@@ -201,6 +201,9 @@
   .iname .q4{color:var(--q-epic);} .iname .q3{color:var(--q-rare);} .iname .q5{color:var(--q-legend);}
   .vr{font-size:9.5px;font-weight:700;letter-spacing:.06em;color:var(--gold);border:1px solid color-mix(in srgb,var(--gold) 40%,transparent);
     border-radius:5px;padding:0 4px;margin-left:6px;vertical-align:middle;text-transform:uppercase;}
+  .have{font-size:9.5px;font-weight:600;color:var(--faint);border:1px solid var(--border-strong);border-radius:5px;
+    padding:0 4px;margin-left:6px;vertical-align:middle;white-space:nowrap;}
+  .have.dupe{color:var(--gold);border-color:color-mix(in srgb,var(--gold) 40%,transparent);}
   .iscore{font-family:var(--font-num);font-weight:700;font-size:14px;text-align:right;}
   .item.zero .iscore{color:var(--faint);font-weight:500;}
   .ilvl{font-size:10.5px;color:var(--faint);font-family:var(--font-num);}
@@ -288,6 +291,8 @@
       <button class="btn icon ghost danger" id="delBoard" title="Remove this report">🗑</button>
     </div>
     <div class="spacer"></div>
+    <div class="seg-label" id="metricLabel">Value</div>
+    <div class="seg" id="metricSeg"></div>
     <div class="seg-label" id="diffLabel">Raid diff</div>
     <div class="seg" id="diffSeg"></div>
     <label class="toggle"><input type="checkbox" id="showAll"> <span>Show older content</span></label>
@@ -311,7 +316,7 @@
       <p>Scores come straight from your report (QE Live for healers, your sim for DPS/tanks). Each item in a pool is one of three states — tap to cycle:</p>
       <div class="states">
         <div><span class="pill w">Want</span><span>An upgrade still in the pool. Its score counts toward EV.</span></div>
-        <div><span class="pill o">Own</span><span>You took it from your vault. It <em>stays in the roll pool</em> (taking a vault item doesn't remove it) so it still dilutes your odds, but it's worth 0 to you now.</span></div>
+        <div><span class="pill o">Own</span><span>You have it (or took it from your vault). It <em>stays in the roll pool</em> — rolling it would just dupe — but it's worth 0 to you. Items in your <code>/simc</code> at <strong>≥ the drop's ilvl</strong> auto-mark Own; a copy at a <em>lower</em> ilvl shows a <span class="have" style="margin:0">have N</span> tag and stays Want (roll it if that lower copy is a different, weaker track).</span></div>
         <div><span class="pill r">Rolled</span><span>You bonus-rolled it — gone from the pool for good.</span></div>
       </div>
       <p>Zero-score items (no upgrade for you) still sit in the pool as filler and drag EV down — that's real. <strong>Raid difficulty</strong> switches which tier's item levels/scores are used. <strong>Token cost</strong> is 1 for everything in S2; set it to 2 to model an S1-style raid roll.</p>
@@ -374,35 +379,34 @@
     }
   }
 
-  /* ---------- Raidbots Droptimizer ---------- */
+  /* ---------- Raidbots Droptimizer ----------
+     profileset name = "instId/encId/difficulty/itemId/ilvl/enchant/slot///"  */
   function parseDroptimizer(data){
-    var sim=data.sim||{}, players=sim.players||[], p0=players[0]||{};
+    var sim=data.sim||{}, p0=(sim.players||[])[0]||{}, sb=data.simbot||{};
     var baseline=(((p0.collected_data||{}).dps||{}).mean)||0;
     var results=(sim.profilesets||{}).results||[];
-    // identity: reuse the embedded simc input if present
-    var input=data.simbot&&(data.simbot.input||((data.simbot.meta||{}).rawFormData||{}).text)||sim.simc_raw||"";
-    var idn=input?parseSimc(input):{name:p0.name,realm:null,spec:(p0.specialization||p0.spec||"")};
-    if(!idn.name) idn.name=p0.name||"Droptimizer";
-    var byItem={};
+    var idn=sb.input?parseSimc(sb.input):{name:sb.player||p0.name,realm:null,spec:sb.spec||p0.specialization||""};
+    if(!idn.name) idn.name=sb.player||p0.name||"Droptimizer";
+    if(!idn.spec) idn.spec=sb.spec||p0.specialization||"";
+    var byKey={};
     results.forEach(function(r){
-      var nm=String(r.name||""); if(/baseline/i.test(nm)) return;
-      var mm=nm.match(/(\d{4,})/); if(!mm) return;            // itemId
-      var id=+mm[1], parts=nm.split("/"), lvl=parseInt(parts[1],10)||0;
-      var pct=baseline>0?((r.mean||0)-baseline)/baseline*100:0;
-      var sc=Math.max(0, Math.round(pct*100)/100);
-      var ex=byItem[id]; if(!ex||sc>ex.score) byItem[id]={item:id,score:sc,level:lvl,dropDifficulty:0};
+      var f=String(r.name||"").split("/"); if(f.length<5) return;
+      var inst=parseInt(f[0],10), enc=parseInt(f[1],10), diff=f[2]||"", item=parseInt(f[3],10), lvl=parseInt(f[4],10)||0;
+      if(!item || isNaN(inst) || isNaN(enc)) return;
+      var delta=(r.mean||0)-baseline, k=inst+":"+enc+":"+item, ex=byKey[k];
+      if(!ex || delta>ex.rawDelta) byKey[k]={item:item,inst:inst,enc:enc,diff:diff,level:lvl,rawDelta:delta,score:Math.max(0,Math.round(delta*10)/10)};
     });
-    return {idn:idn, results:Object.keys(byItem).map(function(k){return byItem[k];}), baseline:baseline};
+    return {idn:idn, baseline:baseline, results:Object.keys(byKey).map(function(x){return byKey[x];})};
   }
   function ingestDroptimizer(id,data){
     var d=parseDroptimizer(data);
-    if(!d.results.length){ toast("No item results found in that Droptimizer — was it a gear/stat sim rather than a drop sim?"); return; }
+    if(!d.results.length){ toast("No drop results in that report — was it a gear/stat sim instead of a Droptimizer?"); return; }
     var k=keyOf(d.idn.name,d.idn.realm,d.idn.spec);
     var b=state.boards.filter(function(x){return x.key===k;})[0];
-    if(b){ b.reportId=id; b.results=d.results; b.source="droptimizer"; b.unit="% dps"; toast("Updated "+d.idn.name+" (Droptimizer)"); }
+    if(b){ b.reportId=id; b.results=d.results; b.baseline=d.baseline; b.source="droptimizer"; b.spec=d.idn.spec||b.spec; toast("Updated "+d.idn.name+" (Droptimizer)"); }
     else {
       b={ id:uid(), key:k, reportId:id, player:d.idn.name||"Unknown", realm:d.idn.realm||"", region:d.idn.region||"",
-          spec:d.idn.spec||"", source:"droptimizer", unit:"% dps", gameType:"Retail", fetchedAt:"",
+          spec:d.idn.spec||"", source:"droptimizer", metric:"raw", baseline:d.baseline, gameType:"Retail", fetchedAt:"",
           results:d.results, ufSettings:{}, raidDiff:null, tokenRaid:1, tokenDungeon:1,
           vaultTake:null, overlay:{}, tokenOverride:{} };
       state.boards.push(b); toast("Loaded "+b.player+" (Droptimizer)");
@@ -441,13 +445,17 @@
       var re=/#\s*(.+?)\s*\((\d+)\)\s*\n#\s*\w+=,id=(\d+)/g,m; while((m=re.exec(blk))) vault.push({name:m[1],ilvl:+m[2],id:+m[3]}); }
     var rolledIds=[], rm=t.match(/bonus_roll_items=(\S+)/);
     if(rm){ rm[1].split("/").forEach(function(rec){ var p=rec.split(":"); if(p.length>=5){ var id=parseInt(p[4],10); if(id) rolledIds.push(id); } }); }
-    return {name:name,realm:realm,spec:spec,region:region,vault:vault,rolledIds:rolledIds};
+    // owned copies (equipped + bags), id -> highest ilvl held; the vault block is excluded (not yet owned)
+    var ot=t; if(vb>=0){ var oe=t.indexOf("### End of Weekly Reward Choices",vb); ot=t.slice(0,vb)+(oe>=0?t.slice(oe):""); }
+    var owned={}, ore=/\((\d+)\)\s*\n#?\s*\w+=,id=(\d+)/g, om;
+    while((om=ore.exec(ot))){ var il=+om[1], iid=+om[2]; if(!owned[iid]||il>owned[iid]) owned[iid]=il; }
+    return {name:name,realm:realm,spec:spec,region:region,vault:vault,rolledIds:rolledIds,owned:owned};
   }
   function readSimc(){
     var t=$("simcInput").value||""; var d=parseSimc(t);
     if(!d.name||!d.realm){ toast("Couldn't find a character in that /simc text"); return; }
     var k=keyOf(d.name,d.realm,d.spec);
-    state.simc[k]={vault:d.vault,rolledIds:d.rolledIds,name:d.name,realm:d.realm,spec:d.spec};
+    state.simc[k]={vault:d.vault,rolledIds:d.rolledIds,owned:d.owned,name:d.name,realm:d.realm,spec:d.spec};
     var applied=false; state.boards.forEach(function(b){ if(b.key===k){ applySimc(b); applied=true; } });
     save(); render(); $("simcInput").value=""; $("simcBox").open=false;
     toast(applied ? ("Linked to "+d.name+" — "+d.vault.length+" vault, "+d.rolledIds.length+" logged rolls")
@@ -470,39 +478,51 @@
     return {type:"raid",name:(r.bosses[String(encId)]||r.name),instName:r.name,current:QE.currentRaids.indexOf(String(instId))>=0};
   }
 
-  function raidDiffs(b){ // distinct raid difficulty codes present (current raids), desc
-    if(b.source==="droptimizer") return [];
+  // per-result sources + difficulty differ by data source
+  function srcList(b,r){ return b.source==="droptimizer" ? [[r.inst,r.enc,isVR(r.item,r.inst,r.enc)]] : (((QE.items[r.item]||{}).s)||[]); }
+  function isVR(item,inst,enc){ var m=QE.items[item]; if(!m) return false; for(var i=0;i<m.s.length;i++){ var s=m.s[i]; if(s[0]===inst&&s[1]===enc&&s.length>2) return true; } return false; }
+  function diffOf(b,r){ return b.source==="droptimizer" ? r.diff : r.dropDifficulty; }
+  var DIFF_ORDER={"raid-mythic":40,"mythic":40,"raid-heroic":30,"heroic":30,"raid-normal":20,"normal":20,"raid-lfr":10,"lfr":10,"raid-finder":10,"mythic-plus":25};
+  function diffRank(d){ d=String(d).toLowerCase(); if(DIFF_ORDER[d]!=null) return DIFF_ORDER[d]; var n=parseInt(d,10); return isNaN(n)?0:n; }
+
+  function raidDiffs(b){ // distinct raid difficulties present (current raids), best-first
     var set={};
     b.results.forEach(function(r){
-      var meta=QE.items[r.item]; if(!meta) return;
-      meta.s.forEach(function(s){ if(s[0]!==-1){ var info=resolve(s[0],s[1]); if(info&&(state.showAll||info.current)&&r.dropDifficulty!==""&&r.dropDifficulty!=null) set[r.dropDifficulty]=1; } });
+      var rd=diffOf(b,r); if(rd===""||rd==null) return;
+      srcList(b,r).forEach(function(s){ if(s[0]===-1) return; var info=resolve(s[0],s[1]); if(info&&info.type==="raid"&&(state.showAll||info.current)) set[String(rd)]=1; });
     });
-    return Object.keys(set).map(Number).sort(function(a,b){return b-a;});
+    return Object.keys(set).sort(function(a,c){ return diffRank(c)-diffRank(a); });
   }
-  function diffLabel(b,code){ var ds=raidDiffs(b); var i=ds.indexOf(code); return DIFF_NAMES[i]||("Diff "+code); }
+  function diffLabel(b,d){
+    d=String(d);
+    if(/[a-z]/i.test(d)){ var t=d.split("-").pop(); return t.charAt(0).toUpperCase()+t.slice(1); }  // "raid-mythic" -> "Mythic"
+    var ds=raidDiffs(b), i=ds.indexOf(d); return DIFF_NAMES[i]||("Diff "+d);                        // QE numeric -> rank name
+  }
 
   function buildGroups(b){
     var diffs=raidDiffs(b);
-    var selDiff = (b.raidDiff!=null && diffs.indexOf(b.raidDiff)>=0) ? b.raidDiff : diffs[0];
+    var selDiff = (b.raidDiff!=null && diffs.indexOf(String(b.raidDiff))>=0) ? String(b.raidDiff) : diffs[0];
     var groups={};
     b.results.forEach(function(r){
-      var meta=QE.items[r.item]; if(!meta) return;
-      meta.s.forEach(function(s){
-        var instId=s[0], encId=s[1], vr=s.length>2;
+      var rd=String(diffOf(b,r));
+      srcList(b,r).forEach(function(s){
+        var instId=s[0], encId=s[1], vr=s.length>2 && s[2];
         var info=resolve(instId,encId); if(!info) return;
         if(!state.showAll && !info.current) return;
-        if(info.type==="raid" && b.source!=="droptimizer"){ if(r.dropDifficulty!==selDiff) return; }
-        var key=instId+":"+encId;
+        if(info.type==="raid" && diffs.length && rd!==selDiff) return;
+        var key=instId+":"+encId, meta=QE.items[r.item]||{};
         var g=groups[key]||(groups[key]={key:key,type:info.type,name:info.name,instName:info.instName||"",items:{}});
-        var ex=g.items[r.item];
-        if(!ex || r.score>ex.score) g.items[r.item]={id:r.item,name:meta.n,q:meta.q,score:r.score||0,lvl:r.level,vr:vr};
+        var ex=g.items[r.item], sc=r.score||0;
+        if(!ex || sc>ex.score) g.items[r.item]={id:r.item,name:meta.n||("Item "+r.item),q:meta.q||3,score:sc,lvl:r.level,vr:vr};
       });
     });
-    // compute
+    var ownedMap=((state.simc[b.key]||{}).owned)||{};
     var rows=Object.keys(groups).map(function(k){
       var g=groups[k]; var items=Object.keys(g.items).map(function(id){
         var it=g.items[id]; var ov=b.overlay[g.key+":"+id];
-        it.state = ov==="rolled" ? "rolled" : (b.vaultTake===Number(id) ? "own" : (ov||"want"));
+        it.ownedIlvl = ownedMap[id]!=null ? ownedMap[id] : null;
+        var autoOwn = it.ownedIlvl!=null && it.lvl && it.ownedIlvl>=it.lvl;   // hold a copy at >= the drop's ilvl -> dupe
+        it.state = ov==="rolled" ? "rolled" : (ov==="own" ? "own" : (b.vaultTake===Number(id) ? "own" : (autoOwn ? "own" : "want")));
         return it;
       }).sort(function(a,c){ return c.score-a.score || a.name.localeCompare(c.name); });
       var remaining=items.filter(function(i){return i.state!=="rolled";}).length;
@@ -515,6 +535,10 @@
     rows.sort(function(a,c){ return c.ev-a.ev || c.num-a.num || a.g.name.localeCompare(c.g.name); });
     return {rows:rows,selDiff:selDiff,diffs:diffs};
   }
+  // display scaling: Droptimizer boards can show raw DPS or % of baseline
+  function facOf(b){ return (b.source==="droptimizer" && b.metric==="pct") ? 100/(b.baseline||1) : 1; }
+  function unitOf(b){ return b.source==="droptimizer" ? (b.metric==="pct"?"% dps":"dps") : "value"; }
+  function dv(b,v){ return fmt(v*facOf(b)); }
 
   /* ---------- render ---------- */
   function esc(t){return String(t==null?"":t).replace(/[&<>"]/g,function(m){return({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[m];});}
@@ -525,7 +549,7 @@
     $("controls").hidden=!has; $("listHead").hidden=!has;
     if(!has){
       $("verdict").innerHTML="";
-      $("sources").innerHTML='<div class="empty-state"><div class="big">🎲</div><div>Paste a QE Live upgrade report above to see which encounter to roll on.</div><div class="sub">Your report stays in this browser — nothing is uploaded.</div></div>';
+      $("sources").innerHTML='<div class="empty-state"><div class="big">🎲</div><div>Paste a QE Live (healer) or Raidbots Droptimizer (DPS/tank) report above to see which encounter to roll on.</div><div class="sub">Your report stays in this browser — nothing is uploaded.</div></div>';
       return;
     }
     var b=active();
@@ -535,8 +559,13 @@
     $("showAll").checked=!!state.showAll;
 
     var built=buildGroups(b);
-    // diff segmented control (raids only; hidden for Droptimizer boards)
-    var hasDiffs=built.diffs.length>0;
+    // metric toggle (Droptimizer only: raw DPS vs % of baseline)
+    var isDrop=b.source==="droptimizer";
+    $("metricLabel").style.display=isDrop?"":"none";
+    $("metricSeg").style.display=isDrop?"":"none";
+    if(isDrop) $("metricSeg").innerHTML='<button data-metric="raw" class="'+(b.metric!=="pct"?"on":"")+'">DPS</button><button data-metric="pct" class="'+(b.metric==="pct"?"on":"")+'">%</button>';
+    // difficulty toggle (only when there's a choice to make)
+    var hasDiffs=built.diffs.length>1;
     $("diffLabel").style.display=hasDiffs?"":"none";
     $("diffSeg").style.display=hasDiffs?"":"none";
     $("diffSeg").innerHTML=built.diffs.map(function(d){return '<button data-diff="'+d+'" class="'+(d===built.selDiff?"on":"")+'">'+esc(diffLabel(b,d))+"</button>";}).join("");
@@ -574,7 +603,7 @@
         var numTake =row.items.reduce(function(t,it){ return t+((it.id===v.id?0:(it.state==="want"?it.score:0))); },0);
         var evLeave=rem>0?numLeave/rem/cost:0, evTake=rem>0?numTake/rem/cost:0;
         warn=(numLeave-numTake)>0;
-        couple='Roll '+esc(row.g.name)+': <b>'+fmt(evLeave)+'</b> if you leave it · <b>'+fmt(evTake)+'</b> if you take it';
+        couple='Roll '+esc(row.g.name)+': <b>'+dv(b,evLeave)+'</b> if you leave it · <b>'+dv(b,evTake)+'</b> if you take it';
       } else {
         encTxt=meta?(function(){var s=meta.s[0]; var info=resolve(s[0],s[1]); return info?info.name:"—";})():"—";
         couple="Not in a rollable pool right now";
@@ -601,24 +630,24 @@
       return;
     }
     var next=built.rows.filter(function(r){return r.ev>0&&r.g.key!==best.g.key;})[0];
-    var edge=next?(" · "+fmt(best.ev-next.ev)+" ahead of "+esc(next.g.name)):" · your only live source";
+    var edge=next?(" · "+dv(b,best.ev-next.ev)+" ahead of "+esc(next.g.name)):" · your only live source";
     var top=best.items.filter(function(i){return i.state==="want"&&i.score>0;}).slice(0,2)
-      .map(function(i){return esc(i.name)+(i.vr?" ✦":"")+" ("+i.score+")";}).join(", ");
+      .map(function(i){return esc(i.name)+(i.vr?" ✦":"")+" ("+dv(b,i.score)+")";}).join(", ");
     var dl=best.g.type==="raid"?diffLabel(b,built.selDiff):"M+";
     host.className="verdict";
     host.innerHTML=
       '<div>'+
         '<div class="label">◈ Spend your next roll on</div>'+
         '<div class="target">'+esc(best.g.name)+'<span class="type-tag '+best.g.type+'" style="margin-left:9px;vertical-align:middle">'+best.g.type+" · "+dl+'</span></div>'+
-        '<div class="why">'+(top?"carried by "+top:best.num.toLocaleString()+" of value")+" · "+best.remaining+" in pool"+edge+'</div>'+
+        '<div class="why">'+(top?"carried by "+top:dv(b,best.num)+" of value")+" · "+best.remaining+" in pool"+edge+'</div>'+
       '</div>'+
-      '<div class="big"><div class="ev tnum">'+fmt(best.ev)+'</div><div class="ev-unit">'+esc(b.unit||"value")+' / token</div></div>';
+      '<div class="big"><div class="ev tnum">'+dv(b,best.ev)+'</div><div class="ev-unit">'+esc(unitOf(b))+' / token</div></div>';
   }
 
   function cardHTML(b,r,i){
     var g=r.g, depleted=r.remaining<=0;
     var cls="card"+(i===0&&r.ev>0?" rank-1":"")+(b._open===g.key?" open":"")+(depleted?" depleted":"");
-    var math=r.remaining>0?(r.num.toLocaleString()+" / "+r.remaining+(r.cost!==1?" / "+r.cost:"")):"pool empty";
+    var math=r.remaining>0?(dv(b,r.num)+" / "+r.remaining+(r.cost!==1?" / "+r.cost:"")):"pool empty";
     var sub=g.type==="raid"?(g.instName+(r.nWant?" · "+r.nWant+" upgrade"+(r.nWant>1?"s":""):"")):("M+ dungeon"+(r.nWant?" · "+r.nWant+" upgrade"+(r.nWant>1?"s":""):""));
     return ''+
     '<div class="'+cls+'" data-key="'+g.key+'">'+
@@ -628,36 +657,39 @@
           '<div class="name"><span class="txt">'+esc(g.name)+'</span><span class="type-tag '+g.type+'">'+g.type+'</span></div>'+
           '<div class="meta">'+r.remaining+' in pool · '+sub+'</div>'+
         '</div>'+
-        '<div class="ev-cell"><div class="ev tnum">'+fmt(r.ev)+'</div><div class="math">'+math+'</div></div>'+
+        '<div class="ev-cell"><div class="ev tnum">'+dv(b,r.ev)+'</div><div class="math">'+math+'</div></div>'+
         '<div class="chev">▸</div>'+
       '</div>'+
       '<div class="card-body">'+
         '<div class="cfg-row">'+
           '<div class="field"><label>Token cost</label><input class="num-in tnum" data-act="cost" type="number" min="1" value="'+r.cost+'"></div>'+
-          '<span>Σ '+r.num.toLocaleString()+' want · '+r.remaining+' in pool'+(r.cost!==1?' · ÷'+r.cost+' tokens':'')+'</span>'+
+          '<span>Σ '+dv(b,r.num)+' want · '+r.remaining+' in pool'+(r.cost!==1?' · ÷'+r.cost+' tokens':'')+'</span>'+
         '</div>'+
-        itemsHTML(r)+
+        itemsHTML(b,r)+
       '</div>'+
     '</div>';
   }
 
-  function itemsHTML(r){
+  function itemsHTML(b,r){
     var showZero=active()._showZeroKey===r.g.key;
     var shown=r.items, zeros=shown.filter(function(i){return i.score<=0&&i.state==="want";});
     var visible=shown.filter(function(i){return !(i.score<=0&&i.state==="want"&&!showZero);});
-    var html=visible.map(function(it){return itemRow(it);}).join("");
+    var html=visible.map(function(it){return itemRow(b,it);}).join("");
     var toggle=(zeros.length && !showZero)?'<div class="hidden-zero" data-act="showzero">+ '+zeros.length+' filler item'+(zeros.length>1?"s":"")+' with no upgrade (still in pool) — show</div>':'';
     return '<div class="items">'+html+'</div>'+toggle;
   }
-  function itemRow(it){
+  function itemRow(b,it){
     var st=it.state||"want", lbl=st==="want"?"Want":(st==="own"?"Own":"Rolled");
     var zero=it.score<=0?" zero":"";
+    var have = it.ownedIlvl!=null
+      ? '<span class="have'+(it.ownedIlvl>=(it.lvl||0)?" dupe":"")+'" title="You already hold this item at ilvl '+it.ownedIlvl+(it.ownedIlvl>=(it.lvl||0)?" — a duplicate":" — a lower track; roll it if that\'s a real upgrade")+'">have '+it.ownedIlvl+'</span>'
+      : '';
     return ''+
     '<div class="item st-'+st+zero+'" data-id="'+it.id+'">'+
       '<button class="state-btn '+st+'" data-act="cycle" title="Want → Own → Rolled">'+lbl+'</button>'+
-      '<div class="iname"><span class="q'+(it.q||3)+'">'+esc(it.name)+'</span>'+(it.vr?'<span class="vr">rare</span>':'')+'</div>'+
+      '<div class="iname"><span class="q'+(it.q||3)+'">'+esc(it.name)+'</span>'+(it.vr?'<span class="vr">rare</span>':'')+have+'</div>'+
       '<div class="ilvl">'+(it.lvl||"")+'</div>'+
-      '<div class="iscore tnum">'+(it.score>0?"+"+it.score:"—")+'</div>'+
+      '<div class="iscore tnum">'+(it.score>0?"+"+dv(b,it.score):"—")+'</div>'+
     '</div>';
   }
 
@@ -687,7 +719,11 @@
 
   $("diffSeg").addEventListener("click",function(e){
     var el=e.target.closest("[data-diff]"); if(!el) return;
-    active().raidDiff=Number(el.dataset.diff); save(); render();
+    active().raidDiff=el.dataset.diff; save(); render();
+  });
+  $("metricSeg").addEventListener("click",function(e){
+    var el=e.target.closest("[data-metric]"); if(!el) return;
+    active().metric=el.dataset.metric; save(); render();
   });
   $("boardSel").addEventListener("change",function(e){ state.activeId=e.target.value; save(); render(); });
   $("delBoard").addEventListener("click",function(){
