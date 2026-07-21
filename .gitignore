@@ -1,0 +1,12 @@
+# Editor / OS cruft
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# Local backups exported from the app
+slowyourroll-backup.json
+
+# Node (only if you later add tooling)
+node_modules/
