@@ -23,6 +23,11 @@ pool is in one of three states you can cycle by tapping it:
   to you. Copies in your `/simc` export at ≥ the drop's item level auto-mark as Own.
 - **Rolled** — you already bonus-rolled it; removed from the pool for good.
 
+Items marked **✦ rare** are very rare drops off a boss kill, but a bonus roll draws uniformly from
+the pool — so they're weighted no differently here. That's intentional: a bonus roll is the one
+place a very rare item costs the same as anything else, which is usually a reason to chase it, not
+to discount it.
+
 Optionally paste your in-game `/simc` addon export to fold in this week's Great Vault choices,
 auto-mark owned gear, and import your logged bonus-roll history.
 
@@ -50,7 +55,9 @@ instance, encounter, difficulty and item level inline, so a next-season raid is 
 report alone: unrecognised sources are ranked as normal, flagged in the UI, and named by id rather
 than silently dropped. Sources that genuinely can't be bonus-rolled — crafted gear, reputation
 vendors, timewalking, world bosses — are recorded at build time in `ignoredInstances` and filtered
-out without a warning, so the warning only ever means "the database is behind."
+out without a warning, as are a raid's non-encounter drops (QE files trash and catalyst loot under
+encounter `999`, world drops under a negative encounter id). So the warning only ever means "the
+database is behind."
 
 QE Live reports are the exception: they carry only item ids, and the loot table comes entirely from
 `data/qe-data.js`. A new season's items won't resolve to any source until you regenerate.

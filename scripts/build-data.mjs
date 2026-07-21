@@ -104,13 +104,17 @@ for (const it of itemDB) {
 // leveling drops, and old catch-up vendors. None are bonus-roll targets, so the app drops them —
 // but it has to drop them *knowingly*. Recording them here is what keeps the runtime "unknown
 // source" warning meaningful: it can then only fire for content genuinely newer than this build.
-const ignoredInstances = [], unnamedDungeons = [];
+const ignoredInstances = [], unnamedDungeons = [], sentinelEncounters = new Set();
 for (const it of Object.values(items)) {
   for (const [instId, encId] of it.s) {
     if (instId === -1) {
       if (!dungeons[encId] && !unnamedDungeons.includes(encId)) unnamedDungeons.push(encId);
-    } else if (instId > 0 && !raids[instId] && !ignoredInstances.includes(instId)) {
-      ignoredInstances.push(instId);
+    } else if (instId > 0 && !raids[instId]) {
+      if (!ignoredInstances.includes(instId)) ignoredInstances.push(instId);
+    } else if (instId > 0 && (encId === 999 || encId < 0)) {
+      // A real raid, but not an encounter: 999 is trash/catalyst, negatives are world drops filed
+      // against the tier they match. src/model.js drops both; report them so that stays deliberate.
+      sentinelEncounters.add(instId + "/" + encId);
     }
   }
 }
@@ -148,6 +152,10 @@ const counts =
 if (ignoredInstances.length) {
   const named = ignoredInstances.map((id) => id + (instanceDB[id] ? ` (${instanceDB[id]})` : "")).join(", ");
   console.log(`Ignored instances — referenced by items, not described by encounterDB: ${named}`);
+}
+if (sentinelEncounters.size) {
+  const named = [...sentinelEncounters].map((k) => k + ` (${raids[k.split("/")[0]].name})`).join(", ");
+  console.log(`Non-encounter raid sources — trash/catalyst and world drops, filtered at runtime: ${named}`);
 }
 if (unnamedDungeons.length) {
   // Never seen upstream. If it happens, these dungeons would render as "Unknown dungeon N" and

@@ -60,6 +60,24 @@ test("sources that can't be bonus-rolled stay filtered out, unflagged", () => {
   assert.equal(resolve(Number(ignored[0]), 1), null);
 });
 
+test("a raid's non-encounter drops are filtered out, not mistaken for staleness", () => {
+  // QE files trash/catalyst loot under encounter 999 and world drops under a negative encounter,
+  // both inside a real raid instance. Neither drops from a boss. Upstream lists 999 in a raid's
+  // boss map only sometimes, so resolving it by name would make a ranked "Voidspire · Voidspire"
+  // row appear and disappear with an upstream typo.
+  const raidId = Number(QE_DATA.currentRaids[0]);
+  assert.equal(resolve(raidId, 999), null, "trash & catalyst loot is not a roll source");
+  assert.equal(resolve(raidId, -78), null, "world drops filed against a tier are not a roll source");
+
+  state.showAll = false;
+  state.simc = {};
+  const b = futureBoard();
+  b.results = [{ item: 900001, inst: raidId, enc: 999, diff: "mythic", level: 700, score: 10 }];
+  const built = buildGroups(b);
+  assert.deepEqual(built.rows, [], "no phantom row");
+  assert.deepEqual(built.unknown, [], "and no warning — this was dropped knowingly");
+});
+
 test("a known raid with an unrecognised boss keeps the raid name but is flagged", () => {
   const raidId = Number(QE_DATA.currentRaids[0]);
   const info = resolve(raidId, FUTURE_BOSS);

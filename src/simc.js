@@ -21,7 +21,9 @@ export function parseSimc(t) {
   if (vb >= 0) {
     const ve = t.indexOf("### End of Weekly Reward Choices", vb);
     const blk = t.slice(vb, ve < 0 ? t.length : ve);
-    const re = /#\s*(.+?)\s*\((\d+)\)\s*\n#\s*\w+=,id=(\d+)/g;
+    // Horizontal whitespace only, anchored per line: the addon separates entries with a bare "#"
+    // line, and an `\s*` that can cross a newline swallows it into the next entry's name.
+    const re = /^#[ \t]*(.+?)[ \t]*\((\d+)\)[ \t]*\n#[ \t]*\w+=,id=(\d+)/gm;
     let m;
     while ((m = re.exec(blk))) vault.push({ name: m[1], ilvl: +m[2], id: +m[3] });
   }

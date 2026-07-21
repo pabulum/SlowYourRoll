@@ -10,10 +10,13 @@ server=area-52
 spec=holy
 
 ### Weekly Reward Choices
+#
 # Some Trinket (639)
 # trinket1=,id=1111
+#
 # Another Item (639)
 # head=,id=2222
+#
 ### End of Weekly Reward Choices
 
 head=,id=3333,ilevel=623
@@ -36,6 +39,8 @@ test("parseSimc reads the weekly vault choices", () => {
   assert.equal(d.vault.length, 2);
   assert.deepEqual(d.vault.map((v) => v.id), [1111, 2222]);
   assert.equal(d.vault[0].ilvl, 639);
+  // The addon puts a bare "#" between entries; it must not end up in the name.
+  assert.deepEqual(d.vault.map((v) => v.name), ["Some Trinket", "Another Item"]);
 });
 
 test("parseSimc reads logged bonus rolls", () => {

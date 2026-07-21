@@ -12,7 +12,8 @@ import { fmt } from "./util.js";
  * Resolve an (instId, encId) pair to a display name and type. instId === -1 is a M+ dungeon.
  *
  * Returns null only for sources that are genuinely not bonus-rollable: QE's negative sentinel
- * instances (crafted, reputation, timewalking, PvP) and the instances the data build recorded in
+ * instances (crafted, reputation, timewalking, PvP), its sentinel *encounters* within a real raid
+ * (trash/catalyst and world drops — see below), and the instances the data build recorded in
  * `ignoredInstances` (world bosses, leveling drops, old catch-up vendors).
  *
  * Anything else unrecognised is content *newer* than the encounter database — a new season's raid,
@@ -31,6 +32,12 @@ export function resolve(instId, encId) {
     return { type: "dungeon", name: "Unknown dungeon " + encId, current: true, unknown: true };
   }
   if (instId < 0) return null; // crafted / reputation / timewalking / PvP — never bonus-rollable
+  // A raid's non-encounter drops are filed under sentinel *encounter* ids: 999 is "BoE Trash Drops
+  // & Catalyst" (QE's getSourceName special-cases it for every instance) and negatives are world
+  // drops catalogued against the tier they match. Nothing here drops from a boss, so none of it is
+  // a roll target. Checked before the boss lookup on purpose: upstream lists 999 in a raid's boss
+  // map only sometimes, and a missing entry is an upstream oversight, not new content.
+  if (encId === 999 || encId < 0) return null;
   const r = QE_DATA.raids[String(instId)];
   if (!r) {
     if ((QE_DATA.ignoredInstances || []).indexOf(String(instId)) >= 0) return null;
@@ -65,7 +72,15 @@ function srcList(b, r) {
     : ((QE_DATA.items[r.item] || {}).s) || [];
 }
 
-/** Is this item a "very rare" drop from the given source? */
+/**
+ * Is this item a "very rare" drop from the given source?
+ *
+ * Display only — deliberately absent from the EV maths. "Very rare" describes the item's rate off
+ * a boss kill; a bonus roll draws uniformly from the pool, so a very rare item is exactly as likely
+ * as anything else in it. Discounting it here would be wrong twice over: it would understate the
+ * roll, and it would hide the one case where rolling beats farming outright. Ranking it flat is the
+ * point, not an oversight.
+ */
 export function isVR(item, inst, enc) {
   const m = QE_DATA.items[item];
   if (!m) return false;
