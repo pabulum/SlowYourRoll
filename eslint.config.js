@@ -20,9 +20,9 @@ export default [
     },
   },
 
-  // Tests and config files run under Node.
+  // Tests, build scripts, and config files run under Node.
   {
-    files: ["tests/**/*.js", "*.config.js"],
+    files: ["tests/**/*.js", "scripts/**/*.mjs", "*.config.js"],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: "module",

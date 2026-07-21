@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { QE_DATA } from "../src/data.js";
+import { SEASON } from "../src/season.js";
 import { state } from "../src/store.js";
 import { resolve, buildGroups } from "../src/model.js";
 
@@ -19,8 +20,7 @@ function makeBoard() {
       { item: 900001, inst: RAID_ID, enc: ENC_ID, diff: "mythic", level: 639, score: 10 },
       { item: 900002, inst: RAID_ID, enc: ENC_ID, diff: "mythic", level: 639, score: 20 },
     ],
-    overlay: {}, tokenOverride: {}, vaultTake: null,
-    tokenRaid: 1, tokenDungeon: 1, raidDiff: null,
+    overlay: {}, tokenOverride: {}, vaultTake: null, raidDiff: null,
   };
 }
 
@@ -39,8 +39,8 @@ test("buildGroups scores a pool as (Σ wanted ÷ pool size) ÷ token cost", () =
   const row = built.rows[0];
   assert.equal(row.num, 30);      // 10 + 20 wanted
   assert.equal(row.remaining, 2); // both still in the pool
-  assert.equal(row.cost, 1);
-  assert.equal(row.ev, 15);       // 30 / 2 / 1
+  assert.equal(row.cost, SEASON.tokenRaid);       // raid cost comes from the season
+  assert.equal(row.ev, 30 / 2 / SEASON.tokenRaid);
   assert.equal(row.nWant, 2);
 });
 
@@ -52,15 +52,15 @@ test("a Rolled item leaves the pool and stops counting toward EV", () => {
   const row = buildGroups(b).rows[0];
   assert.equal(row.num, 10);
   assert.equal(row.remaining, 1);
-  assert.equal(row.ev, 10);       // 10 / 1 / 1
+  assert.equal(row.ev, 10 / 1 / SEASON.tokenRaid);
 });
 
-test("a higher token cost divides EV down", () => {
+test("a per-encounter override beats the season's token cost", () => {
   state.showAll = false;
   state.simc = {};
   const b = makeBoard();
-  b.tokenOverride[RAID_ID + ":" + ENC_ID] = 2;
+  b.tokenOverride[RAID_ID + ":" + ENC_ID] = 4;
   const row = buildGroups(b).rows[0];
-  assert.equal(row.cost, 2);
-  assert.equal(row.ev, 7.5);      // 30 / 2 / 2
+  assert.equal(row.cost, 4);
+  assert.equal(row.ev, 3.75);     // 30 / 2 / 4
 });

@@ -2,9 +2,39 @@
 // this week's vault panel, and the per-encounter item pools.
 
 import { QE_DATA } from "./data.js";
+import { SEASON, SEASON_LABEL, seasonDrift } from "./season.js";
 import { state, active } from "./store.js";
 import { $, esc } from "./util.js";
 import { buildGroups, resolve, diffLabel, unitOf, dv } from "./model.js";
+
+/** Fill in the season-dependent copy. Runs once at boot; nothing here changes at runtime. */
+export function renderSeason() {
+  $("seasonLabel").textContent = SEASON_LABEL;
+  $("tokenNote").textContent = SEASON.tokenNote;
+}
+
+/**
+ * Warn when the encounter database has fallen behind what we're being asked to rank.
+ * Two independent signals: sources in this report the database can't identify (a new raid, most
+ * likely), and the database itself having moved to a season this build wasn't configured for.
+ */
+function renderDataNote(built) {
+  const host = $("dataNote"), parts = [];
+  if (built.unknown.length) {
+    const list = built.unknown.slice(0, 4).map(esc).join(", ");
+    const more = built.unknown.length > 4 ? " and " + (built.unknown.length - 4) + " more" : "";
+    parts.push("<b>This report has " + built.unknown.length + " source" + (built.unknown.length > 1 ? "s" : "") +
+      " the encounter database doesn't know</b> — " + list + more +
+      ". They're ranked from the report's own numbers, but their names and item pools may be incomplete. " +
+      "Rebuild the database with <code>npm run data</code>.");
+  }
+  if (seasonDrift(QE_DATA.seasonId)) {
+    parts.push("<b>The encounter database is from a newer season than this build.</b> Token costs and the " +
+      "season label may be wrong — update <code>src/season.js</code> (QE season id " + esc(String(QE_DATA.seasonId)) + ").");
+  }
+  host.hidden = !parts.length;
+  host.innerHTML = parts.map((p) => "◈ " + p).join("<br><br>");
+}
 
 /** Re-render the whole app from current state. */
 export function render() {
@@ -12,6 +42,7 @@ export function render() {
   $("controls").hidden = !has;
   $("listHead").hidden = !has;
   if (!has) {
+    $("dataNote").hidden = true;
     $("verdict").innerHTML = "";
     $("sources").innerHTML = '<div class="empty-state"><div class="big">🎲</div><div>Paste a QE Live (healer) or Raidbots Droptimizer (DPS/tank) report above to see which encounter to roll on.</div><div class="sub">Your report stays in this browser — nothing is uploaded.</div></div>';
     return;
@@ -49,6 +80,7 @@ export function render() {
     note.hidden = true;
   }
 
+  renderDataNote(built);
   renderVault(b, built);
   renderVerdict(built, b);
 
@@ -68,7 +100,7 @@ function renderVault(b, built) {
   const html = simc.vault.map((v) => {
     const meta = QE_DATA.items[v.id], name = meta ? meta.n : v.name;
     const row = rowByItem[v.id], taken = b.vaultTake === v.id;
-    let encTxt = "—", couple = "", warn = false;
+    let encTxt, couple, warn = false;
     if (row) {
       encTxt = row.g.name;
       const rem = row.remaining, cost = row.cost;

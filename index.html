@@ -14,7 +14,7 @@
       <span class="sigil">🎲</span>
       <div>
         <h1>Slow Your Roll</h1>
-        <span class="sub">Bonus-roll expected value · WoW S2 Midnight</span>
+        <span class="sub">Bonus-roll expected value · <span id="seasonLabel"></span></span>
       </div>
     </div>
     <div class="masthead-tools">
@@ -57,6 +57,7 @@
     <label class="toggle"><input type="checkbox" id="showAll"> <span>Show older content</span></label>
   </div>
 
+  <div id="dataNote" class="simc-note alert" hidden></div>
   <div id="simcNote" class="simc-note" hidden></div>
   <section id="vaultPanel"></section>
   <section id="verdict"></section>
@@ -78,7 +79,7 @@
         <div><span class="pill o">Own</span><span>You have it (or took it from your vault). It <em>stays in the roll pool</em> — rolling it would just dupe — but it's worth 0 to you. Items in your <code>/simc</code> at <strong>≥ the drop's ilvl</strong> auto-mark Own; a copy at a <em>lower</em> ilvl shows a <span class="have" style="margin:0">have N</span> tag and stays Want (roll it if that lower copy is a different, weaker track).</span></div>
         <div><span class="pill r">Rolled</span><span>You bonus-rolled it — gone from the pool for good.</span></div>
       </div>
-      <p>Zero-score items (no upgrade for you) still sit in the pool as filler and drag EV down — that's real. <strong>Raid difficulty</strong> switches which tier's item levels/scores are used. <strong>Token cost</strong> is 1 for everything in S2; set it to 2 to model an S1-style raid roll.</p>
+      <p>Zero-score items (no upgrade for you) still sit in the pool as filler and drag EV down — that's real. <strong>Raid difficulty</strong> switches which tier's item levels/scores are used. <strong>Token cost</strong> defaults to the season's: <span id="tokenNote"></span> Override it per encounter in any expanded row.</p>
       <p style="color:var(--faint);margin-bottom:0"><span class="vr" style="margin:0 4px 0 0">Very rare</span> items have far lower drop odds than the uniform pool assumes, so treat their EV as a ceiling. Everything saves in this browser; Export gives you a backup file.</p>
     </div>
   </details>

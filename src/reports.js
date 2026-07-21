@@ -94,7 +94,7 @@ function ingestDroptimizer(id, data) {
     b = {
       id: uid(), key: k, reportId: id, player: d.idn.name || "Unknown", realm: d.idn.realm || "", region: d.idn.region || "",
       spec: d.idn.spec || "", source: "droptimizer", metric: "raw", baseline: d.baseline, gameType: "Retail", fetchedAt: "",
-      results: d.results, ufSettings: {}, raidDiff: null, tokenRaid: 1, tokenDungeon: 1,
+      results: d.results, ufSettings: {}, raidDiff: null,
       vaultTake: null, overlay: {}, tokenOverride: {},
     };
     state.boards.push(b);
@@ -119,7 +119,7 @@ function ingest(code, data) {
       id: uid(), key: k, reportId: code, source: "qe", unit: "value", player: data.playername || "Unknown",
       realm: data.realm || "", region: data.region || "", spec: data.spec || "", contentType: data.contentType || "",
       gameType: data.gameType || "Retail", fetchedAt: data.dateCreated || "", results: data.results,
-      ufSettings: data.ufSettings || {}, raidDiff: null, tokenRaid: 1, tokenDungeon: 1,
+      ufSettings: data.ufSettings || {}, raidDiff: null,
       vaultTake: null, overlay: {}, tokenOverride: {},
     };
     state.boards.push(b);

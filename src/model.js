@@ -4,26 +4,51 @@
 //   EV = ( Σ score of items you still "want" ÷ items still in the pool ) ÷ token cost
 
 import { QE_DATA, DIFF_NAMES, DIFF_ORDER } from "./data.js";
+import { SEASON } from "./season.js";
 import { state } from "./store.js";
 import { fmt } from "./util.js";
 
 /**
  * Resolve an (instId, encId) pair to a display name and type. instId === -1 is a M+ dungeon.
+ *
+ * Returns null only for sources that are genuinely not bonus-rollable: QE's negative sentinel
+ * instances (crafted, reputation, timewalking, PvP) and the instances the data build recorded in
+ * `ignoredInstances` (world bosses, leveling drops, old catch-up vendors).
+ *
+ * Anything else unrecognised is content *newer* than the encounter database — a new season's raid,
+ * most likely. Those resolve to a placeholder flagged `unknown` and are treated as current, so a
+ * day-one report still ranks instead of silently losing rows. Callers surface the flag; see
+ * `buildGroups`, which collects them into `unknown` for the staleness banner.
+ *
  * @param {number} instId
  * @param {number} encId
+ * @returns {{type: "raid"|"dungeon", name: string, instName?: string, current: boolean, unknown?: boolean}|null}
  */
 export function resolve(instId, encId) {
   if (instId === -1) {
     const dn = QE_DATA.dungeons[String(encId)];
-    return dn ? { type: "dungeon", name: dn, current: QE_DATA.currentDungeons.indexOf(String(encId)) >= 0 } : null;
+    if (dn) return { type: "dungeon", name: dn, current: QE_DATA.currentDungeons.indexOf(String(encId)) >= 0 };
+    return { type: "dungeon", name: "Unknown dungeon " + encId, current: true, unknown: true };
   }
+  if (instId < 0) return null; // crafted / reputation / timewalking / PvP — never bonus-rollable
   const r = QE_DATA.raids[String(instId)];
-  if (!r) return null;
+  if (!r) {
+    if ((QE_DATA.ignoredInstances || []).indexOf(String(instId)) >= 0) return null;
+    return {
+      type: "raid",
+      name: "Unknown boss " + encId,
+      instName: "Unknown raid " + instId,
+      current: true,
+      unknown: true,
+    };
+  }
+  const boss = r.bosses[String(encId)];
   return {
     type: "raid",
-    name: r.bosses[String(encId)] || r.name,
+    name: boss || r.name,
     instName: r.name,
     current: QE_DATA.currentRaids.indexOf(String(instId)) >= 0,
+    unknown: !boss,
   };
 }
 
@@ -86,14 +111,16 @@ export function diffLabel(b, d) {
 
 /**
  * Build the ranked list of rollable sources for a board at its selected difficulty.
- * Returns { rows, selDiff, diffs } where each row carries its items, pool size, and EV.
+ * Returns { rows, selDiff, diffs, unknown } where each row carries its items, pool size, and EV,
+ * and `unknown` names the visible sources the encounter database couldn't identify.
  * @param {import("./types.js").Board} b
- * @returns {{ rows: import("./types.js").Row[], selDiff: string, diffs: string[] }}
+ * @returns {{ rows: import("./types.js").Row[], selDiff: string, diffs: string[], unknown: string[] }}
  */
 export function buildGroups(b) {
   const diffs = raidDiffs(b);
   const selDiff = (b.raidDiff != null && diffs.indexOf(String(b.raidDiff)) >= 0) ? String(b.raidDiff) : diffs[0];
   const groups = {};
+  const unknown = {};
 
   b.results.forEach((r) => {
     const rd = String(diffOf(b, r));
@@ -104,6 +131,9 @@ export function buildGroups(b) {
       if (!state.showAll && !info.current) return;
       if (info.type === "raid" && diffs.length && rd !== selDiff) return;
       const key = instId + ":" + encId;
+      // Only count unknowns that survive the filters — an unidentified source the user can't
+      // see isn't a staleness signal worth interrupting them over.
+      if (info.unknown) unknown[key] = info.type === "dungeon" ? info.name : info.instName + " · " + info.name;
       const meta = /** @type {Partial<import("./types.js").Item>} */ (QE_DATA.items[r.item] || {});
       const g = groups[key] || (groups[key] = { key, type: info.type, name: info.name, instName: info.instName || "", items: {} });
       const ex = g.items[r.item], sc = r.score || 0;
@@ -126,7 +156,9 @@ export function buildGroups(b) {
     }).sort((a, c) => c.score - a.score || a.name.localeCompare(c.name));
     const remaining = items.filter((i) => i.state !== "rolled").length;
     const num = items.reduce((t, i) => t + (i.state === "want" ? i.score : 0), 0);
-    const cost = b.tokenOverride[g.key] || (g.type === "raid" ? b.tokenRaid : b.tokenDungeon) || 1;
+    // Token cost follows the season unless the user overrode this encounter. The per-board
+    // tokenRaid/tokenDungeon fields older saves carry were never user-editable, so they're ignored.
+    const cost = b.tokenOverride[g.key] || (g.type === "raid" ? SEASON.tokenRaid : SEASON.tokenDungeon) || 1;
     const ev = remaining > 0 ? num / remaining / cost : 0;
     return {
       g, items, remaining, num, cost, ev,
@@ -134,7 +166,7 @@ export function buildGroups(b) {
     };
   });
   rows.sort((a, c) => c.ev - a.ev || c.num - a.num || a.g.name.localeCompare(c.g.name));
-  return { rows, selDiff, diffs };
+  return { rows, selDiff, diffs, unknown: Object.keys(unknown).map((k) => unknown[k]) };
 }
 
 // Display scaling: Droptimizer boards can show raw DPS or % of baseline.

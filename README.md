@@ -1,6 +1,6 @@
 # Slow Your Roll
 
-A bonus-roll expected-value tracker for **World of Warcraft Season 2 "Midnight."** Paste an
+A bonus-roll expected-value tracker for **World of Warcraft "Midnight."** Paste an
 upgrade report and it ranks every raid boss and Mythic+ dungeon you can bonus-roll by the
 expected value of a single token, so you spend tokens where they pay off.
 
@@ -25,6 +25,35 @@ pool is in one of three states you can cycle by tapping it:
 
 Optionally paste your in-game `/simc` addon export to fold in this week's Great Vault choices,
 auto-mark owned gear, and import your logged bonus-roll history.
+
+## Seasons
+
+Two things are season-dependent, and they're kept apart because they change at different times.
+
+**Which encounters are current** lives in the generated database (`data/qe-data.js`), mirroring
+QE Live's own constants. Regenerate it from a local [QuestionablyEpic](https://github.com/Voulk/QuestionablyEpic)
+checkout — nothing in it is hand-maintained:
+
+```sh
+npm run data                          # uses $QE_PATH, else ~/Projects/QuestionablyEpic
+npm run data -- --qe=/path/to/QELive  # explicit checkout
+npm run data:check                    # report drift without writing
+```
+
+**What a roll costs and what the season is called** live in [`src/season.js`](src/season.js) —
+QE Live doesn't publish those. Season 1 charges 2 tokens for a raid boss and 1 for a M+ dungeon;
+Season 2 charges 1 for everything, which materially reorders the rankings. Moving to Season 2 is
+`npm run data`, then setting `ACTIVE = 2` in that file.
+
+The app doesn't depend on either being up to date to stay useful. A Droptimizer carries its own
+instance, encounter, difficulty and item level inline, so a next-season raid is rankable from the
+report alone: unrecognised sources are ranked as normal, flagged in the UI, and named by id rather
+than silently dropped. Sources that genuinely can't be bonus-rolled — crafted gear, reputation
+vendors, timewalking, world bosses — are recorded at build time in `ignoredInstances` and filtered
+out without a warning, so the warning only ever means "the database is behind."
+
+QE Live reports are the exception: they carry only item ids, and the loot table comes entirely from
+`data/qe-data.js`. A new season's items won't resolve to any source until you regenerate.
 
 ## Running locally
 
@@ -63,6 +92,7 @@ src/
   styles.css        All styling (light/dark, theme tokens)
   main.js           Entry point: boots the UI and renders
   data.js           Re-exports the encounter database + difficulty vocabulary
+  season.js         Season config: name + token costs (see "Seasons" above)
   store.js          Persistent state (localStorage), boards, save/load
   model.js          The EV model: encounter resolution, grouping, ranking
   reports.js        Loading QE Live and Raidbots Droptimizer reports
@@ -72,6 +102,8 @@ src/
   types.js          JSDoc type definitions (no runtime code)
 data/
   qe-data.js        Generated encounter + item database (see src/data.js for its shape)
+scripts/
+  build-data.mjs    Regenerates data/qe-data.js from a QuestionablyEpic checkout
 tests/              Unit tests (node:test)
 ```
 

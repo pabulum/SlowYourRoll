@@ -17,6 +17,10 @@
  * @property {Record<string, string>} dungeons
  * @property {string[]} currentRaids
  * @property {string[]} currentDungeons
+ * @property {string[]} [ignoredInstances] Instances items reference that aren't bonus-roll sources
+ *   (world bosses, leveling drops, catch-up vendors). Recorded so the app can drop them knowingly
+ *   and still warn about instances it has genuinely never heard of.
+ * @property {number} [seasonId]  QE Live's CONSTANTS.seasonID at build time; see src/season.js.
  * @property {Record<string, Item>} items
  */
 
@@ -50,8 +54,8 @@
  * @property {Object<string, "own"|"rolled">} overlay     Manual per-item state overrides.
  * @property {Object<string, number>} tokenOverride        Per-encounter token cost overrides.
  * @property {number|null} vaultTake      Item id being taken from the vault, if any.
- * @property {number} tokenRaid
- * @property {number} tokenDungeon
+ * @property {number} [tokenRaid]         Legacy; token costs now come from src/season.js.
+ * @property {number} [tokenDungeon]      Legacy; token costs now come from src/season.js.
  * @property {string|number|null} raidDiff Selected raid difficulty.
  * @property {"raw"|"pct"} [metric]        Droptimizer display metric.
  * @property {number} [baseline]           Droptimizer baseline DPS.
