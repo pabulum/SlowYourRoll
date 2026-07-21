@@ -1,7 +1,7 @@
 name: Deploy to GitHub Pages
 
-# Publishes the static site (repo root) to GitHub Pages on every push to main.
-# In the repo settings, set Pages → Build and deployment → Source to "GitHub Actions".
+# Publishes the static site to GitHub Pages on every push to main, but only after CI
+# passes. In the repo settings, set Pages → Build and deployment → Source to "GitHub Actions".
 
 on:
   push:
@@ -19,7 +19,12 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Gate the deploy on lint + typecheck + test, so main is never published red.
+  check:
+    uses: ./.github/workflows/ci.yml
+
   deploy:
+    needs: check
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -27,8 +32,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+
+      # There's no build step — "building" is copying the files the browser actually
+      # loads. Everything else (tests, scripts, tooling config) stays off the site.
+      - name: Stage the site
+        run: |
+          mkdir -p _site
+          cp index.html LICENSE _site/
+          cp -r src data _site/
+
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: _site
       - id: deployment
         uses: actions/deploy-pages@v4

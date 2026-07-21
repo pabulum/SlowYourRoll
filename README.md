@@ -62,8 +62,13 @@ URL). Any static server works — there is **no build step**, and the shipped si
 runtime dependencies**:
 
 ```sh
-npm run serve        # python3 -m http.server 8000, then open http://localhost:8000
+npm run serve                  # http://localhost:8000
+npm run serve -- --port=3000   # or set $PORT
 ```
+
+That's [`scripts/serve.mjs`](scripts/serve.mjs) — a zero-dependency Node static server, so
+Node is the only thing you need installed. It sends `cache-control: no-store`, because a
+304 on a stale ES module is a confusing way to lose an edit.
 
 ## Development
 

@@ -1,19 +1,31 @@
 name: CI
 
 # Lint, type-check, and test on every push and pull request.
+# Also callable from pages.yml, so a deploy can't ship a red build.
 on:
   push:
     branches: [main]
   pull_request:
+  workflow_call:
 
 jobs:
   check:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Floor (package.json engines) / stable / early warning. The floor catches
+        # "works on my newer Node"; "current" covers what local dev actually runs.
+        # "lts/*" picks up each new LTS on its own — including 26, once it lands.
+        node: ["20.6", "lts/*", "current"]
+    # "current" is advisory: upstream Node churn shouldn't redden a PR or, since this
+    # workflow gates pages.yml, block a deploy for a reason that isn't our code.
+    continue-on-error: ${{ matrix.node == 'current' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
       - run: npm run lint
