@@ -23,10 +23,10 @@ pool is in one of three states you can cycle by tapping it:
   to you. Copies in your `/simc` export at ≥ the drop's item level auto-mark as Own.
 - **Rolled** — you already bonus-rolled it; removed from the pool for good.
 
-Items marked **✦ rare** are very rare drops off a boss kill, but a bonus roll draws uniformly from
-the pool — so they're weighted no differently here. That's intentional: a bonus roll is the one
-place a very rare item costs the same as anything else, which is usually a reason to chase it, not
-to discount it.
+Items badged **very rare** (and flagged **✦** in the recommendation) are rare off a *boss kill*, but
+a bonus roll draws evenly from the pool — so they're weighted no differently here, and their EV is
+not discounted. That's intentional: the roll is the one place a very rare item costs the same as
+common filler, which is usually a reason to chase it rather than shy off it.
 
 Optionally paste your in-game `/simc` addon export to fold in this week's Great Vault choices,
 auto-mark owned gear, and import your logged bonus-roll history.

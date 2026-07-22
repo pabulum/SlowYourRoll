@@ -198,7 +198,7 @@ function itemRow(b, it) {
   return '' +
     '<div class="item st-' + st + zero + '" data-id="' + it.id + '">' +
     '<button class="state-btn ' + st + '" data-act="cycle" title="Want → Own → Rolled">' + lbl + '</button>' +
-    '<div class="iname"><span class="q' + (it.q || 3) + '">' + esc(it.name) + '</span>' + (it.vr ? '<span class="vr">rare</span>' : '') + have + '</div>' +
+    '<div class="iname"><span class="q' + (it.q || 3) + '">' + esc(it.name) + '</span>' + (it.vr ? '<span class="vr">very rare</span>' : '') + have + '</div>' +
     '<div class="ilvl">' + (it.lvl || "") + '</div>' +
     '<div class="iscore tnum">' + (it.score > 0 ? "+" + dv(b, it.score) : "—") + '</div>' +
     '</div>';
