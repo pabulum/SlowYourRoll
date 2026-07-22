@@ -54,10 +54,13 @@
     <div class="seg" id="metricSeg"></div>
     <div class="seg-label" id="diffLabel">Raid diff</div>
     <div class="seg" id="diffSeg"></div>
+    <div class="seg-label" id="lootSpecLabel">Loot spec</div>
+    <select class="board slim" id="lootSpecSel" aria-label="Loot spec"></select>
     <label class="toggle"><input type="checkbox" id="showAll"> <span>Show older content</span></label>
   </div>
 
   <div id="dataNote" class="simc-note alert" hidden></div>
+  <div id="lootNote" class="simc-note" hidden></div>
   <div id="simcNote" class="simc-note" hidden></div>
   <section id="vaultPanel"></section>
   <section id="verdict"></section>
@@ -95,5 +98,13 @@
 <div class="toast" id="toast"></div>
 
 <script type="module" src="src/main.js"></script>
+
+<!-- Wowhead's tooltip widget, the same one QE Live and Raidbots use. It attaches Wowhead's own item
+     card to the links this app renders (see src/wowhead.js). Told not to recolour, rename or
+     iconize those links: we already do all three, and its versions fight the layout.
+     This is the app's only third-party script. Hovering an item tells Wowhead which item you
+     hovered; nothing from your report is involved. Blocked or offline, the links stay links. -->
+<script>const whTooltips = { colorLinks: false, iconizeLinks: false, renameLinks: false };</script>
+<script defer src="https://wow.zamimg.com/widgets/power.js"></script>
 </body>
 </html>

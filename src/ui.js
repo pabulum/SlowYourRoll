@@ -15,8 +15,9 @@ export function initUI() {
     const card = e.target.closest(".card");
     if (!card) return;
     const b = active(), key = card.dataset.key, act = el.dataset.act;
+    if (act === "wowhead") return; // the icon is a plain link out; let the browser have it
     if (act === "toggle") { b._open = (b._open === key ? null : key); save(); render(); return; }
-    if (act === "showzero") { b._showZeroKey = (b._showZeroKey === key ? null : key); render(); return; }
+    if (act === "showblocked") { b._showBlockedKey = (b._showBlockedKey === key ? null : key); render(); return; }
     const itemEl = e.target.closest(".item");
     if (act === "cycle" && itemEl) {
       const id = itemEl.dataset.id, ok = key + ":" + id;
@@ -47,6 +48,10 @@ export function initUI() {
     active().metric = el.dataset.metric; save(); render();
   });
   $("boardSel").addEventListener("change", (/** @type {any} */ e) => { state.activeId = e.target.value; save(); render(); });
+  // Changing loot spec changes which drops you're eligible for, and so the whole ranking.
+  $("lootSpecSel").addEventListener("change", (/** @type {any} */ e) => {
+    active().lootSpec = e.target.value || null; save(); render();
+  });
   $("delBoard").addEventListener("click", () => {
     const b = active();
     if (!confirm("Remove " + b.player + " (" + b.spec + ")? Your rolled history for it is lost.")) return;

@@ -6,6 +6,8 @@ import { SEASON, SEASON_LABEL, seasonDrift } from "./season.js";
 import { state, active } from "./store.js";
 import { $, esc } from "./util.js";
 import { buildGroups, resolve, diffLabel, unitOf, dv } from "./model.js";
+import { specId, specInfo, classSpecs } from "./loot.js";
+import { iconHTML, nameHTML } from "./wowhead.js";
 
 /** Fill in the season-dependent copy. Runs once at boot; nothing here changes at runtime. */
 export function renderSeason() {
@@ -47,6 +49,36 @@ function renderDataNote(built) {
   host.innerHTML = parts.map((p) => "◈ " + p).join("<br><br>");
 }
 
+/**
+ * The loot-spec picker. In game you choose which spec a boss loots you for, and that decides which
+ * drops you're eligible for — so it decides the pool, and the ranking with it. Defaults to the
+ * spec the report was run as; only shown when the class has another spec to switch to.
+ */
+function renderLootSpec(b) {
+  const own = specId(b.spec), sel = $("lootSpecSel"), note = $("lootNote");
+  const mine = own ? classSpecs(own) : [];
+  const show = mine.length > 1;
+  $("lootSpecLabel").style.display = show ? "" : "none";
+  sel.style.display = show ? "" : "none";
+  note.hidden = true;
+  if (!show) return;
+  const cur = b.lootSpec || own;
+  sel.innerHTML = mine.map((id) =>
+    '<option value="' + id + '"' + (id === cur ? " selected" : "") + ">" + esc(specInfo(id).n) +
+    (id === own ? " (report)" : "") + "</option>"
+  ).join("");
+
+  // Switching loot spec changes the pool honestly, but not the values: the report only ever simmed
+  // one spec, so the other's gear sits at zero. Say so rather than let it read as "worth nothing".
+  if (cur !== own) {
+    note.hidden = false;
+    note.innerHTML = '◈ <b>Looting as ' + esc(specInfo(cur).n) + ', valued as ' + esc(specInfo(own).n) + '.</b> ' +
+      'Pool sizes are right for this loot spec, but every item only ' + esc(specInfo(cur).n) +
+      ' can use scores 0 — the report never simmed it. Load a ' + esc(specInfo(cur).n) +
+      ' report to rank these for real.';
+  }
+}
+
 /** Re-render the whole app from current state. */
 export function render() {
   const has = state.boards.length > 0;
@@ -82,6 +114,8 @@ export function render() {
   $("diffSeg").innerHTML = built.diffs.map((d) =>
     '<button data-diff="' + d + '" class="' + (d === built.selDiff ? "on" : "") + '">' + esc(diffLabel(b, d)) + "</button>"
   ).join("");
+
+  renderLootSpec(b);
 
   const simc = state.simc[b.key], note = $("simcNote");
   if (simc && (!simc.rolledIds || !simc.rolledIds.length)) {
@@ -189,28 +223,89 @@ function cardHTML(b, r, i) {
     '</div>';
 }
 
+/**
+ * A pool in three tiers, all of them on screen: the upgrades you're rolling for, the filler that
+ * has no value but still dilutes the odds, and what this loot spec can't be handed at all. Only the
+ * last is inert — the filler is the half of the pool you most need to *correct*, since marking one
+ * Rolled is what takes it out of the denominator.
+ */
 function itemsHTML(b, r) {
-  const showZero = active()._showZeroKey === r.g.key;
-  const shown = r.items, zeros = shown.filter((i) => i.score <= 0 && i.state === "want");
-  const visible = shown.filter((i) => !(i.score <= 0 && i.state === "want" && !showZero));
-  const html = visible.map((it) => itemRow(b, it)).join("");
-  const toggle = (zeros.length && !showZero)
-    ? '<div class="hidden-zero" data-act="showzero">+ ' + zeros.length + ' filler item' + (zeros.length > 1 ? "s" : "") + ' with no upgrade (still in pool) — show</div>'
-    : '';
-  return '<div class="items">' + html + '</div>' + toggle;
+  const showBlocked = active()._showBlockedKey === r.g.key;
+  const canGet = r.items.filter((i) => i.elig !== false), blocked = r.items.filter((i) => i.elig === false);
+  const upgrades = canGet.filter((i) => i.score > 0), filler = canGet.filter((i) => i.score <= 0);
+  const group = (label, n) => '<div class="item-group">' + label + ' <span class="n">' + n + '</span></div>';
+  let html = upgrades.map((it) => itemRow(b, it)).join("");
+  if (filler.length) {
+    html += group(upgrades.length ? "No upgrade — still dilutes the pool" : "Nothing here is an upgrade", filler.length);
+    html += filler.map((it) => itemRow(b, it)).join("");
+  }
+  // The blocked tier is reference, not work: it's out of the pool and can't be changed from here, so
+  // it folds away. What it's *for* is the alt-spec lines below, which read from it.
+  if (blocked.length) {
+    html += '<div class="item-group tap" data-act="showblocked">' +
+      (showBlocked ? "Hide" : "Show") + ' what this loot spec can’t be awarded <span class="n">' + blocked.length + '</span></div>';
+    if (showBlocked) html += blocked.map((it) => itemRow(b, it)).join("");
+  }
+  return '<div class="items">' + html + '</div>' + altNotes(b, r);
+}
+
+/**
+ * What another loot spec would do to this pool. Only better-EV options appear, each named by what
+ * it sheds and what it costs — the whole point of switching is usually the dodge, not the gain.
+ */
+function altNotes(b, r) {
+  return r.alts.slice(0, 2).map((a) => {
+    const name = esc(specInfo(a.spec).n);
+    const delta = a.remaining - r.remaining;
+    const parts = ['<b>Loot as ' + name + ':</b> EV ' + dv(b, a.ev) + ' vs ' + dv(b, r.ev) +
+      ' · ' + a.remaining + ' in pool' + (delta ? " (" + (delta > 0 ? "+" : "") + delta + ")" : "")];
+    if (a.dodges.length) parts.push("Dodges " + listOf(a.dodges));
+    if (a.gains.length) parts.push("Adds " + listOf(a.gains));
+    if (a.loses.length) parts.push("<b>Gives up " + listOf(a.loses) + "</b>");
+    return '<div class="swap-note">' + parts.join(" · ") + "</div>";
+  }).join("");
+}
+
+/** "A, B and 3 more" — item names for a one-line summary. */
+function listOf(names) {
+  const head = names.slice(0, 2).map(esc).join(", ");
+  return names.length > 2 ? head + " and " + (names.length - 2) + " more" : head;
 }
 
 function itemRow(b, it) {
+  if (it.elig === false) {
+    return '' +
+      '<div class="item blocked" data-id="' + it.id + '">' +
+      '<span class="state-btn blocked" title="A bonus roll can\'t award this to your loot spec">Can\'t</span>' +
+      '<div class="iname">' + iconHTML(it.id, it.lvl) + nameHTML(it.id, it.name, it.q, it.lvl) +
+      '<span class="why">' + esc(it.why || "not for this spec") + '</span></div>' +
+      '<div class="ilvl">' + (it.lvl || "") + '</div>' +
+      '<div class="iscore tnum">—</div>' +
+      '</div>';
+  }
   const st = it.state || "want", lbl = st === "want" ? "Want" : (st === "own" ? "Own" : "Rolled");
   const zero = it.score <= 0 ? " zero" : "";
+  const only = exclusive(it);
   const have = it.ownedIlvl != null
     ? '<span class="have' + (it.ownedIlvl >= (it.lvl || 0) ? " dupe" : "") + '" title="You already hold this item at ilvl ' + it.ownedIlvl + (it.ownedIlvl >= (it.lvl || 0) ? " — a duplicate" : " — a lower track; roll it if that's a real upgrade") + '">have ' + it.ownedIlvl + '</span>'
     : '';
   return '' +
     '<div class="item st-' + st + zero + '" data-id="' + it.id + '">' +
     '<button class="state-btn ' + st + '" data-act="cycle" title="Want → Own → Rolled">' + lbl + '</button>' +
-    '<div class="iname"><span class="q' + (it.q || 3) + '">' + esc(it.name) + '</span>' + (it.vr ? '<span class="vr">very rare</span>' : '') + have + '</div>' +
+    '<div class="iname">' + iconHTML(it.id, it.lvl) + nameHTML(it.id, it.name, it.q, it.lvl) +
+    (it.vr ? '<span class="vr">very rare</span>' : '') + only + have + '</div>' +
     '<div class="ilvl">' + (it.lvl || "") + '</div>' +
     '<div class="iscore tnum">' + (it.score > 0 ? "+" + dv(b, it.score) : "—") + '</div>' +
     '</div>';
+}
+
+/**
+ * Badge an item that not every spec of the class can be awarded. On something you want that's a
+ * reason not to switch; on filler it's the thing another spec would dodge for you.
+ */
+function exclusive(it) {
+  const specs = it.specs || [];
+  if (!specs.length || specs.length >= classSpecs(specs[0]).length) return "";
+  const names = specs.map((s) => specInfo(s).n).join(" / ");
+  return '<span class="only" title="Only ' + esc(names) + ' can be awarded this">' + esc(names) + ' only</span>';
 }

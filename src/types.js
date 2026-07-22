@@ -8,6 +8,22 @@
  * @property {string} n  Item name.
  * @property {number} q  Quality (2 uncommon … 5 legendary).
  * @property {Array<number[]>} s  Sources: each [instId, encId] with an optional 3rd "very rare" flag.
+ * @property {number} [c]   Item class (2 weapon, 4 armor).
+ * @property {number} [u]   Item subclass — armor type: 1 cloth, 2 leather, 3 mail, 4 plate, 6 shield.
+ * @property {number} [iv]  Inventory slot (16 = Back; cloaks are filed as cloth but worn by all).
+ * @property {string} [st]  Primary stats it can roll, as a code set: "i" intellect, "ai" the
+ *   agility-or-intellect of leather and mail, "si" plate, "" none (jewelry and cloaks).
+ * @property {number[]} [p]  Spec ids Blizzard allows this to drop for. Absent = unrestricted.
+ * @property {string} [ic]  Blizzard icon name, for the icon CDN and the hover card.
+ * @property {string} [sc]  Secondary stats, biggest first: "c" crit, "h" haste, "v" vers, "m" mastery.
+ */
+
+/**
+ * A playable spec, keyed by Blizzard's spec id.
+ * @typedef {Object} Spec
+ * @property {string} n   Spec name ("Mistweaver").
+ * @property {string} c   Class name ("Monk").
+ * @property {string} st  Primary stat ("int"/"agi"/"str"), inferred at build time; "" if unknown.
  */
 
 /**
@@ -21,6 +37,7 @@
  *   (world bosses, leveling drops, catch-up vendors). Recorded so the app can drop them knowingly
  *   and still warn about instances it has genuinely never heard of.
  * @property {number} [seasonId]  QE Live's CONSTANTS.seasonID at build time; see src/season.js.
+ * @property {Record<string, Spec>} [specs]  Spec id -> name/class/primary stat; see src/loot.js.
  * @property {Record<string, Item>} items
  */
 
@@ -57,6 +74,7 @@
  * @property {number} [tokenRaid]         Legacy; token costs now come from src/season.js.
  * @property {number} [tokenDungeon]      Legacy; token costs now come from src/season.js.
  * @property {string|number|null} raidDiff Selected raid difficulty.
+ * @property {string|null} [lootSpec]     Spec id to be looted as; null follows the report's spec.
  * @property {"raw"|"pct"} [metric]        Droptimizer display metric.
  * @property {number} [baseline]           Droptimizer baseline DPS.
  * @property {string} [fetchedAt]
@@ -65,7 +83,7 @@
  * @property {string} [unit]
  * @property {Object} [ufSettings]
  * @property {string|null} [_open]         Currently expanded encounter key.
- * @property {string|null} [_showZeroKey]  Encounter whose zero-score fillers are revealed.
+ * @property {string|null} [_showBlockedKey] Encounter whose ineligible items are revealed.
  */
 
 /**
@@ -90,6 +108,10 @@
  * @property {boolean} vr
  * @property {number|null} [ownedIlvl]
  * @property {"want"|"own"|"rolled"} [state]
+ * @property {boolean} [elig]        False when this loot spec can't be awarded the item.
+ * @property {string} [why]          Why not, for the UI.
+ * @property {string[]|null} [swap]  Specs of the same class that could take it, if any.
+ * @property {string[]} [specs]      Spec ids of this character's class that can be awarded it.
  */
 
 /**
@@ -102,6 +124,9 @@
  * @property {number} cost
  * @property {number} ev
  * @property {number} nWant
+ * @property {number} [nBlocked]  Items shown but out of the pool: this loot spec can't receive them.
+ * @property {{spec: string, remaining: number, num: number, ev: number, dodges: string[],
+ *   gains: string[], loses: string[]}[]} [alts]  Better-EV loot specs for this encounter.
  */
 
 export {};

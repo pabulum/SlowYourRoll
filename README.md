@@ -23,6 +23,34 @@ pool is in one of three states you can cycle by tapping it:
   to you. Copies in your `/simc` export at ≥ the drop's item level auto-mark as Own.
 - **Rolled** — you already bonus-rolled it; removed from the pool for good.
 
+**The pool is the boss's whole loot table, not just what your report scored.** A report only
+evaluates items worth simming, but a bonus roll draws from everything that boss can hand you, so
+the rest is filled in from the item database at zero value — it dilutes the odds without adding
+upside, which is exactly what it does in game.
+
+**What's in that pool depends on your loot spec.** Blizzard only awards you drops your loot spec
+can receive, so items it can't — a plate helm for a monk, a caster trinket for a healer, an
+agility weapon for a Mistweaver — are left out of the math entirely and folded away with the
+reason attached.
+
+That makes loot spec a lever, not just a filter, and it cuts both ways: switching can *add* items
+you want, but more often the win is **dropping** ones you don't. A Mistweaver at Pit of Saron is
+the standard case — looting as Windwalker sheds Nevermelting Ice Crystal, which no agility spec
+can be given, and keeps every piece of leather. Same wanted value, one fewer item in the pool,
+better odds on each. So each encounter is costed as every spec of your class, and any that beats
+your current one is offered under the item list, named by what it dodges and what it gives up.
+Items only some of your specs can receive are badged as such. Note that your report's *values*
+still only describe the spec it was simmed as; the app says so when the two differ.
+
+**Icons and hover cards.** Item names and icons link to Wowhead, and Wowhead's tooltip widget
+(`widgets/power.js`, the same one QE Live and Raidbots use) renders its card on hover. Links carry
+the item level *this source* drops at, so the card describes the item you'd actually be handed
+rather than a generic one. Icons come from Blizzard's icon CDN.
+
+That widget is the app's only third-party script, and the only thing that tells anyone else what
+you're doing: hovering an item tells Wowhead which item you hovered. Nothing from your report is
+involved either way. Blocked or offline, the links stay links and the app is unaffected.
+
 Items badged **very rare** (and flagged **✦** in the recommendation) are rare off a *boss kill*, but
 a bonus roll draws evenly from the pool — so they're weighted no differently here, and their EV is
 not discounted. That's intentional: the roll is the one place a very rare item costs the same as
@@ -44,6 +72,14 @@ npm run data                          # uses $QE_PATH, else ~/Projects/Questiona
 npm run data -- --qe=/path/to/QELive  # explicit checkout
 npm run data:check                    # report drift without writing
 ```
+
+The build also downloads Blizzard's item and talent data from [Raidbots](https://www.raidbots.com)
+(`equippable-items.json`, `talents.json`) for the one thing QE Live's database can't supply: who is
+allowed to loot what. QE's ItemDB is a healer database — every item in it is intellect and none of
+it records spec eligibility — so it can't distinguish a healer trinket from the caster-DPS one on
+the same boss, and a report will happily list both. Blizzard's spec lists, armor types and primary
+stats settle it; see [`src/loot.js`](src/loot.js). Pass `--items=` / `--talents=` (or
+`$RAIDBOTS_ITEMS` / `$RAIDBOTS_TALENTS`) to build from saved copies offline.
 
 **What a roll costs and what the season is called** live in [`src/season.js`](src/season.js) —
 QE Live doesn't publish those. Season 1 charges 2 tokens for a raid boss and 1 for a M+ dungeon;

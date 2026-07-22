@@ -6,6 +6,7 @@
 import { QE_DATA, DIFF_NAMES, DIFF_ORDER } from "./data.js";
 import { SEASON } from "./season.js";
 import { state } from "./store.js";
+import { canLoot, specId, classSpecs } from "./loot.js";
 import { fmt } from "./util.js";
 
 /**
@@ -131,6 +132,63 @@ export function diffLabel(b, d) {
 }
 
 /**
+ * The same encounter, rolled as each of the character's other specs.
+ *
+ * Loot spec is a lever on the pool, not just a filter: dropping an item you'd never want shortens
+ * the denominator and every remaining item's odds go up. The classic case is a Mistweaver at Pit of
+ * Saron, where looting as Windwalker sheds Nevermelting Ice Crystal and keeps every piece of
+ * leather. So each alternative is costed the same way as the current one, and named by what it
+ * drops and what it gives up.
+ *
+ * Values are the report's, which only ever simmed one spec — fine for "what would I stop being
+ * offered", not for "what is this worth to the other spec". Rows keep only the better options.
+ */
+function altSpecs(items, sp, cost, ev) {
+  if (!sp) return [];
+  const live = items.filter((i) => i.state !== "rolled");
+  return classSpecs(sp).filter((s) => s !== sp).map((s) => {
+    const has = (i) => (i.specs || []).indexOf(s) >= 0;
+    const pool = live.filter(has);
+    const num = pool.reduce((t, i) => t + (i.state === "want" ? i.score : 0), 0);
+    return {
+      spec: s,
+      remaining: pool.length,
+      num,
+      ev: pool.length > 0 ? num / pool.length / cost : 0,
+      dodges: live.filter((i) => i.elig !== false && !has(i)).map((i) => i.name),
+      gains: live.filter((i) => i.elig === false && has(i)).map((i) => i.name),
+      loses: live.filter((i) => i.elig !== false && !has(i) && i.score > 0).map((i) => i.name),
+    };
+  }).filter((a) => a.ev > ev).sort((a, c) => c.ev - a.ev);
+}
+
+/**
+ * Which of the character's own specs could be awarded this item. The point isn't the current spec —
+ * it's the difference between them. An item only one spec can receive is an item the others dodge,
+ * and dodging is half of what a loot spec is for.
+ * @returns {string[]} spec ids, empty when the character's spec is unknown.
+ */
+function eligibleSpecs(meta, sp) {
+  if (!sp) return [];
+  return classSpecs(sp).filter((s) => canLoot(meta, s).ok);
+}
+
+/** Item ids per "instId:encId" source, built once on demand. */
+let bySource = null;
+function itemsAt(key) {
+  if (!bySource) {
+    bySource = {};
+    Object.keys(QE_DATA.items).forEach((id) => {
+      QE_DATA.items[id].s.forEach((s) => {
+        const k = s[0] + ":" + s[1];
+        (bySource[k] || (bySource[k] = [])).push(id);
+      });
+    });
+  }
+  return bySource[key] || [];
+}
+
+/**
  * Build the ranked list of rollable sources for a board at its selected difficulty.
  * Returns { rows, selDiff, diffs, unknown } where each row carries its items, pool size, and EV,
  * and `unknown` names the visible sources the encounter database couldn't identify.
@@ -138,6 +196,7 @@ export function diffLabel(b, d) {
  * @returns {{ rows: import("./types.js").Row[], selDiff: string, diffs: string[], unknown: string[] }}
  */
 export function buildGroups(b) {
+  const sp = b.lootSpec || specId(b.spec);
   const diffs = raidDiffs(b);
   const selDiff = (b.raidDiff != null && diffs.indexOf(String(b.raidDiff)) >= 0) ? String(b.raidDiff) : diffs[0];
   const groups = {};
@@ -158,7 +217,34 @@ export function buildGroups(b) {
       const meta = /** @type {Partial<import("./types.js").Item>} */ (QE_DATA.items[r.item] || {});
       const g = groups[key] || (groups[key] = { key, type: info.type, name: info.name, instName: info.instName || "", items: {} });
       const ex = g.items[r.item], sc = r.score || 0;
-      if (!ex || sc > ex.score) g.items[r.item] = { id: r.item, name: meta.n || ("Item " + r.item), q: meta.q || 3, score: sc, lvl: r.level, vr };
+      // A report can list items this character's loot spec can't be given — QE evaluates a healer
+      // trinket and the caster-DPS one beside it alike. Keep them, flagged: they're visible but out
+      // of the pool, since a bonus roll can't hand you one.
+      const lt = canLoot(meta, sp);
+      if (!ex || sc > ex.score) {
+        g.items[r.item] = {
+          id: r.item, name: meta.n || ("Item " + r.item), q: meta.q || 3, score: sc, lvl: r.level, vr,
+          elig: lt.ok, why: lt.why || "", swap: lt.swap || null, specs: eligibleSpecs(meta, sp),
+        };
+      }
+    });
+  });
+
+  // A report only scores what it evaluated, but a bonus roll draws from the whole loot table — so
+  // the rest of each boss's drops belong in the pool at zero value. Leaving them out was the other
+  // half of the EV error: it shrinks the denominator, flattering every encounter the report is
+  // thin on. They render as fillers, folded away behind the "no upgrade" toggle.
+  Object.keys(groups).forEach((key) => {
+    const g = groups[key];
+    itemsAt(key).forEach((id) => {
+      if (g.items[id]) return;
+      const meta = QE_DATA.items[id];
+      const src = meta.s.filter((x) => x[0] + ":" + x[1] === key)[0] || [];
+      const lt = canLoot(meta, sp);
+      g.items[id] = {
+        id: Number(id), name: meta.n, q: meta.q || 3, score: 0, lvl: 0, vr: !!src[2],
+        elig: lt.ok, why: lt.why || "", swap: lt.swap || null, specs: eligibleSpecs(meta, sp),
+      };
     });
   });
 
@@ -175,15 +261,19 @@ export function buildGroups(b) {
             : (autoOwn ? "own" : "want")));
       return it;
     }).sort((a, c) => c.score - a.score || a.name.localeCompare(c.name));
-    const remaining = items.filter((i) => i.state !== "rolled").length;
-    const num = items.reduce((t, i) => t + (i.state === "want" ? i.score : 0), 0);
+    // Ineligible items are shown but never counted: they can't dilute a pool they can't be in.
+    const canGet = items.filter((i) => i.elig !== false);
+    const remaining = canGet.filter((i) => i.state !== "rolled").length;
+    const num = canGet.reduce((t, i) => t + (i.state === "want" ? i.score : 0), 0);
     // Token cost follows the season unless the user overrode this encounter. The per-board
     // tokenRaid/tokenDungeon fields older saves carry were never user-editable, so they're ignored.
     const cost = b.tokenOverride[g.key] || (g.type === "raid" ? SEASON.tokenRaid : SEASON.tokenDungeon) || 1;
     const ev = remaining > 0 ? num / remaining / cost : 0;
     return {
       g, items, remaining, num, cost, ev,
-      nWant: items.filter((i) => i.state === "want" && i.score > 0).length,
+      nWant: canGet.filter((i) => i.state === "want" && i.score > 0).length,
+      nBlocked: items.length - canGet.length,
+      alts: altSpecs(items, sp, cost, ev),
     };
   });
   rows.sort((a, c) => c.ev - a.ev || c.num - a.num || a.g.name.localeCompare(c.g.name));
