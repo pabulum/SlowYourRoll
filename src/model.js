@@ -11,13 +11,19 @@ import { fmt } from "./util.js";
 /**
  * Resolve an (instId, encId) pair to a display name and type. instId === -1 is a M+ dungeon.
  *
- * Returns null only for sources that are genuinely not bonus-rollable: QE's negative sentinel
+ * Returns null for sources that are genuinely not bonus-rollable: QE's negative sentinel
  * instances (crafted, reputation, timewalking, PvP), its sentinel *encounters* within a real raid
- * (trash/catalyst and world drops — see below), and the instances the data build recorded in
- * `ignoredInstances` (world bosses, leveling drops, old catch-up vendors).
+ * (trash/catalyst and world drops — see below), the instances the data build recorded in
+ * `ignoredInstances` (world bosses, leveling drops, old catch-up vendors), and encounter ids inside
+ * a raid we *do* know that aren't in its boss list.
  *
- * Anything else unrecognised is content *newer* than the encounter database — a new season's raid,
- * most likely. Those resolve to a placeholder flagged `unknown` and are treated as current, so a
+ * That last one is the trash case. Reports carry their own source ids — a Droptimizer especially,
+ * which sims straight from Raidbots' data — and those include per-raid pseudo-encounters (trash
+ * packs, catalyst) that QE never catalogues as bosses. When we have the raid, we have its boss
+ * list, so an id that isn't in it isn't a boss you can bonus roll; ranking it would invent an
+ * encounter and name it after its own raid. An unknown *instance* is the real new-content signal.
+ *
+ * An unrecognised instance resolves to a placeholder flagged `unknown` and treated as current, so a
  * day-one report still ranks instead of silently losing rows. Callers surface the flag; see
  * `buildGroups`, which collects them into `unknown` for the staleness banner.
  *
@@ -50,12 +56,12 @@ export function resolve(instId, encId) {
     };
   }
   const boss = r.bosses[String(encId)];
+  if (!boss) return null; // known raid, unlisted encounter — trash, not a boss (see above)
   return {
     type: "raid",
-    name: boss || r.name,
+    name: boss,
     instName: r.name,
     current: QE_DATA.currentRaids.indexOf(String(instId)) >= 0,
-    unknown: !boss,
   };
 }
 

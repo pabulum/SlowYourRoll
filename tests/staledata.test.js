@@ -78,11 +78,11 @@ test("a raid's non-encounter drops are filtered out, not mistaken for staleness"
   assert.deepEqual(built.unknown, [], "and no warning — this was dropped knowingly");
 });
 
-test("a known raid with an unrecognised boss keeps the raid name but is flagged", () => {
+test("an unlisted encounter inside a known raid is dropped as trash, not flagged", () => {
+  // Reports carry Raidbots' own source ids, which include per-raid trash/catalyst pseudo-encounters
+  // QE never lists as bosses. We have this raid's boss list, so an id missing from it isn't a boss.
   const raidId = Number(QE_DATA.currentRaids[0]);
-  const info = resolve(raidId, FUTURE_BOSS);
-  assert.equal(info.name, QE_DATA.raids[String(raidId)].name);
-  assert.equal(info.unknown, true);
+  assert.equal(resolve(raidId, FUTURE_BOSS), null);
 });
 
 test("a next-season report still ranks, and reports what it couldn't identify", () => {
@@ -99,6 +99,20 @@ test("a next-season report still ranks, and reports what it couldn't identify", 
 
   assert.equal(built.unknown.length, 1, "the staleness banner needs something to report");
   assert.match(built.unknown[0], /999901/, "the warning identifies the unknown raid");
+});
+
+test("a current raid's trash drops raise no row and no warning", () => {
+  // The bug this pins: the banner used to report "The Voidspire · The Voidspire" — a raid we know,
+  // named twice, for an encounter nobody can roll on.
+  state.showAll = false;
+  state.simc = {};
+  const raidId = Number(QE_DATA.currentRaids[0]);
+  const b = futureBoard();
+  b.results = [{ item: 900001, inst: raidId, enc: FUTURE_BOSS, diff: "mythic", level: 700, score: 10 }];
+  const built = buildGroups(b);
+
+  assert.deepEqual(built.rows, []);
+  assert.deepEqual(built.unknown, []);
 });
 
 test("known current content produces no staleness warning", () => {

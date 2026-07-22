@@ -17,20 +17,31 @@ export function renderSeason() {
  * Warn when the encounter database has fallen behind what we're being asked to rank.
  * Two independent signals: sources in this report the database can't identify (a new raid, most
  * likely), and the database itself having moved to a season this build wasn't configured for.
+ *
+ * Both are the site's problem to fix, not the visitor's — the banner says what it means for the
+ * numbers on screen and stops there. The maintainer's fix (`npm run data`, `src/season.js`) needs
+ * a local checkout nobody browsing the site has, so it goes to the console instead.
  */
 function renderDataNote(built) {
   const host = $("dataNote"), parts = [];
   if (built.unknown.length) {
+    const n = built.unknown.length, many = n > 1;
     const list = built.unknown.slice(0, 4).map(esc).join(", ");
-    const more = built.unknown.length > 4 ? " and " + (built.unknown.length - 4) + " more" : "";
-    parts.push("<b>This report has " + built.unknown.length + " source" + (built.unknown.length > 1 ? "s" : "") +
-      " the encounter database doesn't know</b> — " + list + more +
-      ". They're ranked from the report's own numbers, but their names and item pools may be incomplete. " +
-      "Rebuild the database with <code>npm run data</code>.");
+    const more = n > 4 ? " and " + (n - 4) + " more" : "";
+    parts.push("<b>" + n + " encounter" + (many ? "s in" : " in") + " this report " + (many ? "aren't" : "isn't") +
+      " in the site's item data yet</b> — " + list + more +
+      ". " + (many ? "They're" : "It's") + " still ranked, using the numbers from your own report, so where " +
+      (many ? "they land" : "it lands") + " in the list is real — but " + (many ? "their names and item lists" : "the name and item list") +
+      " may be incomplete. This usually means new content just went live; it clears up once the site's data catches up.");
+    console.warn("[SlowYourRoll] Encounter database is missing: " + built.unknown.join(", ") +
+      ". Maintainer fix: rerun `npm run data` against a current QuestionablyEpic checkout and commit data/qe-data.js.");
   }
   if (seasonDrift(QE_DATA.seasonId)) {
-    parts.push("<b>The encounter database is from a newer season than this build.</b> Token costs and the " +
-      "season label may be wrong — update <code>src/season.js</code> (QE season id " + esc(String(QE_DATA.seasonId)) + ").");
+    parts.push("<b>The site's item data is from a newer season than the rest of the page.</b> Bonus-roll token " +
+      "costs and the season label above may be out of date, which can put raid and dungeon encounters in the " +
+      "wrong order relative to each other. Each encounter's own item list is still accurate.");
+    console.warn("[SlowYourRoll] Season drift: data/qe-data.js reports QE season id " + QE_DATA.seasonId +
+      ", but src/season.js is configured for " + SEASON.qeSeasonId + ". Maintainer fix: bump ACTIVE in src/season.js.");
   }
   host.hidden = !parts.length;
   host.innerHTML = parts.map((p) => "◈ " + p).join("<br><br>");
