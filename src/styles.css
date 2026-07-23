@@ -259,6 +259,9 @@ select.board.slim{min-width:0;padding:6px 8px;font-size:13px;}
 .name-cell .name{font-family:var(--font-display);font-size:19px;font-weight:600;letter-spacing:-.02em;display:flex;align-items:center;gap:9px;}
 .name-cell .name .txt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .name-cell .meta{font-size:12px;color:var(--faint);margin-top:2px;}
+/* These pills sit inside the display-face headings — the heading gets the display face, the badge
+   doesn't. At 10px the character reads as noise, and uppercase tracking wants the plainer face. */
+.type-tag,.pays,.special{font-family:var(--font-ui);}
 .type-tag{font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;padding:2px 7px;border-radius:999px;
   border:1px solid transparent;white-space:nowrap;}
 .type-tag.raid{color:var(--accent);background:var(--accent-soft);border-color:color-mix(in srgb, var(--accent) 35%, transparent);}
