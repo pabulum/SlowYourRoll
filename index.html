@@ -79,10 +79,11 @@
       <p>Scores come straight from your report (QE Live for healers, your sim for DPS/tanks). Each item in a pool is one of three states — tap to cycle:</p>
       <div class="states">
         <div><span class="pill w">Want</span><span>An upgrade still in the pool. Its score counts toward EV.</span></div>
-        <div><span class="pill o">Own</span><span>You have it (or took it from your vault). It <em>stays in the roll pool</em> — rolling it would just dupe — but it's worth 0 to you. Items in your <code>/simc</code> at <strong>≥ the drop's ilvl</strong> auto-mark Own; a copy at a <em>lower</em> ilvl shows a <span class="have" style="margin:0">have N</span> tag and stays Want (roll it if that lower copy is a different, weaker track).</span></div>
+        <div><span class="pill o">Own</span><span>You have it (or took it from your vault). It <em>stays in the roll pool</em> — rolling it would just dupe — but it's worth 0 to you. Items in your <code>/simc</code> at <strong>≥ the ilvl a roll here would hand you</strong> auto-mark Own; a copy below that shows a <span class="have" style="margin:0">have N</span> tag and stays Want, because the roll is still an upgrade.</span></div>
         <div><span class="pill r">Rolled</span><span>You bonus-rolled it — gone from the pool for good.</span></div>
       </div>
       <p>Zero-score items (no upgrade for you) still sit in the pool as filler and drag EV down — that's real. <strong>Raid difficulty</strong> switches which tier's item levels/scores are used. <strong>Token cost</strong> defaults to the season's: <span id="tokenNote"></span> Override it per encounter in any expanded row.</p>
+      <p id="rewardNote" hidden></p>
       <p><span class="vr" style="margin:0 4px 0 0">Very rare</span> items are rare off a <em>boss kill</em> — a bonus roll draws evenly from the pool, so they count here exactly like any other drop, and their EV is not discounted. That's usually a reason to chase one rather than to shy off it: the roll is the one place a very rare item costs the same as common filler. They're flagged <strong>✦</strong> in the recommendation up top.</p>
       <p style="color:var(--faint);margin-bottom:0">Everything saves in this browser; Export gives you a backup file.</p>
     </div>

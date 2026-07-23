@@ -13,6 +13,16 @@ import { iconHTML, nameHTML } from "./wowhead.js";
 export function renderSeason() {
   $("seasonLabel").textContent = SEASON_LABEL;
   $("tokenNote").textContent = SEASON.tokenNote;
+  // Only shown in a season that promotes rolls, where "the drop" and "what you'd receive" part ways.
+  const rn = $("rewardNote");
+  if (SEASON.rollReward) {
+    rn.hidden = false;
+    rn.innerHTML = "A bonus roll in Season " + SEASON.number + " is paid out <strong>as if the item came from " +
+      "your Great Vault</strong>, not from the boss — a Mythic boss hands back a fully upgraded item, " +
+      "Heroic and M+ the first step of the Myth track. Item levels below are what the roll would " +
+      "actually give you; the scores are still your report's, simmed at the item level each boss " +
+      "<em>drops</em> at, so they run low wherever the roll promotes.";
+  }
 }
 
 /**
@@ -202,12 +212,17 @@ function cardHTML(b, r, i) {
   const sub = g.type === "raid"
     ? (g.instName + (r.nWant ? " · " + r.nWant + " upgrade" + (r.nWant > 1 ? "s" : "") : ""))
     : ("M+ dungeon" + (r.nWant ? " · " + r.nWant + " upgrade" + (r.nWant > 1 ? "s" : "") : ""));
+  // Where a roll pays out. Worth saying per encounter rather than once: this is the season where a
+  // Mythic boss and a dungeon cost the same single token and pay five upgrade steps apart.
+  const pays = r.reward && r.reward.label
+    ? '<span class="pays" title="A bonus roll here is paid out as if the item came from your Great Vault">pays ' + esc(r.reward.label) + '</span>'
+    : "";
   return '' +
     '<div class="' + cls + '" data-key="' + g.key + '">' +
     '<div class="card-head" data-act="toggle">' +
     '<div class="rank tnum">' + (r.ev > 0 ? (i + 1) : "–") + '</div>' +
     '<div class="name-cell">' +
-    '<div class="name"><span class="txt">' + esc(g.name) + '</span><span class="type-tag ' + g.type + '">' + g.type + '</span></div>' +
+    '<div class="name"><span class="txt">' + esc(g.name) + '</span><span class="type-tag ' + g.type + '">' + g.type + '</span>' + pays + '</div>' +
     '<div class="meta">' + r.remaining + ' in pool · ' + sub + '</div>' +
     '</div>' +
     '<div class="ev-cell"><div class="ev tnum">' + dv(b, r.ev) + '</div><div class="math">' + math + '</div></div>' +
@@ -218,9 +233,26 @@ function cardHTML(b, r, i) {
     '<div class="field"><label>Token cost</label><input class="num-in tnum" data-act="cost" type="number" min="1" value="' + r.cost + '"></div>' +
     '<span>Σ ' + dv(b, r.num) + ' want · ' + r.remaining + ' in pool' + (r.cost !== 1 ? ' · ÷' + r.cost + ' tokens' : '') + '</span>' +
     '</div>' +
+    promoNote(r) +
     itemsHTML(b, r) +
     '</div>' +
     '</div>';
+}
+
+/**
+ * Say out loud that the scores below are not the scores of the item you'd receive.
+ *
+ * A report sims each drop at the item level it drops at, so where the season promotes the reward
+ * every score in the pool is a floor. It biases *between* encounters too — the same token buys a
+ * Mythic boss's fully-upgraded item or a dungeon's first step, and nothing in the EV maths knows
+ * that. Correcting the scores would mean re-simming at the promoted item level, which is the
+ * report's job, not ours; naming the bias is what we can honestly do here.
+ */
+function promoNote(r) {
+  if (!r.reward || !r.reward.label) return "";
+  return '<div class="swap-note">A roll here is paid out as <b>' + esc(r.reward.label) +
+    '</b>, above the item level your report simmed each drop at — so the scores below are a floor, ' +
+    'and they understate this encounter against one that pays a lower track.</div>';
 }
 
 /**
@@ -272,29 +304,56 @@ function listOf(names) {
   return names.length > 2 ? head + " and " + (names.length - 2) + " more" : head;
 }
 
+/**
+ * The item level to show and to build the Wowhead card from: what a roll here would hand you, which
+ * in a season that promotes rewards to a vault track is a step or five above what the boss drops.
+ * Stats roll from item level, so the card is wrong on the drop's.
+ */
+function rollIlvlOf(it) {
+  return it.rollIlvl || it.lvl || 0;
+}
+
+function ilvlCell(it) {
+  const lvl = rollIlvlOf(it);
+  if (!lvl) return "";
+  if (it.lvl && lvl !== it.lvl) {
+    return '<span class="promoted" title="Drops at ilvl ' + it.lvl + ' — a bonus roll pays out at ilvl ' + lvl + '">' + lvl + '</span>';
+  }
+  return String(lvl);
+}
+
+/** "have 678" on a copy you already hold, gold when rolling it again would only duplicate it. */
+function haveBadge(it) {
+  if (it.ownedIlvl == null) return "";
+  const why = it.dupe
+    ? "You already hold this item at ilvl " + it.ownedIlvl + " — rolling here would only duplicate it"
+    : (it.rollIlvl
+      ? "You hold this at ilvl " + it.ownedIlvl + "; a roll here pays out at ilvl " + it.rollIlvl + " — a real upgrade"
+      : "You hold this at ilvl " + it.ownedIlvl + ", but a roll here pays out on a higher upgrade track — probably still an upgrade");
+  return '<span class="have' + (it.dupe ? " dupe" : "") + '" title="' + why + '">have ' + it.ownedIlvl + '</span>';
+}
+
 function itemRow(b, it) {
+  const lvl = rollIlvlOf(it);
   if (it.elig === false) {
     return '' +
       '<div class="item blocked" data-id="' + it.id + '">' +
       '<span class="state-btn blocked" title="A bonus roll can\'t award this to your loot spec">Can\'t</span>' +
-      '<div class="iname">' + iconHTML(it.id, it.lvl) + nameHTML(it.id, it.name, it.q, it.lvl) +
+      '<div class="iname">' + iconHTML(it.id, lvl) + nameHTML(it.id, it.name, it.q, lvl) +
       '<span class="why">' + esc(it.why || "not for this spec") + '</span></div>' +
-      '<div class="ilvl">' + (it.lvl || "") + '</div>' +
+      '<div class="ilvl">' + ilvlCell(it) + '</div>' +
       '<div class="iscore tnum">—</div>' +
       '</div>';
   }
   const st = it.state || "want", lbl = st === "want" ? "Want" : (st === "own" ? "Own" : "Rolled");
   const zero = it.score <= 0 ? " zero" : "";
   const only = exclusive(it);
-  const have = it.ownedIlvl != null
-    ? '<span class="have' + (it.ownedIlvl >= (it.lvl || 0) ? " dupe" : "") + '" title="You already hold this item at ilvl ' + it.ownedIlvl + (it.ownedIlvl >= (it.lvl || 0) ? " — a duplicate" : " — a lower track; roll it if that's a real upgrade") + '">have ' + it.ownedIlvl + '</span>'
-    : '';
   return '' +
     '<div class="item st-' + st + zero + '" data-id="' + it.id + '">' +
     '<button class="state-btn ' + st + '" data-act="cycle" title="Want → Own → Rolled">' + lbl + '</button>' +
-    '<div class="iname">' + iconHTML(it.id, it.lvl) + nameHTML(it.id, it.name, it.q, it.lvl) +
-    (it.vr ? '<span class="vr">very rare</span>' : '') + only + have + '</div>' +
-    '<div class="ilvl">' + (it.lvl || "") + '</div>' +
+    '<div class="iname">' + iconHTML(it.id, lvl) + nameHTML(it.id, it.name, it.q, lvl) +
+    (it.vr ? '<span class="vr">very rare</span>' : '') + only + haveBadge(it) + '</div>' +
+    '<div class="ilvl">' + ilvlCell(it) + '</div>' +
     '<div class="iscore tnum">' + (it.score > 0 ? "+" + dv(b, it.score) : "—") + '</div>' +
     '</div>';
 }

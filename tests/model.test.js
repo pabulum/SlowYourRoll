@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { QE_DATA } from "../src/data.js";
 import { SEASON } from "../src/season.js";
 import { state } from "../src/store.js";
-import { resolve, buildGroups } from "../src/model.js";
+import { resolve, buildGroups, rollIlvlFor, isDupe } from "../src/model.js";
 
 // A current raid + one of its bosses, pulled from the live database so the test
 // adapts to data changes rather than hard-coding ids.
@@ -71,4 +71,62 @@ test("a per-encounter override beats the season's token cost", () => {
   const row = buildGroups(b).rows[0];
   assert.equal(row.cost, 4);
   assert.equal(row.ev, 30 / POOL / 4);
+});
+
+/* ---------- what the roll actually pays out ---------- */
+
+test("with no promotion the roll pays the drop's own item level", () => {
+  assert.equal(rollIlvlFor(null, 639), 639);
+  assert.equal(rollIlvlFor(null, 0), null); // report never said — don't pretend to know
+});
+
+test("a promoted roll pays its track's item level, or nothing until that level is known", () => {
+  assert.equal(rollIlvlFor({ label: "Myth 6/6", ilvl: 652 }, 639), 652);
+  assert.equal(rollIlvlFor({ label: "Myth 1/6", ilvl: null }, 639), null);
+});
+
+test("a copy you hold only dupes a roll it matches or beats", () => {
+  assert.equal(isDupe(639, 639), true);
+  assert.equal(isDupe(652, 639), true);
+  assert.equal(isDupe(639, 652), false); // the promoted roll is still an upgrade
+  assert.equal(isDupe(null, 639), false); // you don't hold one
+  assert.equal(isDupe(639, null), false); // promoted by an unknown amount — guess Want, not Own
+});
+
+test("holding a copy at the roll's item level marks it Own and drops it from the numerator", () => {
+  state.showAll = false;
+  const b = makeBoard();
+  state.simc = { testkey: { owned: { 900002: 639 } } };
+  const row = buildGroups(b).rows[0];
+  const it = row.items.filter((x) => x.id === 900002)[0];
+  assert.equal(it.rollIlvl, 639, "Season 1 pays the drop, so that's what a dupe is measured against");
+  assert.equal(it.dupe, true);
+  assert.equal(it.state, "own");
+  assert.equal(row.num, 10);          // only the item they don't already hold
+  assert.equal(row.remaining, POOL);  // an owned copy still dilutes the pool
+});
+
+test("holding a weaker copy leaves the item Want, tagged with what you hold", () => {
+  state.showAll = false;
+  const b = makeBoard();
+  state.simc = { testkey: { owned: { 900002: 630 } } };
+  const it = buildGroups(b).rows[0].items.filter((x) => x.id === 900002)[0];
+  assert.equal(it.ownedIlvl, 630);
+  assert.equal(it.dupe, false);
+  assert.equal(it.state, "want");
+  assert.equal(buildGroups(b).rows[0].num, 30);
+});
+
+// Filler comes out of the loot table, not the report, so it has no drop level to compare against.
+// Owning one must not be read as owning the roll's reward.
+test("an item the report never scored is not auto-owned on item level alone", () => {
+  state.showAll = false;
+  const b = makeBoard();
+  const filler = Object.keys(QE_DATA.items)
+    .filter((id) => QE_DATA.items[id].s.some((s) => s[0] === RAID_ID && s[1] === ENC_ID))[0];
+  state.simc = { testkey: { owned: { [filler]: 9999 } } };
+  const it = buildGroups(b).rows[0].items.filter((x) => String(x.id) === filler)[0];
+  assert.equal(it.lvl, 0);
+  assert.equal(it.rollIlvl, null);
+  assert.equal(it.dupe, false);
 });

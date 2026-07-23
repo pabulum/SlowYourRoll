@@ -104,7 +104,11 @@
  * @property {string} name
  * @property {number} q
  * @property {number} score
- * @property {number} [lvl]
+ * @property {number} [lvl]  Item level this source drops it at — what the report simmed.
+ * @property {number|null} [rollIlvl]  Item level a bonus roll would actually hand you. Equal to
+ *   `lvl` in a season that pays out at the drop; null when the season promotes the reward to a
+ *   vault track whose item level isn't known yet. See src/season.js.
+ * @property {boolean} [dupe]  You already hold this at or above `rollIlvl`, so a roll adds nothing.
  * @property {boolean} vr
  * @property {number|null} [ownedIlvl]
  * @property {"want"|"own"|"rolled"} [state]
@@ -124,6 +128,8 @@
  * @property {number} cost
  * @property {number} ev
  * @property {number} nWant
+ * @property {import("./season.js").Reward|null} [reward]  Upgrade track a roll here pays out at;
+ *   null when the season simply hands you the drop.
  * @property {number} [nBlocked]  Items shown but out of the pool: this loot spec can't receive them.
  * @property {{spec: string, remaining: number, num: number, ev: number, dodges: string[],
  *   gains: string[], loses: string[]}[]} [alts]  Better-EV loot specs for this encounter.

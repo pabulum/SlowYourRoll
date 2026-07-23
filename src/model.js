@@ -4,7 +4,7 @@
 //   EV = ( Σ score of items you still "want" ÷ items still in the pool ) ÷ token cost
 
 import { QE_DATA, DIFF_NAMES, DIFF_ORDER } from "./data.js";
-import { SEASON } from "./season.js";
+import { SEASON, rollReward } from "./season.js";
 import { state } from "./store.js";
 import { canLoot, specId, classSpecs } from "./loot.js";
 import { fmt } from "./util.js";
@@ -132,6 +132,15 @@ export function diffLabel(b, d) {
 }
 
 /**
+ * Canonical difficulty key ("mythic", "heroic", …) for a board's selected difficulty, for looking
+ * up what a roll at that difficulty pays. Both encodings pass through `diffLabel`: Droptimizer's
+ * named strings and QE's numeric index into the board's own difficulty list.
+ */
+export function diffKey(b, d) {
+  return diffLabel(b, d).toLowerCase();
+}
+
+/**
  * The same encounter, rolled as each of the character's other specs.
  *
  * Loot spec is a lever on the pool, not just a filter: dropping an item you'd never want shortens
@@ -171,6 +180,33 @@ function altSpecs(items, sp, cost, ev) {
 function eligibleSpecs(meta, sp) {
   if (!sp) return [];
   return classSpecs(sp).filter((s) => canLoot(meta, s).ok);
+}
+
+/**
+ * The item level a bonus roll on this source would actually hand you.
+ *
+ * @param {import("./season.js").Reward|null} reward  Where the season pays this source out, or null
+ *   when it pays out the drop itself.
+ * @param {number} [dropIlvl]  Item level the boss drops it at, as the report simmed it.
+ * @returns {number|null} null when it can't be pinned down — either the drop level is unknown, or
+ *   the season promotes the reward to a track whose item level isn't published yet.
+ */
+export function rollIlvlFor(reward, dropIlvl) {
+  return reward ? reward.ilvl : (dropIlvl || null);
+}
+
+/**
+ * Would a roll here only hand you a copy of what you already have?
+ *
+ * Unknown means no: a roll wrongly left as Want is a visible extra line the user can click to Own,
+ * while a roll wrongly marked Own drops silently out of the numerator and understates the whole
+ * encounter. Only one of those two mistakes argues against itself on screen.
+ *
+ * @param {number|null} [ownedIlvl] Best copy the character holds, null if they hold none.
+ * @param {number|null} [rollIlvl]  What the roll pays out, from `rollIlvlFor`.
+ */
+export function isDupe(ownedIlvl, rollIlvl) {
+  return ownedIlvl != null && rollIlvl != null && ownedIlvl >= rollIlvl;
 }
 
 /** Item ids per "instId:encId" source, built once on demand. */
@@ -251,14 +287,22 @@ export function buildGroups(b) {
   const ownedMap = ((state.simc[b.key] || {}).owned) || {};
   const rows = Object.keys(groups).map((k) => {
     const g = groups[k];
+    // What a roll here hands you, which is not always what the boss drops. Same for every item in
+    // the row: an upgrade track step is one item level, whichever item lands on it.
+    const reward = rollReward(g.type, diffKey(b, selDiff));
     const items = Object.keys(g.items).map((id) => {
       const it = g.items[id], ov = b.overlay[g.key + ":" + id];
       it.ownedIlvl = ownedMap[id] != null ? ownedMap[id] : null;
-      const autoOwn = it.ownedIlvl != null && it.lvl && it.ownedIlvl >= it.lvl; // hold a copy at >= the drop's ilvl -> dupe
+      // A copy you already hold only makes the roll redundant if it's at least as good as what the
+      // roll would hand you — and in a season that promotes rewards to a vault track, that is not
+      // the drop. Owning the Heroic version of an item doesn't dupe a roll that pays out on the
+      // Myth track.
+      it.rollIlvl = rollIlvlFor(reward, it.lvl);
+      it.dupe = isDupe(it.ownedIlvl, it.rollIlvl);
       it.state = ov === "rolled" ? "rolled"
         : (ov === "own" ? "own"
           : (b.vaultTake === Number(id) ? "own"
-            : (autoOwn ? "own" : "want")));
+            : (it.dupe ? "own" : "want")));
       return it;
     }).sort((a, c) => c.score - a.score || a.name.localeCompare(c.name));
     // Ineligible items are shown but never counted: they can't dilute a pool they can't be in.
@@ -270,7 +314,7 @@ export function buildGroups(b) {
     const cost = b.tokenOverride[g.key] || (g.type === "raid" ? SEASON.tokenRaid : SEASON.tokenDungeon) || 1;
     const ev = remaining > 0 ? num / remaining / cost : 0;
     return {
-      g, items, remaining, num, cost, ev,
+      g, items, remaining, num, cost, ev, reward,
       nWant: canGet.filter((i) => i.state === "want" && i.score > 0).length,
       nBlocked: items.length - canGet.length,
       alts: altSpecs(items, sp, cost, ev),
