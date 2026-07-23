@@ -263,13 +263,16 @@ function cardHTML(b, r, i) {
   const pays = r.reward && r.reward.label
     ? '<span class="pays" title="A bonus roll here is paid out as if the item came from your Great Vault">pays ' + esc(r.reward.label) + '</span>'
     : "";
+  const special = r.g.special && SEASON.special
+    ? '<span class="special" title="' + esc(SEASON.special.note) + '">' + esc(SEASON.special.badge) + '</span>'
+    : "";
   return '' +
     '<div class="' + cls + '" data-key="' + g.key + '">' +
     '<div class="card-head" data-act="toggle">' +
     '<div class="rank tnum">' + (r.ev > 0 ? (i + 1) : "–") + '</div>' +
     '<div class="name-cell">' +
-    '<div class="name"><span class="txt">' + esc(g.name) + '</span><span class="type-tag ' + g.type + '">' + g.type + '</span>' + pays + '</div>' +
-    '<div class="meta">' + r.remaining + ' in pool · ' + sub + '</div>' +
+    '<div class="name"><span class="txt">' + esc(g.name) + '</span><span class="type-tag ' + g.type + '">' + g.type + '</span>' + special + pays + '</div>' +
+    '<div class="meta">' + r.remaining + ' in pool · ' + sub + crestMeta(r) + '</div>' +
     '</div>' +
     '<div class="ev-cell"><div class="ev tnum">' + dv(b, r.ev) + '</div><div class="math">' + math + '</div></div>' +
     '<div class="chev">▸</div>' +
@@ -279,7 +282,9 @@ function cardHTML(b, r, i) {
     '<div class="field"><label>Token cost</label><input class="num-in tnum" data-act="cost" type="number" min="1" value="' + r.cost + '"></div>' +
     '<span>Σ ' + dv(b, r.num) + ' want · ' + r.remaining + ' in pool' + (r.cost !== 1 ? ' · ÷' + r.cost + ' tokens' : '') + '</span>' +
     '</div>' +
+    specialNote(r) +
     promoNote(r) +
+    crestNote(b, r) +
     itemsHTML(b, r) +
     '</div>' +
     '</div>';
@@ -299,6 +304,45 @@ function promoNote(r) {
   return '<div class="swap-note">A roll here is paid out as <b>' + esc(r.reward.label) +
     '</b>, above the item level your report simmed each drop at — so the scores below are a floor, ' +
     'and they understate this encounter against one that pays a lower track.</div>';
+}
+
+/** Crest yield, in the card's one-line summary. Uniform per roll, so it needs no qualifier there. */
+function crestMeta(r) {
+  const c = r.reward && r.reward.crests;
+  return c ? ' · ≈' + c + " " + esc(r.reward.crestKind || "") + " crests per roll" : "";
+}
+
+/**
+ * What a roll here is worth in crests, kept in crests.
+ *
+ * This is the half of a roll's value the score can't carry, and the reason it's quoted in its own
+ * currency is that converting it would need a crests-to-score rate that depends on which item you'd
+ * have spent them on — which is exactly the opportunity cost no report computes.
+ *
+ * The figure doesn't vary within a pool, and that is the useful part. An item handed over already
+ * upgraded saves the crests you'd have spent getting it there; one you'd never wear still unlocks
+ * that slot, so the item you *do* wear upgrades free. Filler and upgrade yield the same crests.
+ * So it can never reorder items inside an encounter — only encounters against each other, which is
+ * precisely where a season that charges one token for both a Mythic boss and a dungeon needs it.
+ */
+function crestNote(b, r) {
+  const c = r.reward && r.reward.crests;
+  if (!c) return "";
+  const kind = esc(r.reward.crestKind || "");
+  return '<div class="swap-note"><b>≈' + c + " " + kind + ' crests</b> per roll, whatever it hands you — ' +
+    'an item you want arrives already upgraded, and one you don’t still unlocks that slot, so the ' +
+    'piece you actually wear upgrades free. Uniform across the pool, so it can’t change <em>which</em> ' +
+    'item you want here, only whether this encounter beats another. Left out of the EV above: folding ' +
+    'it in would need a crests-to-' + esc(unitOf(b)) + ' rate that depends on the item you’d have ' +
+    'spent them on, which no report computes.</div>';
+}
+
+/** The end-of-raid encounters worth banking a token for, called out where the ranking can't see it. */
+function specialNote(r) {
+  if (!r.g.special || !SEASON.special) return "";
+  return '<div class="swap-note special-note"><b>' + esc(SEASON.special.badge) + '.</b> ' +
+    esc(SEASON.special.note) + ' The EV above prices <em>this week</em> only — it has no way to ' +
+    'weigh a token held for a kill week against one spent now.</div>';
 }
 
 /**

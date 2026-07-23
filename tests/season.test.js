@@ -28,6 +28,25 @@ test("an unrecognised difficulty in a promoting season is unknown, not unpromote
   assert.equal(r.label, "");
 });
 
+// The crest yield only exists where the payout is above a track's first step. Anywhere else the
+// roll still hands you a better item than the boss would, but not one you'd have paid crests for.
+test("only the fully-upgraded payout banks crests", () => {
+  const s2 = SEASONS[2];
+  assert.equal(rewardOf(s2, "raid", "mythic").crests, 80);
+  assert.equal(rewardOf(s2, "raid", "heroic").crests, 0);
+  assert.equal(rewardOf(s2, "dungeon").crests, 0);
+});
+
+test("an unrecognised difficulty banks no crests rather than guessing a figure", () => {
+  assert.equal(rewardOf(SEASONS[2], "raid", "diff 7").crests, undefined);
+});
+
+test("only a season with an end-of-raid tier describes one", () => {
+  assert.equal(SEASONS[1].special, null);
+  assert.equal(SEASONS[2].special.lastBosses, 2);
+  assert.ok(SEASONS[2].special.badge && SEASONS[2].special.note);
+});
+
 test("every reward carries a label and an item level slot", () => {
   Object.keys(SEASONS).forEach((n) => {
     const table = SEASONS[n].rollReward;

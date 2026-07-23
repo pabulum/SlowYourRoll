@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { QE_DATA } from "../src/data.js";
 import { SEASON } from "../src/season.js";
 import { state } from "../src/store.js";
-import { resolve, buildGroups, rollIlvlFor, isDupe, vaultChoice } from "../src/model.js";
+import { resolve, buildGroups, rollIlvlFor, isDupe, vaultChoice, finalBosses } from "../src/model.js";
 
 // A current raid + one of its bosses, pulled from the live database so the test
 // adapts to data changes rather than hard-coding ids.
@@ -115,6 +115,25 @@ test("holding a weaker copy leaves the item Want, tagged with what you hold", ()
   assert.equal(it.dupe, false);
   assert.equal(it.state, "want");
   assert.equal(buildGroups(b).rows[0].num, 30);
+});
+
+/* ---------- end-of-raid encounters worth banking a token for ---------- */
+
+test("the final bosses of a raid are the tail of its encounter ids", () => {
+  const ids = Object.keys(RAID.bosses).sort((a, c) => Number(a) - Number(c));
+  assert.deepEqual(finalBosses(RAID_ID, 2), ids.slice(-2));
+  assert.deepEqual(finalBosses(RAID_ID, 1), ids.slice(-1));
+});
+
+test("asking for no final bosses, or for an unknown raid, names none", () => {
+  assert.deepEqual(finalBosses(RAID_ID, 0), []);
+  assert.deepEqual(finalBosses(-999, 2), []);
+});
+
+// A raid shorter than the window is all endgame rather than an error.
+test("a raid with fewer bosses than asked for yields all of them", () => {
+  const n = Object.keys(RAID.bosses).length;
+  assert.equal(finalBosses(RAID_ID, n + 5).length, n);
 });
 
 /* ---------- the vault item you give up to roll ---------- */

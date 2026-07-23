@@ -121,7 +121,8 @@
 /**
  * An encounter grouping and its ranked pool.
  * @typedef {Object} Row
- * @property {{ key: string, type: "raid"|"dungeon", name: string, instName: string }} g
+ * @property {{ key: string, type: "raid"|"dungeon", name: string, instName: string,
+ *   special?: boolean }} g  `special` marks an end-of-raid encounter carrying the season's top tier.
  * @property {PoolItem[]} items
  * @property {number} remaining
  * @property {number} num

@@ -20,6 +20,23 @@
  * @property {string} label  Upgrade track and step, for display ("Myth 6/6"); "" when unrecognised.
  * @property {number|null} ilvl  Item level of that step — null until Blizzard publishes it. Null
  *   means "promoted, by an amount we don't know", which is not the same as "not promoted".
+ * @property {number} [crests]  Upgrade crests the payout saves you, per roll. Zero where the roll
+ *   lands on a track's first step, which is where a drop would have started anyway.
+ * @property {string} [crestKind]  Which crest currency that is ("Myth").
+ */
+
+/**
+ * Encounters at the end of a raid whose rewards are a class apart, and worth holding a token for.
+ *
+ * `lastBosses` counts back from the end of the raid rather than naming encounter ids, because the
+ * raid this describes isn't in the database yet. Which encounters those are is worked out in
+ * model.js, by encounter id — see `finalBosses` there for why that ordering is the only one
+ * available and what it assumes.
+ *
+ * @typedef {Object} Special
+ * @property {number} lastBosses  How many bosses at the end of a raid carry these rewards.
+ * @property {string} badge  Short tag for the encounter card.
+ * @property {string} note   One line on why the encounter is worth saving a token for.
  */
 
 /**
@@ -36,6 +53,8 @@
  * @property {Record<string, Reward>|null} rollReward  Where a roll pays out, keyed by difficulty
  *   ("mythic"/"heroic"/"normal"/"lfr", plus "mythic-plus" for dungeons). Null when a roll simply
  *   hands you the drop, at the drop's own item level — the Season 1 behaviour.
+ * @property {Special|null} special  End-of-raid encounters worth holding a token for; null when the
+ *   season has no such tier.
  */
 
 /** @type {Record<number, Season>} */
@@ -49,6 +68,7 @@ export const SEASONS = {
     tokenNote: "A raid boss costs 2 tokens in Season 1 and a M+ dungeon costs 1, so raid EV is halved against dungeon EV. Season 2 drops raids to 1 token.",
     rollReward: null, // a Season 1 roll hands you the item exactly as the boss drops it
     tokenFromVault: false,
+    special: null,
   },
   2: {
     number: 2,
@@ -65,12 +85,24 @@ export const SEASONS = {
     // Mythic vault arrives fully upgraded — so a Mythic boss and a M+ dungeon cost the same single
     // token and hand back items five upgrade steps apart. Item levels are null because Blizzard
     // hasn't published Midnight's track values; the tracks themselves are the part that's known.
+    //
+    // The crest figures are what the payout saves you, and they follow from Larias' arithmetic:
+    // 1,280 Myth crests to cap 16 slots is 80 per slot, so an item handed over at Myth 6/6 is 80
+    // crests you never have to spend — the "80 free crests a week, unobtainable any other way".
+    // Every other payout lands on the first step of a track, which is where a drop starts anyway,
+    // so it saves no crests even though it is still a better item than the boss would have given.
     rollReward: {
-      mythic: { label: "Myth 6/6", ilvl: null },
-      heroic: { label: "Myth 1/6", ilvl: null },
-      normal: { label: "Hero 1/6", ilvl: null },
-      lfr: { label: "Champion 1/8", ilvl: null },
-      "mythic-plus": { label: "Myth 1/6", ilvl: null },
+      mythic: { label: "Myth 6/6", ilvl: null, crests: 80, crestKind: "Myth" },
+      heroic: { label: "Myth 1/6", ilvl: null, crests: 0, crestKind: "Myth" },
+      normal: { label: "Hero 1/6", ilvl: null, crests: 0, crestKind: "Hero" },
+      lfr: { label: "Champion 1/8", ilvl: null, crests: 0, crestKind: "Champion" },
+      "mythic-plus": { label: "Myth 1/6", ilvl: null, crests: 0, crestKind: "Myth" },
+    },
+    special: {
+      lastBosses: 2,
+      badge: "Venomcursed 9/6",
+      note: "Its Mythic items are 9/6 with cantrip effects — a tier above anything else in the game, " +
+        "and the reason most raiders bank a token for the kill week rather than spend it on this ranking.",
     },
   },
 };

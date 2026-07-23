@@ -209,6 +209,37 @@ export function isDupe(ownedIlvl, rollIlvl) {
   return ownedIlvl != null && rollIlvl != null && ownedIlvl >= rollIlvl;
 }
 
+/**
+ * The last `n` encounters of a raid, as the encounter ids that end its boss list.
+ *
+ * Ordered by encounter id, because that's the only order there is: the data build sorts each raid's
+ * boss map by key, and JS orders integer-like keys numerically anyway, so no pull order ever
+ * survived upstream to be preserved. Blizzard hands out journal encounter ids in roughly pull
+ * order, which is why this works — but it is an assumption about their numbering, not a fact from
+ * the data. If a raid ever lands whose ids don't ascend with its bosses, this is the one place to
+ * fix, and the season's `special.lastBosses` is what it serves.
+ *
+ * @param {number|string} instId
+ * @param {number} n
+ * @returns {string[]} encounter ids, empty when the raid is unknown or `n` is 0.
+ */
+export function finalBosses(instId, n) {
+  const r = QE_DATA.raids[String(instId)];
+  if (!r || !n) return [];
+  return Object.keys(r.bosses).sort((a, c) => Number(a) - Number(c)).slice(-n);
+}
+
+/** Does this encounter carry the season's end-of-raid rewards? Memoised per raid. */
+let specialByRaid = null;
+function isSpecial(instId, encId) {
+  const sp = SEASON.special;
+  if (!sp) return false;
+  if (!specialByRaid) specialByRaid = {};
+  const k = String(instId);
+  if (!specialByRaid[k]) specialByRaid[k] = finalBosses(instId, sp.lastBosses);
+  return specialByRaid[k].indexOf(String(encId)) >= 0;
+}
+
 /** Item ids per "instId:encId" source, built once on demand. */
 let bySource = null;
 function itemsAt(key) {
@@ -251,7 +282,10 @@ export function buildGroups(b) {
       // see isn't a staleness signal worth interrupting them over.
       if (info.unknown) unknown[key] = info.type === "dungeon" ? info.name : info.instName + " · " + info.name;
       const meta = /** @type {Partial<import("./types.js").Item>} */ (QE_DATA.items[r.item] || {});
-      const g = groups[key] || (groups[key] = { key, type: info.type, name: info.name, instName: info.instName || "", items: {} });
+      const g = groups[key] || (groups[key] = {
+        key, type: info.type, name: info.name, instName: info.instName || "", items: {},
+        special: info.type === "raid" && isSpecial(instId, encId),
+      });
       const ex = g.items[r.item], sc = r.score || 0;
       // A report can list items this character's loot spec can't be given — QE evaluates a healer
       // trinket and the caster-DPS one beside it alike. Keep them, flagged: they're visible but out
