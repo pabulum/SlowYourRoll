@@ -7,6 +7,7 @@ import { state, active } from "./store.js";
 import { $, esc } from "./util.js";
 import { buildGroups, resolve, diffLabel, unitOf, dv, vaultChoice } from "./model.js";
 import { specId, specInfo, classSpecs } from "./loot.js";
+import { CLASS_COLOR } from "./classes.js";
 import { iconHTML, nameHTML } from "./wowhead.js";
 
 /** Fill in the season-dependent copy. Runs once at boot; nothing here changes at runtime. */
@@ -89,6 +90,90 @@ function renderLootSpec(b) {
   }
 }
 
+/* ---------- the report picker ----------
+   One character usually has several reports loaded, one per spec — and boards are keyed by
+   name · realm · spec, so within a character the spec is the *only* thing that tells two rows
+   apart. So spec leads, in its class colour, and the character name only heads the group. */
+
+/** A report's spec as "Frost Mage" — the bare spec name collides across classes. */
+function specText(b) {
+  const s = specInfo(specId(b.spec));
+  return s ? s.n + " " + s.c : (b.spec || "—");
+}
+
+/** The class-coloured dot for a report, or a neutral one when the spec didn't resolve. */
+function swatch(b) {
+  const s = specInfo(specId(b.spec));
+  const c = (s && CLASS_COLOR[s.c]) || "var(--faint)";
+  return '<span class="cdot" style="--cls:' + c + '"></span>';
+}
+
+/** "Jul 22" from whatever date string the report carried; the raw text if it won't parse. */
+function shortDate(s) {
+  if (!s) return "";
+  const d = new Date(s);
+  return isNaN(d.getTime())
+    ? String(s).replace(/\s+/g, " ").trim()
+    : d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+/** Where a report came from and when — the line that says how stale its numbers are. */
+function boardMeta(b) {
+  const drop = b.source === "droptimizer";
+  const d = shortDate(b.fetchedAt);
+  return (drop ? "Droptimizer" : "QE Live") + (d ? " · " + (drop ? "loaded " : "simmed ") + d : "");
+}
+
+function renderBoardPicker(b) {
+  const btn = $("boardBtn"), menu = $("boardMenu");
+  btn.innerHTML = swatch(b) + '<span class="nm">' + esc(b.player) + "</span>" +
+    '<span class="sp">' + esc(specText(b)) + "</span>" +
+    (b.realm ? '<span class="rl">' + esc(b.realm) + "</span>" : "") +
+    '<span class="mk">▾</span>';
+  $("specBadge").textContent = boardMeta(b);
+  $("specBadge").title = b.fetchedAt || "";
+
+  // Group by character, in the order they were first loaded.
+  const groups = [];
+  state.boards.forEach((x) => {
+    const k = (x.player + "·" + x.realm).toLowerCase();
+    let g = groups.filter((y) => y.k === k)[0];
+    if (!g) { g = { k, boards: [] }; groups.push(g); }
+    g.boards.push(x);
+  });
+
+  menu.innerHTML = groups.map((g) => {
+    // A lone report has no sibling to be confused with, so it keeps the name on its own row;
+    // only a character with several specs loaded needs the name lifted into a heading.
+    const multi = g.boards.length > 1, g0 = g.boards[0];
+    const head = multi
+      ? '<div class="pgroup">' + esc(g0.player) + (g0.realm ? ' <span class="rl">' + esc(g0.realm) + "</span>" : "") + "</div>"
+      : "";
+    return '<div class="pgrp">' + head + g.boards.map((x) => {
+      const on = x.id === b.id;
+      const lead = multi
+        ? esc(specText(x))
+        : esc(x.player) + (x.realm ? ' <span class="rl">' + esc(x.realm) + "</span>" : "");
+      const sub = (multi ? "" : esc(specText(x)) + " · ") + esc(boardMeta(x));
+      return '<button class="popt' + (on ? " on" : "") + '" role="menuitemradio" aria-checked="' + on +
+        '" data-board="' + esc(x.id) + '">' + swatch(x) +
+        '<span class="ptext"><span class="pl">' + lead + '</span><span class="pm">' + sub + "</span></span>" +
+        '<span class="pcheck">✓</span></button>';
+    }).join("") + "</div>";
+  }).join("");
+
+  // With a single report there's nothing to switch to — the trigger is just the nameplate.
+  btn.disabled = state.boards.length < 2;
+
+  closeBoardMenu();
+}
+
+/** Shut the picker. Every render passes through here — any state change closes it. */
+export function closeBoardMenu() {
+  $("boardMenu").hidden = true;
+  $("boardBtn").setAttribute("aria-expanded", "false");
+}
+
 /** Re-render the whole app from current state. */
 export function render() {
   const has = state.boards.length > 0;
@@ -102,11 +187,7 @@ export function render() {
   }
   const b = active();
 
-  // Board selector
-  $("boardSel").innerHTML = state.boards.map((x) =>
-    '<option value="' + x.id + '"' + (x.id === b.id ? " selected" : "") + ">" + esc(x.player) + (x.realm ? " · " + esc(x.realm) : "") + "</option>"
-  ).join("");
-  $("specBadge").textContent = b.spec + (b.fetchedAt ? "  ·  simmed " + b.fetchedAt.replace(/\s/g, "") : "");
+  renderBoardPicker(b);
   $("showAll").checked = !!state.showAll;
 
   const built = buildGroups(b);

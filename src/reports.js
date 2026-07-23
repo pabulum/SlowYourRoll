@@ -89,11 +89,15 @@ function ingestDroptimizer(id, data) {
   if (b) {
     b.reportId = id; b.results = d.results; b.baseline = d.baseline; b.source = "droptimizer";
     b.spec = d.idn.spec || b.spec;
+    b.fetchedAt = new Date().toISOString();
     toast("Updated " + d.idn.name + " (Droptimizer)");
   } else {
     b = {
       id: uid(), key: k, reportId: id, player: d.idn.name || "Unknown", realm: d.idn.realm || "", region: d.idn.region || "",
-      spec: d.idn.spec || "", source: "droptimizer", metric: "raw", baseline: d.baseline, gameType: "Retail", fetchedAt: "",
+      spec: d.idn.spec || "", source: "droptimizer", metric: "raw", baseline: d.baseline, gameType: "Retail",
+      // Raidbots doesn't date its report data, so this is when it was pulled — close enough,
+      // since a Droptimizer link is normally loaded the day it's simmed.
+      fetchedAt: new Date().toISOString(),
       results: d.results, ufSettings: {}, raidDiff: null,
       vaultTake: null, overlay: {}, tokenOverride: {},
     };

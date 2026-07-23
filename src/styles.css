@@ -73,6 +73,17 @@ input,select{font-family:inherit;}
 .btn.tiny{padding:4px 9px;font-size:12px;border-radius:7px;}
 .btn.danger:hover{border-color:var(--danger);color:var(--danger);}
 
+/* Theme toggle: show the theme you'd switch *to* — sun while dark, moon while light.
+   Until the first click there's no data-theme, so the OS preference decides. */
+#themeBtn svg{width:16px;height:16px;display:block;}
+#themeBtn .i-sun{display:none;}
+:root[data-theme="dark"] #themeBtn .i-sun{display:inline;}
+:root[data-theme="dark"] #themeBtn .i-moon{display:none;}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme]) #themeBtn .i-sun{display:inline;}
+  :root:not([data-theme]) #themeBtn .i-moon{display:none;}
+}
+
 /* import bar */
 .import{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--panel);border:1px solid var(--border);
   border-radius:14px;padding:12px 14px;box-shadow:var(--shadow);margin-bottom:16px;}
@@ -138,6 +149,45 @@ select.board{border:1px solid var(--border-strong);background:var(--panel);color
   padding:8px 10px;font-size:14px;font-weight:600;min-width:200px;}
 select.board.slim{min-width:0;padding:6px 8px;font-size:13px;}
 .spec-badge{font-size:12px;color:var(--muted);}
+
+/* report picker — a menu, not a <select>: the rows carry a class colour and a source line */
+.picker{position:relative;}
+/* Blizzard's class colours are picked for a black UI — Priest white and Rogue yellow vanish on a
+   light page, so there they're darkened toward the text colour instead of shown raw. */
+.cdot{width:9px;height:9px;border-radius:50%;flex:0 0 auto;
+  background:color-mix(in srgb, var(--cls) 74%, #2f2a3a);box-shadow:inset 0 0 0 1px rgba(0,0,0,.25);}
+@media (prefers-color-scheme:dark){:root:not([data-theme]) .cdot{background:var(--cls);}}
+:root[data-theme="dark"] .cdot{background:var(--cls);}
+.picker-btn{display:flex;align-items:center;gap:8px;max-width:min(420px,72vw);
+  border:1px solid var(--border-strong);background:var(--panel);color:var(--text);border-radius:9px;
+  padding:8px 10px;font-size:14px;font-weight:600;text-align:left;}
+.picker-btn:hover:not(:disabled){border-color:var(--accent);}
+.picker-btn:disabled{opacity:1;cursor:default;}
+.picker-btn:disabled .mk{display:none;}
+.picker-btn .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.picker-btn .sp{font-weight:600;color:var(--muted);white-space:nowrap;}
+.picker-btn .rl,.pgroup .rl,.popt .rl{font-weight:400;color:var(--faint);}
+.picker-btn .rl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.picker-btn .rl::before,.picker-btn .sp::before{content:"· ";color:var(--faint);}
+.picker-btn .mk{margin-left:auto;padding-left:4px;color:var(--faint);font-size:11px;}
+.picker-menu{position:absolute;z-index:30;top:calc(100% + 6px);left:0;min-width:max(100%,250px);
+  width:max-content;max-width:min(420px,88vw);max-height:min(60vh,420px);overflow:auto;padding:5px;
+  border:1px solid var(--border-strong);border-radius:11px;background:var(--panel);
+  box-shadow:var(--shadow-lift);}
+.pgrp+.pgrp{border-top:1px solid var(--border);margin-top:5px;padding-top:5px;}
+.pgroup{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--faint);
+  font-weight:700;padding:7px 9px 3px;}
+.pgroup .rl{text-transform:none;letter-spacing:0;}
+.popt{display:flex;align-items:center;gap:9px;width:100%;text-align:left;
+  border:0;background:transparent;color:var(--text);border-radius:8px;padding:7px 9px;}
+.popt:hover,.popt:focus-visible{background:var(--panel-3);outline:none;}
+.popt.on{background:var(--accent-soft);}
+.popt .ptext{min-width:0;flex:1 1 auto;}
+.popt .pl{display:block;font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.popt .pm{display:block;font-size:11.5px;color:var(--faint);margin-top:1px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.popt .pcheck{color:var(--accent);font-size:12px;opacity:0;}
+.popt.on .pcheck{opacity:1;}
 .spacer{flex:1 1 auto;}
 .seg{display:inline-flex;border:1px solid var(--border-strong);border-radius:9px;overflow:hidden;background:var(--panel-2);}
 .seg button{border:0;background:transparent;color:var(--muted);padding:7px 12px;font-size:13px;font-weight:600;}
@@ -215,7 +265,7 @@ select.board.slim{min-width:0;padding:6px 8px;font-size:13px;}
 .item.zero .iname{color:var(--muted);}
 .iname{font-size:14px;font-weight:500;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:8px;}
 /* Item icons come from Blizzard's CDN; the link out is the only third-party request the app makes. */
-.icon,.icon.blank{width:22px;height:22px;border-radius:5px;flex:0 0 auto;border:1px solid var(--border-strong);display:block;}
+img.icon,.icon.blank{width:22px;height:22px;border-radius:5px;flex:0 0 auto;border:1px solid var(--border-strong);display:block;}
 .icon.blank{background:var(--panel-2);}
 .icon-link{display:block;flex:0 0 auto;line-height:0;}
 .icon-link:hover .icon{border-color:var(--accent);}

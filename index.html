@@ -18,7 +18,16 @@
       </div>
     </div>
     <div class="masthead-tools">
-      <button class="btn ghost icon" id="themeBtn" title="Toggle light / dark" aria-label="Toggle theme">◑</button>
+      <button class="btn ghost icon" id="themeBtn" title="Toggle light / dark" aria-label="Toggle theme">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"
+             stroke-linecap="round" aria-hidden="true">
+          <g class="i-sun">
+            <circle cx="8" cy="8" r="3"/>
+            <path d="M8 1.5V3M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.06 1.06M11.54 11.54l1.06 1.06M3.4 12.6l1.06-1.06M11.54 4.46l1.06-1.06"/>
+          </g>
+          <path class="i-moon" d="M13.5 9.8A6.2 6.2 0 0 1 6.2 2.5 6.2 6.2 0 1 0 13.5 9.8Z"/>
+        </svg>
+      </button>
       <button class="btn" id="importBtn" title="Load a saved backup">Import</button>
       <button class="btn" id="exportBtn" title="Download a backup file">Export</button>
       <input type="file" id="importFile" accept="application/json" hidden>
@@ -45,7 +54,10 @@
 
   <div class="controls" id="controls" hidden>
     <div class="who">
-      <select class="board" id="boardSel" aria-label="Character"></select>
+      <div class="picker" id="boardPicker">
+        <button class="picker-btn" id="boardBtn" aria-haspopup="true" aria-expanded="false" aria-label="Report"></button>
+        <div class="picker-menu" id="boardMenu" role="menu" hidden></div>
+      </div>
       <span class="spec-badge" id="specBadge"></span>
       <button class="btn icon ghost danger" id="delBoard" title="Remove this report">🗑</button>
     </div>

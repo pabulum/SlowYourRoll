@@ -3,9 +3,50 @@
 
 import { state, save, active, replaceState } from "./store.js";
 import { $, toast } from "./util.js";
-import { render } from "./render.js";
+import { render, closeBoardMenu } from "./render.js";
 import { loadReport } from "./reports.js";
 import { readSimc } from "./simc.js";
+
+/**
+ * The report picker: a menu rather than a <select> because the rows carry a class colour, the
+ * spec, and where the numbers came from — a native option list can hold none of that, and with
+ * several specs of one character loaded those are the only things telling the rows apart.
+ * Rows are real buttons, so Tab/Enter/Space work on their own; this adds arrows and Escape.
+ */
+function initBoardPicker() {
+  const btn = $("boardBtn"), menu = $("boardMenu");
+  const open = () => {
+    menu.hidden = false;
+    btn.setAttribute("aria-expanded", "true");
+    const first = menu.querySelector(".popt.on") || menu.querySelector(".popt");
+    if (first) first.focus();
+  };
+
+  btn.addEventListener("click", () => { if (menu.hidden) open(); else closeBoardMenu(); });
+  menu.addEventListener("click", (/** @type {any} */ e) => {
+    const el = e.target.closest("[data-board]");
+    if (!el) return;
+    state.activeId = el.dataset.board; save(); render();
+    btn.focus();
+  });
+
+  $("boardPicker").addEventListener("keydown", (/** @type {any} */ e) => {
+    if (e.key === "Escape" && !menu.hidden) { closeBoardMenu(); btn.focus(); return; }
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    e.preventDefault();
+    if (menu.hidden) { open(); return; }
+    const opts = [].slice.call(menu.querySelectorAll(".popt"));
+    if (!opts.length) return;
+    const i = opts.indexOf(document.activeElement), d = e.key === "ArrowDown" ? 1 : -1;
+    const next = i < 0 ? opts[d > 0 ? 0 : opts.length - 1] : opts[(i + d + opts.length) % opts.length];
+    next.focus();
+  });
+
+  // Anywhere outside closes it, the way a dropdown is expected to behave.
+  document.addEventListener("click", (/** @type {any} */ e) => {
+    if (!menu.hidden && !e.target.closest("#boardPicker")) closeBoardMenu();
+  });
+}
 
 export function initUI() {
   // Encounter list — expand/collapse, reveal zero-score fillers, cycle item state.
@@ -47,7 +88,7 @@ export function initUI() {
     if (!el) return;
     active().metric = el.dataset.metric; save(); render();
   });
-  $("boardSel").addEventListener("change", (/** @type {any} */ e) => { state.activeId = e.target.value; save(); render(); });
+  initBoardPicker();
   // Changing loot spec changes which drops you're eligible for, and so the whole ranking.
   $("lootSpecSel").addEventListener("change", (/** @type {any} */ e) => {
     active().lootSpec = e.target.value || null; save(); render();

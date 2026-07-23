@@ -18,6 +18,13 @@ export const CLASS_ARMOR = {
 
 export const ARMOR_NAME = { 1: "Cloth", 2: "Leather", 3: "Mail", 4: "Plate", 6: "Shield" };
 
+/** Blizzard's own class colours — used as a swatch so a character reads at a glance. */
+export const CLASS_COLOR = {
+  "Death Knight": "#c41e3a", "Demon Hunter": "#a330c9", Druid: "#ff7c0a", Evoker: "#33937f",
+  Hunter: "#aad372", Mage: "#3fc7eb", Monk: "#00ff98", Paladin: "#f48cba", Priest: "#ffffff",
+  Rogue: "#fff468", Shaman: "#0070dd", Warlock: "#8788ee", Warrior: "#c69b6d",
+};
+
 /** Classes that can equip a shield. */
 export const SHIELD_CLASSES = ["Paladin", "Shaman", "Warrior"];
 
