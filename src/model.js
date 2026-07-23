@@ -339,7 +339,8 @@ export function buildGroups(b) {
  *
  * @param {import("./types.js").Board} b
  * @returns {{options: any[], keep: any, top: import("./types.js").Row|null, perRoll: number,
- *   verdict: "keep"|"roll"}|null} null when no vault has been imported.
+ *   verdict: "keep"|"roll", drag: {amount: number, name: string, isTop: boolean}|null}|null}
+ *   null when no vault has been imported.
  */
 export function vaultChoice(b) {
   const simc = state.simc[b.key];
@@ -366,7 +367,35 @@ export function vaultChoice(b) {
   // against a single vault slot the question is what one roll returns, with its price alongside.
   const perRoll = top ? top.num / top.remaining : 0;
 
-  return { options, keep, top, perRoll, verdict: perRoll > keep.score ? "roll" : "keep" };
+  return { options, keep, top, perRoll, drag: dragOf(rows, keep), verdict: perRoll > keep.score ? "roll" : "keep" };
+}
+
+/**
+ * What taking the vault item costs every roll you make on its encounter afterwards.
+ *
+ * The two branches aren't symmetrical the way a one-week comparison implies. A roll *removes* an
+ * item from its pool for good, so every later roll there improves. Taking the item from your vault
+ * does the reverse: the item stays in the pool, now worth nothing to you and still counted, so
+ * every later roll on that encounter is permanently worse. Dropping the item out of the numerator
+ * costs the encounter `score / remaining` per roll from then on.
+ *
+ * Reported, never netted out: the size of it depends on how many times you'd roll that encounter
+ * again, which is a question about the rest of the season that this app doesn't model.
+ *
+ * @param {import("./types.js").Row[]} rows  Pools priced with nothing taken from the vault.
+ * @param {{id: number}} keep  The vault option the trade is measured against.
+ */
+function dragOf(rows, keep) {
+  let worst = null;
+  rows.forEach((r, i) => {
+    const it = r.items.filter((x) => x.id === keep.id)[0];
+    // Only an item that currently counts can stop counting. One already Own or Rolled — a dupe, or
+    // one you've had before — is doing its damage to the pool either way.
+    if (!it || it.elig === false || it.state !== "want" || !it.score || r.remaining <= 0) return;
+    const amount = it.score / r.remaining;
+    if (!worst || amount > worst.amount) worst = { amount, name: r.g.name, isTop: i === 0 };
+  });
+  return worst;
 }
 
 // Display scaling: Droptimizer boards can show raw DPS or % of baseline.

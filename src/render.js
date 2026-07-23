@@ -193,6 +193,9 @@ function renderVault(b, built) {
  * The recommendation is deliberately narrow: it compares this week's expected score and nothing
  * else. A roll also banks crests and can unlock free upgrades in its slot, and a guaranteed item
  * can't miss — neither is priced here, so the margin is stated rather than rounded to a verdict.
+ *
+ * The one lasting effect that *is* named is the drag: taking the item leaves it in its pool for
+ * good, where a roll would have removed one. That asymmetry outlives the week the trade is made in.
  */
 function tradeHTML(b, vc) {
   if (!vc || !vc.top) return "";
@@ -211,9 +214,17 @@ function tradeHTML(b, vc) {
   const exclusive = SEASON.tokenFromVault
     ? " Weeks 1–7 the token <em>is</em> a vault slot, so this is one choice, not two — from week 8 the token is free and you get both."
     : "";
+  const d = vc.drag;
+  const drag = d
+    ? '<div class="tdrag">And it doesn’t end this week: taking ' + esc(keep.name) + ' leaves it in ' +
+      esc(d.name) + '’s pool for good — worth nothing to you there, still counted — which costs ' +
+      (d.isTop ? 'the very encounter above' : 'that encounter') + ' <b>' + dv(b, d.amount) + '</b> ' +
+      esc(unit) + ' on every roll you make there from here on. A roll takes an item <em>out</em> of a pool.</div>'
+    : "";
   return '<div class="trade ' + vc.verdict + '">' +
     '<div class="tlead">' + lead + '</div>' +
     '<div class="tbody">' + rollTxt + ', against ' + keepTxt + '.' + margin + price + exclusive + '</div>' +
+    drag +
     '</div>';
 }
 

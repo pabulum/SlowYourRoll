@@ -159,6 +159,30 @@ test("the roll side is priced as if nothing were taken from the vault", () => {
   assert.equal(vaultChoice(b).perRoll, 30 / POOL);
 });
 
+// The asymmetry a one-week comparison hides: a roll takes an item out of the pool for good, while
+// taking the vault item leaves it in there forever, counted and worth nothing.
+test("taking a vault item is charged for the pool it permanently pollutes", () => {
+  state.showAll = false;
+  withVault([900002]);
+  const vc = vaultChoice(makeBoard());
+  assert.equal(vc.drag.amount, 20 / POOL, "the numerator loses 20 over an unchanged pool");
+  assert.equal(vc.drag.isTop, true, "and it's the encounter the ranking would send you to");
+});
+
+test("an item already out of the running drags nothing further", () => {
+  state.showAll = false;
+  withVault([900002]);
+  const b = makeBoard();
+  b.overlay[RAID_ID + ":" + ENC_ID + ":900002"] = "rolled"; // gone from the pool already
+  assert.equal(vaultChoice(b).drag, null);
+});
+
+test("a vault item that no live pool contains has nothing to drag", () => {
+  state.showAll = false;
+  withVault([900003]);
+  assert.equal(vaultChoice(makeBoard()).drag, null);
+});
+
 test("the best vault option is the one the trade is measured against", () => {
   state.showAll = false;
   withVault([900001, 900002]);
