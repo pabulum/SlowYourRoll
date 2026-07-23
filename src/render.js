@@ -5,7 +5,7 @@ import { QE_DATA } from "./data.js";
 import { SEASON, SEASON_LABEL, seasonDrift } from "./season.js";
 import { state, active } from "./store.js";
 import { $, esc } from "./util.js";
-import { buildGroups, resolve, diffLabel, unitOf, dv } from "./model.js";
+import { buildGroups, resolve, diffLabel, unitOf, dv, vaultChoice } from "./model.js";
 import { specId, specInfo, classSpecs } from "./loot.js";
 import { iconHTML, nameHTML } from "./wowhead.js";
 
@@ -178,8 +178,43 @@ function renderVault(b, built) {
   }).join("");
   host.innerHTML = '<div class="vault"><h3>◈ This week’s vault</h3>' +
     '<div class="vsub">Taking an item leaves it in your roll pool — worth 0 to you but still diluting the odds, and a possible dupe if you also roll that source. Mark what you’ll take to fold it into the ranking.</div>' +
+    tradeHTML(b, vaultChoice(b)) +
     '<div class="vault-items">' + html + '</div>' +
     '<div class="note">A taken pick becomes <b>Own</b> below. If a boss’s only upgrade is also your vault pick, its roll EV collapses — take it from the vault and roll elsewhere.</div></div>';
+}
+
+/**
+ * The one comparison the encounter ranking can't make: a guaranteed item against a gamble.
+ *
+ * Both numbers are already on screen elsewhere; what's missing is that they're alternatives. Where
+ * the season pays the roll token out of a vault slot they're strictly exclusive, and the wording
+ * says so — otherwise this is a sanity check on whether spending a token is worth it at all.
+ *
+ * The recommendation is deliberately narrow: it compares this week's expected score and nothing
+ * else. A roll also banks crests and can unlock free upgrades in its slot, and a guaranteed item
+ * can't miss — neither is priced here, so the margin is stated rather than rounded to a verdict.
+ */
+function tradeHTML(b, vc) {
+  if (!vc || !vc.top) return "";
+  const unit = unitOf(b), keep = vc.keep, roll = vc.top;
+  const rollTxt = '<b>' + dv(b, vc.perRoll) + '</b> ' + esc(unit) + ' on average from one roll on ' + esc(roll.g.name);
+  const keepTxt = keep.scored
+    ? '<b>' + dv(b, keep.score) + '</b> ' + esc(unit) + ' guaranteed from ' + esc(keep.name)
+    : esc(keep.name) + ', which your report never evaluated';
+  const lead = SEASON.tokenFromVault
+    ? (vc.verdict === "roll" ? "Take the token" : "Take the item")
+    : (vc.verdict === "roll" ? "The roll is worth spending on" : "Your vault beats your best roll");
+  const margin = keep.scored
+    ? " The gap is " + dv(b, Math.abs(vc.perRoll - keep.score)) + " " + esc(unit) + "."
+    : "";
+  const price = roll.cost !== 1 ? " That roll costs " + roll.cost + " tokens." : "";
+  const exclusive = SEASON.tokenFromVault
+    ? " Weeks 1–7 the token <em>is</em> a vault slot, so this is one choice, not two — from week 8 the token is free and you get both."
+    : "";
+  return '<div class="trade ' + vc.verdict + '">' +
+    '<div class="tlead">' + lead + '</div>' +
+    '<div class="tbody">' + rollTxt + ', against ' + keepTxt + '.' + margin + price + exclusive + '</div>' +
+    '</div>';
 }
 
 function renderVerdict(built, b) {

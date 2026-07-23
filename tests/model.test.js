@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { QE_DATA } from "../src/data.js";
 import { SEASON } from "../src/season.js";
 import { state } from "../src/store.js";
-import { resolve, buildGroups, rollIlvlFor, isDupe } from "../src/model.js";
+import { resolve, buildGroups, rollIlvlFor, isDupe, vaultChoice } from "../src/model.js";
 
 // A current raid + one of its bosses, pulled from the live database so the test
 // adapts to data changes rather than hard-coding ids.
@@ -115,6 +115,56 @@ test("holding a weaker copy leaves the item Want, tagged with what you hold", ()
   assert.equal(it.dupe, false);
   assert.equal(it.state, "want");
   assert.equal(buildGroups(b).rows[0].num, 30);
+});
+
+/* ---------- the vault item you give up to roll ---------- */
+
+/** Put `ids` in this week's vault, as the /simc addon would report them. */
+function withVault(ids) {
+  state.simc = { testkey: { owned: {}, vault: ids.map((id) => ({ name: "V" + id, ilvl: 639, id })) } };
+}
+
+test("with no vault imported there is no trade to weigh", () => {
+  state.showAll = false;
+  state.simc = {};
+  assert.equal(vaultChoice(makeBoard()), null);
+});
+
+test("a vault item worth more than one roll's expectation says keep the item", () => {
+  state.showAll = false;
+  withVault([900002]); // the 20-value item, against 30/POOL per roll
+  const vc = vaultChoice(makeBoard());
+  assert.equal(vc.keep.id, 900002);
+  assert.equal(vc.keep.score, 20);
+  assert.equal(vc.perRoll, 30 / POOL);
+  assert.equal(vc.verdict, "keep");
+});
+
+test("a vault of nothing you want says spend the token", () => {
+  state.showAll = false;
+  withVault([900003]); // never scored by the report
+  const vc = vaultChoice(makeBoard());
+  assert.equal(vc.keep.score, 0);
+  assert.equal(vc.keep.scored, false, "unevaluated is not the same claim as worthless");
+  assert.equal(vc.verdict, "roll");
+});
+
+// Taking an item and spending the token it would have been are the two branches being compared.
+// Pricing the roll against a board that has already taken one costs the roll its own alternative.
+test("the roll side is priced as if nothing were taken from the vault", () => {
+  state.showAll = false;
+  withVault([900002]);
+  const b = makeBoard();
+  b.vaultTake = 900002;
+  assert.equal(vaultChoice(b).perRoll, 30 / POOL);
+});
+
+test("the best vault option is the one the trade is measured against", () => {
+  state.showAll = false;
+  withVault([900001, 900002]);
+  const vc = vaultChoice(makeBoard());
+  assert.equal(vc.options.length, 2);
+  assert.equal(vc.keep.id, 900002, "20 beats 10");
 });
 
 // Filler comes out of the loot table, not the report, so it has no drop level to compare against.

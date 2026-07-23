@@ -324,6 +324,51 @@ export function buildGroups(b) {
   return { rows, selDiff, diffs, unknown: Object.keys(unknown).map((k) => unknown[k]) };
 }
 
+/**
+ * The week's actual trade: one guaranteed item out of the Great Vault, or the token that buys one
+ * roll. Where the season pays the token out of a vault slot, these are not two decisions but one,
+ * and the ranking on its own can't answer it — it prices rolls against each other, never against
+ * the item already sitting in front of you.
+ *
+ * The roll side is priced with nothing taken from the vault, because that's the branch being
+ * costed: you can't both take an item and spend the token it would have been. `buildGroups` is run
+ * again for that rather than reusing the board's current `vaultTake`, which is the *other* branch.
+ *
+ * Item values come from the whole report, not just the visible pools — a vault option filtered out
+ * of the ranking (older content, another difficulty) is still an item you can take this week.
+ *
+ * @param {import("./types.js").Board} b
+ * @returns {{options: any[], keep: any, top: import("./types.js").Row|null, perRoll: number,
+ *   verdict: "keep"|"roll"}|null} null when no vault has been imported.
+ */
+export function vaultChoice(b) {
+  const simc = state.simc[b.key];
+  if (!simc || !simc.vault || !simc.vault.length) return null;
+
+  const scored = {};
+  b.results.forEach((r) => {
+    if (scored[r.item] == null || r.score > scored[r.item]) scored[r.item] = r.score || 0;
+  });
+  const options = simc.vault.map((v) => ({
+    id: v.id,
+    name: (QE_DATA.items[v.id] || {}).n || v.name,
+    ilvl: v.ilvl,
+    score: scored[v.id] || 0,
+    // Distinguished from a genuine zero: an item the report never evaluated has no value we can
+    // quote, and saying "worth 0" about it would be a claim we haven't earned.
+    scored: scored[v.id] != null,
+  }));
+  const keep = options.slice().sort((a, c) => c.score - a.score)[0];
+
+  const rows = buildGroups(Object.assign({}, b, { vaultTake: null })).rows;
+  const top = rows.filter((r) => r.ev > 0)[0] || null;
+  // The expected score of the one roll you'd actually make. Not `row.ev`, which is per *token* —
+  // against a single vault slot the question is what one roll returns, with its price alongside.
+  const perRoll = top ? top.num / top.remaining : 0;
+
+  return { options, keep, top, perRoll, verdict: perRoll > keep.score ? "roll" : "keep" };
+}
+
 // Display scaling: Droptimizer boards can show raw DPS or % of baseline.
 function facOf(b) {
   return (b.source === "droptimizer" && b.metric === "pct") ? 100 / (b.baseline || 1) : 1;

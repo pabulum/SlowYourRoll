@@ -30,6 +30,9 @@
  * @property {number} tokenRaid    Bonus-roll token cost for a raid boss.
  * @property {number} tokenDungeon Bonus-roll token cost for a M+ dungeon.
  * @property {string} tokenNote    Plain-English summary of the token economy, shown in the legend.
+ * @property {boolean} tokenFromVault  True when the bonus-roll token is itself a Great Vault
+ *   reward, so taking it costs you the item you'd otherwise have picked. Only changes the wording
+ *   of the vault comparison, never its arithmetic — a wrong guess here misleads nobody's maths.
  * @property {Record<string, Reward>|null} rollReward  Where a roll pays out, keyed by difficulty
  *   ("mythic"/"heroic"/"normal"/"lfr", plus "mythic-plus" for dungeons). Null when a roll simply
  *   hands you the drop, at the drop's own item level — the Season 1 behaviour.
@@ -45,6 +48,7 @@ export const SEASONS = {
     tokenDungeon: 1,
     tokenNote: "A raid boss costs 2 tokens in Season 1 and a M+ dungeon costs 1, so raid EV is halved against dungeon EV. Season 2 drops raids to 1 token.",
     rollReward: null, // a Season 1 roll hands you the item exactly as the boss drops it
+    tokenFromVault: false,
   },
   2: {
     number: 2,
@@ -53,6 +57,9 @@ export const SEASONS = {
     tokenRaid: 1,
     tokenDungeon: 1,
     tokenNote: "Everything costs 1 token in Season 2 — raid bosses and M+ dungeons alike. (Season 1 charged 2 for raid bosses, which is why older notes divide raid EV by 2.)",
+    // Weeks 1–7 the token comes out of a Great Vault slot, so a roll is bought with the item you'd
+    // otherwise have taken. From week 8 it's a free weekly reward again and the trade disappears.
+    tokenFromVault: true,
     // Season 2 pays a bonus roll out as if the item had come from your Great Vault, not from the
     // boss. Vault rewards from LFR/Normal/Heroic jump to the first step of the next track, and a
     // Mythic vault arrives fully upgraded — so a Mythic boss and a M+ dungeon cost the same single
