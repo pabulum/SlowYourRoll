@@ -18,6 +18,17 @@ import { specId, specInfo, classSpecs } from "./loot.js";
 import { CLASS_COLOR } from "./classes.js";
 import { iconHTML, nameHTML } from "./wowhead.js";
 
+/**
+ * The app's mark, drawn rather than set as 🎲 — an emoji is a different object on every platform and
+ * brings a palette this page doesn't control. Kept in sync with the copy in index.html's masthead.
+ */
+const DIE = html`<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+  <rect x="1.6" y="1.6" width="20.8" height="20.8" stroke="currentColor" stroke-width="1.7"/>
+  <circle cx="7.6" cy="7.6" r="1.85" fill="currentColor"/>
+  <circle cx="12" cy="12" r="1.85" fill="currentColor"/>
+  <circle cx="16.4" cy="16.4" r="1.85" fill="currentColor"/>
+</svg>`;
+
 /** Fill in the season-dependent copy. Runs once at boot; nothing here changes at runtime. */
 export function renderSeason() {
   setText("seasonLabel", SEASON_LABEL);
@@ -64,7 +75,7 @@ function renderDataNote(built) {
       ", but src/season.js is configured for " + SEASON.qeSeasonId + ". Maintainer fix: bump ACTIVE in src/season.js.");
   }
   setShown("dataNote", parts.length > 0);
-  setHTML("dataNote", join(parts.map((p) => html`◈ ${p}`), html`<br><br>`));
+  setHTML("dataNote", join(parts, html`<br><br>`));
 }
 
 /**
@@ -90,7 +101,7 @@ function renderLootSpec(b) {
   if (cur === own) return;
   const now = specInfo(cur).n;
   setShown("lootNote", true);
-  setHTML("lootNote", html`◈ <b>Looting as ${now}, valued as ${specInfo(own).n}.</b> Pool sizes are
+  setHTML("lootNote", html`<b>Looting as ${now}, valued as ${specInfo(own).n}.</b> Pool sizes are
     right for this loot spec, but every item only ${now} can use scores 0 — the report never simmed
     it. Load a ${now} report to rank these for real.`);
 }
@@ -184,7 +195,7 @@ export function render() {
   if (!has) {
     setShown("dataNote", false);
     setHTML("verdict", "");
-    setHTML("sources", html`<div class="empty-state"><div class="big">🎲</div><div>Paste a QE Live
+    setHTML("sources", html`<div class="empty-state"><div class="big">${DIE}</div><div>Paste a QE Live
       (healer) or Raidbots Droptimizer (DPS/tank) report above to see which encounter to roll
       on.</div><div class="sub">Your report stays in this browser — nothing is uploaded.</div></div>`);
     return;
@@ -236,7 +247,7 @@ function renderSimcNote(b) {
   const silent = !!simc && !(simc.rolledIds || []).length;
   setShown("simcNote", silent);
   if (!silent) return;
-  setHTML("simcNote", html`◈ <b>/simc linked, but it logged no bonus rolls.</b> The addon only records
+  setHTML("simcNote", html`<b>/simc linked, but it logged no bonus rolls.</b> The addon only records
     rolls you make <b>after</b> updating to 12.1.0 (Jul 6, 2026) — it can’t backfill earlier ones, and
     omits the line entirely when empty. Mark this season’s past rolls by tapping an item →
     <b>Rolled</b>; future rolls import automatically.`);
@@ -249,7 +260,7 @@ function renderVault(b, built) {
   built.rows.forEach((r) => r.items.forEach((it) => { rowByItem[it.id] = r; }));
 
   setHTML("vaultPanel", html`<div class="vault">
-    <h3>◈ This week’s vault</h3>
+    <h3>This week’s vault</h3>
     <div class="vsub">Taking an item leaves it in your roll pool — worth 0 to you but still diluting
       the odds, and a possible dupe if you also roll that source. Mark what you’ll take to fold it
       into the ranking.</div>
@@ -347,7 +358,7 @@ function renderVerdict(built, b) {
   const dl = best.g.type === "raid" ? diffLabel(b, built.selDiff) : "M+";
   $("verdict").className = "verdict";
   setHTML("verdict", html`<div>
-    <div class="label">◈ Spend your next roll on</div>
+    <div class="label">Spend your next roll on</div>
     <div class="target">${best.g.name}<span class="type-tag ${best.g.type}"
       style="margin-left:9px;vertical-align:middle">${best.g.type} · ${dl}</span></div>
     <div class="why">${top.length ? html`carried by ${join(top, ", ")}` : html`${dv(b, best.num)} of value`}
