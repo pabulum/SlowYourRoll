@@ -26,6 +26,24 @@ export function detectSource(v) {
   return null;
 }
 
+/** Fetch a detected report ({ source, id }) and merge it into state. Always resolves. */
+function fetchReport(d) {
+  if (d.source === "qe") {
+    return fetch(QE_API + encodeURIComponent(d.id))
+      .then((r) => r.json())
+      .then((data) => {
+        if (typeof data === "string") data = JSON.parse(data);
+        if (!data || data.status === "Report not found" || !data.results) throw new Error("nf");
+        ingest(d.id, data);
+      })
+      .catch(() => toast("Couldn't load that QE report — check the code, or QE may be down"));
+  }
+  return fetch(DROPT_URL + encodeURIComponent(d.id) + "/data.json")
+    .then((r) => { if (!r.ok) throw new Error("nf"); return r.json(); })
+    .then((data) => ingestDroptimizer(d.id, data))
+    .catch(() => toast("Couldn't load that Raidbots report — it may have expired (they're kept ~30 days)"));
+}
+
 /** Load whichever report is in the input box and merge it into state. */
 export function loadReport() {
   const d = detectSource($("reportInput").value);
@@ -33,25 +51,24 @@ export function loadReport() {
   const btn = $("loadBtn");
   btn.disabled = true;
   btn.textContent = "Loading…";
-  const done = () => { btn.disabled = false; btn.textContent = "Load report"; };
+  fetchReport(d).then(() => { btn.disabled = false; btn.textContent = "Load report"; });
+}
 
-  if (d.source === "qe") {
-    fetch(QE_API + encodeURIComponent(d.id))
-      .then((r) => r.json())
-      .then((data) => {
-        if (typeof data === "string") data = JSON.parse(data);
-        if (!data || data.status === "Report not found" || !data.results) throw new Error("nf");
-        ingest(d.id, data);
-      })
-      .catch(() => toast("Couldn't load that QE report — check the code, or QE may be down"))
-      .then(done);
-  } else {
-    fetch(DROPT_URL + encodeURIComponent(d.id) + "/data.json")
-      .then((r) => { if (!r.ok) throw new Error("nf"); return r.json(); })
-      .then((data) => ingestDroptimizer(d.id, data))
-      .catch(() => toast("Couldn't load that Raidbots report — it may have expired (they're kept ~30 days)"))
-      .then(done);
-  }
+/**
+ * A shared link (?report=…) loads its report on arrival, so the URL a guild officer is handed
+ * needs no paste step. Runs once at startup. The param is stripped right away: it's a one-shot
+ * instruction, and leaving it would make every later reload re-assert that report over whatever
+ * the person has since switched to.
+ */
+export function loadSharedReport() {
+  const v = new URLSearchParams(location.search).get("report");
+  if (!v) return;
+  history.replaceState(null, "", location.pathname + location.hash);
+  const d = detectSource(v);
+  if (!d) { toast("That share link's report code wasn't recognised"); return; }
+  const existing = state.boards.filter((b) => b.reportId === d.id)[0];
+  if (existing) { state.activeId = existing.id; save(); render(); return; }
+  fetchReport(d);
 }
 
 /* ---------- Raidbots Droptimizer ----------

@@ -62,6 +62,9 @@
   --shadow-lift:0 2px 8px rgba(0,0,0,.5),0 22px 50px rgba(120,50,200,.22);
 }
 *{box-sizing:border-box;}
+/* Anything render() hides stays hidden — a display:flex/grid on the same element would
+   otherwise beat the UA's [hidden]{display:none} and show empty chrome on first visit. */
+[hidden]{display:none!important;}
 html,body{margin:0;}
 body{
   font-family:var(--font-ui); color:var(--text); line-height:1.5; min-height:100vh;

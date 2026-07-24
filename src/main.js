@@ -3,6 +3,7 @@
 import { QE_DATA } from "./data.js";
 import { initUI } from "./ui.js";
 import { render, renderSeason } from "./render.js";
+import { loadSharedReport } from "./reports.js";
 
 if (!QE_DATA) {
   document.getElementById("sources").innerHTML =
@@ -11,4 +12,5 @@ if (!QE_DATA) {
   renderSeason();
   initUI();
   render();
+  loadSharedReport();
 }

@@ -93,6 +93,18 @@ export function initUI() {
   $("lootSpecSel").addEventListener("change", (/** @type {any} */ e) => {
     active().lootSpec = e.target.value || null; save(); render();
   });
+  // Share the active report as a ?report= link. What travels is the report id alone —
+  // the recipient fetches the same scores fresh; rolled history and overrides stay local.
+  $("shareBoard").addEventListener("click", () => {
+    const b = active();
+    const url = location.href.replace(/[?#].*$/, "") + "?report=" + encodeURIComponent(b.reportId);
+    navigator.clipboard.writeText(url).then(
+      () => toast(b.source === "droptimizer"
+        ? "Link copied — mind that Raidbots reports expire after ~30 days"
+        : "Link copied — it opens with " + b.player + "'s report loaded"),
+      () => prompt("Copy this link:", url),
+    );
+  });
   $("delBoard").addEventListener("click", () => {
     const b = active();
     if (!confirm("Remove " + b.player + " (" + b.spec + ")? Your rolled history for it is lost.")) return;

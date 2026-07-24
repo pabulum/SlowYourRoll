@@ -4,6 +4,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Slow Your Roll — Bonus Roll EV</title>
+<meta name="description" content="Rank every raid boss and M+ dungeon by the expected value of one bonus-roll token. Paste a QE Live upgrade report or a Raidbots Droptimizer link.">
+<link rel="canonical" href="https://pabulum.github.io/SlowYourRoll/">
+<!-- Link previews (Discord, Slack, iMessage, …). The image is static — crawlers don't run JS,
+     so a ?report= link shows the same card as the bare URL. -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Slow Your Roll">
+<meta property="og:title" content="Slow Your Roll — Bonus Roll EV">
+<meta property="og:description" content="Where is your next bonus-roll token worth the most? Ranks every boss and dungeon by expected value, from your own QE Live or Droptimizer report.">
+<meta property="og:url" content="https://pabulum.github.io/SlowYourRoll/">
+<meta property="og:image" content="https://pabulum.github.io/SlowYourRoll/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Slow Your Roll — a ranked list of encounters by bonus-roll expected value, best one flagged “Roll it”.">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎲</text></svg>">
 <!-- The two latin faces cover the whole first screen; latin-ext waits until an accented name needs it. -->
 <link rel="preload" href="src/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
@@ -62,6 +76,7 @@
         <div class="picker-menu" id="boardMenu" role="menu" hidden></div>
       </div>
       <span class="spec-badge" id="specBadge"></span>
+      <button class="btn icon ghost" id="shareBoard" title="Copy a link that opens this report">🔗</button>
       <button class="btn icon ghost danger" id="delBoard" title="Remove this report">🗑</button>
     </div>
     <div class="spacer"></div>

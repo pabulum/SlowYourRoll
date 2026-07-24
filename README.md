@@ -98,6 +98,14 @@ database is behind."
 QE Live reports are the exception: they carry only item ids, and the loot table comes entirely from
 `data/qe-data.js`. A new season's items won't resolve to any source until you regenerate.
 
+## Sharing a report
+
+The 🔗 button next to the report picker copies a link like `…/?report=<code>`. Opening it
+loads that report before anything is pasted — handy for handing a character's board to a
+guild officer. Only the report id travels: the recipient fetches the same scores fresh from
+QE Live / Raidbots, while rolled history, Own/Rolled marks, and token overrides stay in each
+person's own browser. Raidbots links expire when the underlying report does (~30 days).
+
 ## Running locally
 
 The app uses native ES modules, so it must be served over HTTP (not opened as a `file://`
