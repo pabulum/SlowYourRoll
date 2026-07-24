@@ -4,7 +4,7 @@
 // Everything is fetched client-side; nothing is uploaded.
 
 import { state, save, keyOf, uid } from "./store.js";
-import { $, toast } from "./util.js";
+import { $, toast } from "./dom.js";
 import { parseSimc, applySimc } from "./simc.js";
 import { render } from "./render.js";
 
@@ -66,7 +66,7 @@ export function loadSharedReport() {
   history.replaceState(null, "", location.pathname + location.hash);
   const d = detectSource(v);
   if (!d) { toast("That share link's report code wasn't recognised"); return; }
-  const existing = state.boards.filter((b) => b.reportId === d.id)[0];
+  const existing = state.boards.find((b) => b.reportId === d.id);
   if (existing) { state.activeId = existing.id; save(); render(); return; }
   fetchReport(d);
 }
@@ -95,14 +95,14 @@ export function parseDroptimizer(data) {
       byKey[k] = { item, inst, enc, diff, level: lvl, rawDelta: delta, score: Math.max(0, Math.round(delta * 10) / 10) };
     }
   });
-  return { idn, baseline, results: Object.keys(byKey).map((x) => byKey[x]) };
+  return { idn, baseline, results: Object.values(byKey) };
 }
 
 function ingestDroptimizer(id, data) {
   const d = parseDroptimizer(data);
   if (!d.results.length) { toast("No drop results in that report — was it a gear/stat sim instead of a Droptimizer?"); return; }
   const k = keyOf(d.idn.name, d.idn.realm, d.idn.spec);
-  let b = state.boards.filter((x) => x.key === k)[0];
+  let b = state.boards.find((x) => x.key === k);
   if (b) {
     b.reportId = id; b.results = d.results; b.baseline = d.baseline; b.source = "droptimizer";
     b.spec = d.idn.spec || b.spec;
@@ -130,7 +130,7 @@ function ingestDroptimizer(id, data) {
 function ingest(code, data) {
   // Update the existing board for the same character (name+realm+spec), else create one.
   const k = keyOf(data.playername, data.realm, data.spec);
-  let b = state.boards.filter((x) => x.key === k)[0];
+  let b = state.boards.find((x) => x.key === k);
   if (b) {
     b.reportId = code; b.results = data.results; b.ufSettings = data.ufSettings || {}; b.contentType = data.contentType;
     b.fetchedAt = data.dateCreated || ""; b.gameType = data.gameType || "Retail";

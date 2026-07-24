@@ -3,7 +3,7 @@
 
 import { QE_DATA } from "./data.js";
 import { state, save, keyOf } from "./store.js";
-import { $, toast } from "./util.js";
+import { $, toast } from "./dom.js";
 import { render } from "./render.js";
 
 /**

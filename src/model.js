@@ -7,7 +7,6 @@ import { QE_DATA, DIFF_NAMES, DIFF_ORDER } from "./data.js";
 import { SEASON, rollReward } from "./season.js";
 import { state } from "./store.js";
 import { canLoot, specId, classSpecs } from "./loot.js";
-import { fmt } from "./util.js";
 
 /**
  * Resolve an (instId, encId) pair to a display name and type. instId === -1 is a M+ dungeon.
@@ -35,7 +34,7 @@ import { fmt } from "./util.js";
 export function resolve(instId, encId) {
   if (instId === -1) {
     const dn = QE_DATA.dungeons[String(encId)];
-    if (dn) return { type: "dungeon", name: dn, current: QE_DATA.currentDungeons.indexOf(String(encId)) >= 0 };
+    if (dn) return { type: "dungeon", name: dn, current: QE_DATA.currentDungeons.includes(String(encId)) };
     return { type: "dungeon", name: "Unknown dungeon " + encId, current: true, unknown: true };
   }
   if (instId < 0) return null; // crafted / reputation / timewalking / PvP — never bonus-rollable
@@ -47,7 +46,7 @@ export function resolve(instId, encId) {
   if (encId === 999 || encId < 0) return null;
   const r = QE_DATA.raids[String(instId)];
   if (!r) {
-    if ((QE_DATA.ignoredInstances || []).indexOf(String(instId)) >= 0) return null;
+    if ((QE_DATA.ignoredInstances || []).includes(String(instId))) return null;
     return {
       type: "raid",
       name: "Unknown boss " + encId,
@@ -62,7 +61,7 @@ export function resolve(instId, encId) {
     type: "raid",
     name: boss,
     instName: r.name,
-    current: QE_DATA.currentRaids.indexOf(String(instId)) >= 0,
+    current: QE_DATA.currentRaids.includes(String(instId)),
   };
 }
 
@@ -141,13 +140,50 @@ export function diffKey(b, d) {
 }
 
 /**
+ * The model itself, in one place.
+ *
+ *   EV = ( Σ score of items you still want ÷ items still in the pool ) ÷ token cost
+ *
+ * Every expected value on the page comes through here — the ranking, each alternative loot spec,
+ * and both branches of the vault trade. They differ only in which items they hand it, which is the
+ * point: three transcriptions of one formula are three chances for them to disagree about what a
+ * pool is.
+ *
+ * Ineligible items are dropped outright rather than counted at zero. They can't dilute a pool a
+ * bonus roll is unable to draw them from.
+ *
+ * @param {import("./types.js").PoolItem[]} items
+ * @param {number} cost  Tokens one roll here costs.
+ * @returns {{inPool: import("./types.js").PoolItem[], remaining: number, num: number, ev: number}}
+ */
+export function priceOf(items, cost) {
+  const inPool = items.filter((i) => i.elig !== false);
+  const remaining = inPool.filter((i) => i.state !== "rolled").length;
+  const num = inPool.reduce((t, i) => t + (i.state === "want" ? i.score : 0), 0);
+  return { inPool, remaining, num, ev: remaining > 0 ? num / remaining / (cost || 1) : 0 };
+}
+
+/**
+ * The same encounter priced as if one item were in a different state — the counterfactual behind
+ * the vault panel's "if you leave it / if you take it" pair. Copies rather than mutates: the branch
+ * being priced is by definition not the branch the board is in.
+ *
+ * @param {import("./types.js").Row} row
+ * @param {number} itemId
+ * @param {"want"|"own"|"rolled"} itemState
+ */
+export function priceWith(row, itemId, itemState) {
+  return priceOf(row.items.map((i) => (i.id === itemId ? { ...i, state: itemState } : i)), row.cost);
+}
+
+/**
  * The same encounter, rolled as each of the character's other specs.
  *
  * Loot spec is a lever on the pool, not just a filter: dropping an item you'd never want shortens
  * the denominator and every remaining item's odds go up. The classic case is a Mistweaver at Pit of
  * Saron, where looting as Windwalker sheds Nevermelting Ice Crystal and keeps every piece of
- * leather. So each alternative is costed the same way as the current one, and named by what it
- * drops and what it gives up.
+ * leather. So each alternative is costed the same way as the current one — by re-asking eligibility
+ * as that spec and handing the result to `priceOf` — and named by what it drops and what it gives up.
  *
  * Values are the report's, which only ever simmed one spec — fine for "what would I stop being
  * offered", not for "what is this worth to the other spec". Rows keep only the better options.
@@ -156,14 +192,13 @@ function altSpecs(items, sp, cost, ev) {
   if (!sp) return [];
   const live = items.filter((i) => i.state !== "rolled");
   return classSpecs(sp).filter((s) => s !== sp).map((s) => {
-    const has = (i) => (i.specs || []).indexOf(s) >= 0;
-    const pool = live.filter(has);
-    const num = pool.reduce((t, i) => t + (i.state === "want" ? i.score : 0), 0);
+    const has = (i) => (i.specs || []).includes(s);
+    const p = priceOf(items.map((i) => ({ ...i, elig: has(i) })), cost);
     return {
       spec: s,
-      remaining: pool.length,
-      num,
-      ev: pool.length > 0 ? num / pool.length / cost : 0,
+      remaining: p.remaining,
+      num: p.num,
+      ev: p.ev,
       dodges: live.filter((i) => i.elig !== false && !has(i)).map((i) => i.name),
       gains: live.filter((i) => i.elig === false && has(i)).map((i) => i.name),
       loses: live.filter((i) => i.elig !== false && !has(i) && i.score > 0).map((i) => i.name),
@@ -237,7 +272,7 @@ function isSpecial(instId, encId) {
   if (!specialByRaid) specialByRaid = {};
   const k = String(instId);
   if (!specialByRaid[k]) specialByRaid[k] = finalBosses(instId, sp.lastBosses);
-  return specialByRaid[k].indexOf(String(encId)) >= 0;
+  return specialByRaid[k].includes(String(encId));
 }
 
 /** Item ids per "instId:encId" source, built once on demand. */
@@ -256,19 +291,34 @@ function itemsAt(key) {
 }
 
 /**
- * Build the ranked list of rollable sources for a board at its selected difficulty.
- * Returns { rows, selDiff, diffs, unknown } where each row carries its items, pool size, and EV,
- * and `unknown` names the visible sources the encounter database couldn't identify.
- * @param {import("./types.js").Board} b
- * @returns {{ rows: import("./types.js").Row[], selDiff: string, diffs: string[], unknown: string[] }}
+ * One item as it sits in a pool, before its state is decided. Both halves of a pool build these —
+ * the report's own scored results and the rest of the boss's loot table — and they differ only in
+ * whether there is a score and a drop level to carry.
+ *
+ * A report can list items this character's loot spec can't be given: QE evaluates a healer trinket
+ * and the caster-DPS one beside it alike. They're kept, flagged — visible, but out of the pool,
+ * since a bonus roll can't hand you one.
+ *
+ * @param {number|string} id
+ * @param {Partial<import("./types.js").Item>} meta
+ * @param {string|null} sp  Loot spec id.
+ * @returns {import("./types.js").PoolItem}
  */
-export function buildGroups(b) {
-  const sp = b.lootSpec || specId(b.spec);
-  const diffs = raidDiffs(b);
-  const selDiff = (b.raidDiff != null && diffs.indexOf(String(b.raidDiff)) >= 0) ? String(b.raidDiff) : diffs[0];
-  const groups = {};
-  const unknown = {};
+function poolItem(id, meta, sp, score, lvl, vr) {
+  const lt = canLoot(meta, sp);
+  return {
+    id: Number(id), name: meta.n || ("Item " + id), q: meta.q || 3, score, lvl, vr: !!vr,
+    elig: lt.ok, why: lt.why || "", swap: lt.swap || null, specs: eligibleSpecs(meta, sp),
+  };
+}
 
+/**
+ * Group the report's own results by source, at the selected difficulty — the half of each pool the
+ * report knows about. Sources the ranking can't or shouldn't show are dropped here; the ones it
+ * shows but can't name are recorded in `unknown` for the staleness banner.
+ */
+function collectScored(b, sp, diffs, selDiff, unknown) {
+  const groups = {};
   b.results.forEach((r) => {
     const rd = String(diffOf(b, r));
     srcList(b, r).forEach((s) => {
@@ -281,81 +331,92 @@ export function buildGroups(b) {
       // Only count unknowns that survive the filters — an unidentified source the user can't
       // see isn't a staleness signal worth interrupting them over.
       if (info.unknown) unknown[key] = info.type === "dungeon" ? info.name : info.instName + " · " + info.name;
-      const meta = /** @type {Partial<import("./types.js").Item>} */ (QE_DATA.items[r.item] || {});
       const g = groups[key] || (groups[key] = {
         key, type: info.type, name: info.name, instName: info.instName || "", items: {},
         special: info.type === "raid" && isSpecial(instId, encId),
       });
+      // The same item can be simmed more than once for one source; keep its best showing.
       const ex = g.items[r.item], sc = r.score || 0;
-      // A report can list items this character's loot spec can't be given — QE evaluates a healer
-      // trinket and the caster-DPS one beside it alike. Keep them, flagged: they're visible but out
-      // of the pool, since a bonus roll can't hand you one.
-      const lt = canLoot(meta, sp);
-      if (!ex || sc > ex.score) {
-        g.items[r.item] = {
-          id: r.item, name: meta.n || ("Item " + r.item), q: meta.q || 3, score: sc, lvl: r.level, vr,
-          elig: lt.ok, why: lt.why || "", swap: lt.swap || null, specs: eligibleSpecs(meta, sp),
-        };
-      }
+      if (!ex || sc > ex.score) g.items[r.item] = poolItem(r.item, QE_DATA.items[r.item] || {}, sp, sc, r.level, vr);
     });
   });
+  return groups;
+}
 
-  // A report only scores what it evaluated, but a bonus roll draws from the whole loot table — so
-  // the rest of each boss's drops belong in the pool at zero value. Leaving them out was the other
-  // half of the EV error: it shrinks the denominator, flattering every encounter the report is
-  // thin on. They render as fillers, folded away behind the "no upgrade" toggle.
+/**
+ * Fill each group out to the boss's whole loot table.
+ *
+ * A report only scores what it evaluated, but a bonus roll draws from everything that boss can hand
+ * you — so the rest belongs in the pool at zero value. Leaving them out was the other half of the EV
+ * error: it shrinks the denominator, flattering every encounter the report is thin on. They render
+ * as fillers, folded away behind the "no upgrade" toggle.
+ */
+function fillTable(groups, sp) {
   Object.keys(groups).forEach((key) => {
     const g = groups[key];
     itemsAt(key).forEach((id) => {
       if (g.items[id]) return;
       const meta = QE_DATA.items[id];
-      const src = meta.s.filter((x) => x[0] + ":" + x[1] === key)[0] || [];
-      const lt = canLoot(meta, sp);
-      g.items[id] = {
-        id: Number(id), name: meta.n, q: meta.q || 3, score: 0, lvl: 0, vr: !!src[2],
-        elig: lt.ok, why: lt.why || "", swap: lt.swap || null, specs: eligibleSpecs(meta, sp),
-      };
+      const src = meta.s.find((x) => x[0] + ":" + x[1] === key) || [];
+      g.items[id] = poolItem(id, meta, sp, 0, 0, src[2]);
     });
   });
+}
+
+/**
+ * Price one grouped encounter: settle what a roll here pays out, decide each item's state against
+ * it, then hand the pool to `priceOf`.
+ */
+function priceGroup(b, g, selDiff, ownedMap, sp) {
+  // What a roll here hands you, which is not always what the boss drops. Same for every item in
+  // the row: an upgrade track step is one item level, whichever item lands on it.
+  const reward = rollReward(g.type, diffKey(b, selDiff));
+  const items = Object.values(g.items).map((it) => {
+    const ov = b.overlay[g.key + ":" + it.id];
+    it.ownedIlvl = ownedMap[it.id] != null ? ownedMap[it.id] : null;
+    // A copy you already hold only makes the roll redundant if it's at least as good as what the
+    // roll would hand you — and in a season that promotes rewards to a vault track, that is not
+    // the drop. Owning the Heroic version of an item doesn't dupe a roll that pays out on the
+    // Myth track.
+    it.rollIlvl = rollIlvlFor(reward, it.lvl);
+    it.dupe = isDupe(it.ownedIlvl, it.rollIlvl);
+    it.state = (ov === "rolled" || ov === "own") ? ov
+      : ((b.vaultTake === it.id || it.dupe) ? "own" : "want");
+    return it;
+  }).sort((a, c) => c.score - a.score || a.name.localeCompare(c.name));
+
+  // Token cost follows the season unless the user overrode this encounter. The per-board
+  // tokenRaid/tokenDungeon fields older saves carry were never user-editable, so they're ignored.
+  const cost = b.tokenOverride[g.key] || (g.type === "raid" ? SEASON.tokenRaid : SEASON.tokenDungeon) || 1;
+  const p = priceOf(items, cost);
+  return {
+    g, items, cost, reward, remaining: p.remaining, num: p.num, ev: p.ev,
+    nWant: p.inPool.filter((i) => i.state === "want" && i.score > 0).length,
+    nBlocked: items.length - p.inPool.length,
+    alts: altSpecs(items, sp, cost, p.ev),
+  };
+}
+
+/**
+ * Build the ranked list of rollable sources for a board at its selected difficulty.
+ * Returns { rows, selDiff, diffs, unknown } where each row carries its items, pool size, and EV,
+ * and `unknown` names the visible sources the encounter database couldn't identify.
+ * @param {import("./types.js").Board} b
+ * @returns {{ rows: import("./types.js").Row[], selDiff: string, diffs: string[], unknown: string[] }}
+ */
+export function buildGroups(b) {
+  const sp = b.lootSpec || specId(b.spec);
+  const diffs = raidDiffs(b);
+  const selDiff = (b.raidDiff != null && diffs.includes(String(b.raidDiff))) ? String(b.raidDiff) : diffs[0];
+  const unknown = {};
+
+  const groups = collectScored(b, sp, diffs, selDiff, unknown);
+  fillTable(groups, sp);
 
   const ownedMap = ((state.simc[b.key] || {}).owned) || {};
-  const rows = Object.keys(groups).map((k) => {
-    const g = groups[k];
-    // What a roll here hands you, which is not always what the boss drops. Same for every item in
-    // the row: an upgrade track step is one item level, whichever item lands on it.
-    const reward = rollReward(g.type, diffKey(b, selDiff));
-    const items = Object.keys(g.items).map((id) => {
-      const it = g.items[id], ov = b.overlay[g.key + ":" + id];
-      it.ownedIlvl = ownedMap[id] != null ? ownedMap[id] : null;
-      // A copy you already hold only makes the roll redundant if it's at least as good as what the
-      // roll would hand you — and in a season that promotes rewards to a vault track, that is not
-      // the drop. Owning the Heroic version of an item doesn't dupe a roll that pays out on the
-      // Myth track.
-      it.rollIlvl = rollIlvlFor(reward, it.lvl);
-      it.dupe = isDupe(it.ownedIlvl, it.rollIlvl);
-      it.state = ov === "rolled" ? "rolled"
-        : (ov === "own" ? "own"
-          : (b.vaultTake === Number(id) ? "own"
-            : (it.dupe ? "own" : "want")));
-      return it;
-    }).sort((a, c) => c.score - a.score || a.name.localeCompare(c.name));
-    // Ineligible items are shown but never counted: they can't dilute a pool they can't be in.
-    const canGet = items.filter((i) => i.elig !== false);
-    const remaining = canGet.filter((i) => i.state !== "rolled").length;
-    const num = canGet.reduce((t, i) => t + (i.state === "want" ? i.score : 0), 0);
-    // Token cost follows the season unless the user overrode this encounter. The per-board
-    // tokenRaid/tokenDungeon fields older saves carry were never user-editable, so they're ignored.
-    const cost = b.tokenOverride[g.key] || (g.type === "raid" ? SEASON.tokenRaid : SEASON.tokenDungeon) || 1;
-    const ev = remaining > 0 ? num / remaining / cost : 0;
-    return {
-      g, items, remaining, num, cost, ev, reward,
-      nWant: canGet.filter((i) => i.state === "want" && i.score > 0).length,
-      nBlocked: items.length - canGet.length,
-      alts: altSpecs(items, sp, cost, ev),
-    };
-  });
+  const rows = Object.values(groups).map((g) => priceGroup(b, g, selDiff, ownedMap, sp));
   rows.sort((a, c) => c.ev - a.ev || c.num - a.num || a.g.name.localeCompare(c.g.name));
-  return { rows, selDiff, diffs, unknown: Object.keys(unknown).map((k) => unknown[k]) };
+  return { rows, selDiff, diffs, unknown: Object.values(unknown) };
 }
 
 /**
@@ -396,7 +457,7 @@ export function vaultChoice(b) {
   const keep = options.slice().sort((a, c) => c.score - a.score)[0];
 
   const rows = buildGroups(Object.assign({}, b, { vaultTake: null })).rows;
-  const top = rows.filter((r) => r.ev > 0)[0] || null;
+  const top = rows.find((r) => r.ev > 0) || null;
   // The expected score of the one roll you'd actually make. Not `row.ev`, which is per *token* —
   // against a single vault slot the question is what one roll returns, with its price alongside.
   const perRoll = top ? top.num / top.remaining : 0;
@@ -422,7 +483,7 @@ export function vaultChoice(b) {
 function dragOf(rows, keep) {
   let worst = null;
   rows.forEach((r, i) => {
-    const it = r.items.filter((x) => x.id === keep.id)[0];
+    const it = r.items.find((x) => x.id === keep.id);
     // Only an item that currently counts can stop counting. One already Own or Rolled — a dupe, or
     // one you've had before — is doing its damage to the pool either way.
     if (!it || it.elig === false || it.state !== "want" || !it.score || r.remaining <= 0) return;
@@ -432,9 +493,22 @@ function dragOf(rows, keep) {
   return worst;
 }
 
-// Display scaling: Droptimizer boards can show raw DPS or % of baseline.
+/* ---------- display scaling ----------
+   A score means whatever its report meant by it, so every number on screen goes out through here:
+   Droptimizer boards can show raw DPS or a percentage of the sim's baseline, QE boards have one
+   unit and no choice. Kept beside the model rather than in a formatting module because the scaling
+   factor is a property of the board, which is a model concept. */
+
 function facOf(b) {
   return (b.source === "droptimizer" && b.metric === "pct") ? 100 / (b.baseline || 1) : 1;
+}
+
+/** Format a number to at most 2 decimals with locale grouping. */
+export function fmt(n) {
+  return (Math.round(n * 100) / 100).toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
 }
 
 /** Unit label for a board's scores. */

@@ -1,6 +1,12 @@
-// Preloaded before the test files (via `node --import`). The app modules are written
-// for the browser; these minimal stubs let the pure-logic modules import and run under
-// Node without a DOM. Tests here only exercise pure functions — no real rendering.
+// Preloaded before every test file (via `node --import`). The app modules are written for the
+// browser; this supplies the browser.
+//
+// The DOM is the real index.html parsed by linkedom, not a stub. A stub that answers every
+// getElementById with the same object agrees with any markup at all — including markup that isn't
+// there — which makes every assertion that touches the page quietly vacuous. Parsing the shipped
+// page costs a millisecond and can't do that.
+
+import { loadPage } from "./page.js";
 
 /** @type {Map<string, string>} */
 const store = new Map();
@@ -11,7 +17,7 @@ globalThis.localStorage = /** @type {any} */ ({
   clear: () => store.clear(),
 });
 
-// A tolerant fake element so incidental save()/toast() calls don't throw.
-const fakeEl = { textContent: "", innerHTML: "", classList: { add() {}, remove() {} } };
-globalThis.document = /** @type {any} */ ({ getElementById: () => fakeEl });
+// Not part of the page: the theme toggle asks the OS what it prefers.
 globalThis.matchMedia = /** @type {any} */ (() => ({ matches: false }));
+
+loadPage();

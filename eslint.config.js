@@ -20,13 +20,24 @@ export default [
     },
   },
 
-  // Tests, build scripts, and config files run under Node.
+  // Build scripts and config files run under Node.
   {
-    files: ["tests/**/*.js", "scripts/**/*.mjs", "*.config.js"],
+    files: ["scripts/**/*.mjs", "*.config.js"],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: "module",
       globals: globals.node,
+    },
+  },
+
+  // Tests run under Node, but against a real DOM (tests/page.js parses index.html with linkedom),
+  // so they legitimately reach for both sets of globals.
+  {
+    files: ["tests/**/*.js"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "module",
+      globals: { ...globals.node, ...globals.browser },
     },
   },
 ];

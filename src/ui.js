@@ -1,11 +1,48 @@
 // Wires up all user interaction: encounter/item clicks, difficulty & metric toggles,
 // board switching, export/import, and the theme toggle.
+//
+// Every listener is bound once, to a container that outlives the content inside it. The app
+// re-renders each panel wholesale on every change, so a listener attached to a row would be
+// thrown away with the row it was attached to — see `on` below.
 
 import { state, save, active, replaceState } from "./store.js";
-import { $, toast } from "./util.js";
+import { $, toast } from "./dom.js";
 import { render, closeBoardMenu } from "./render.js";
 import { loadReport } from "./reports.js";
 import { readSimc } from "./simc.js";
+
+/**
+ * Delegate an event on a container to the nearest matching element at or above the target.
+ * @param {import("./dom.js").ElementId} id  Container that survives re-rendering.
+ * @param {string} type
+ * @param {string} selector  What the click has to have landed inside to count.
+ * @param {(el: any, e: any) => void} fn  Called with that element.
+ */
+function on(id, type, selector, fn) {
+  $(id).addEventListener(type, (e) => {
+    const el = /** @type {any} */ (e.target).closest(selector);
+    if (el) fn(el, e);
+  });
+}
+
+/** Persist, then redraw — what any change that should outlive this page view needs. */
+function commit() {
+  save();
+  render();
+}
+
+/**
+ * Want → Own → Rolled → Want. "Want" is the absence of an override rather than a value of one, so
+ * the overlay only ever holds the states a user actually asserted — which is what keeps a stored
+ * board meaningful after the report behind it is reloaded with different items.
+ */
+function cycleItem(b, key, itemEl) {
+  if (!itemEl) return;
+  const k = key + ":" + itemEl.dataset.id;
+  const next = { want: "own", own: "rolled", rolled: "want" }[b.overlay[k] || "want"];
+  if (next === "want") delete b.overlay[k]; else b.overlay[k] = next;
+  commit();
+}
 
 /**
  * The report picker: a menu rather than a <select> because the rows carry a class colour, the
@@ -23,10 +60,9 @@ function initBoardPicker() {
   };
 
   btn.addEventListener("click", () => { if (menu.hidden) open(); else closeBoardMenu(); });
-  menu.addEventListener("click", (/** @type {any} */ e) => {
-    const el = e.target.closest("[data-board]");
-    if (!el) return;
-    state.activeId = el.dataset.board; save(); render();
+  on("boardMenu", "click", "[data-board]", (el) => {
+    state.activeId = el.dataset.board;
+    commit();
     btn.focus();
   });
 
@@ -35,7 +71,7 @@ function initBoardPicker() {
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
     e.preventDefault();
     if (menu.hidden) { open(); return; }
-    const opts = [].slice.call(menu.querySelectorAll(".popt"));
+    const opts = [...menu.querySelectorAll(".popt")];
     if (!opts.length) return;
     const i = opts.indexOf(document.activeElement), d = e.key === "ArrowDown" ? 1 : -1;
     const next = i < 0 ? opts[d > 0 ? 0 : opts.length - 1] : opts[(i + d + opts.length) % opts.length];
@@ -48,51 +84,82 @@ function initBoardPicker() {
   });
 }
 
+/** Download the whole state as a JSON backup, and read one back. */
+function initBackup() {
+  $("exportBtn").addEventListener("click", () => {
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "slowyourroll-backup.json";
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(a.href);
+    toast("Backup downloaded");
+  });
+
+  $("importBtn").addEventListener("click", () => $("importFile").click());
+  $("importFile").addEventListener("change", (/** @type {any} */ e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    const rd = new FileReader();
+    rd.onload = () => {
+      try {
+        const p = JSON.parse(String(rd.result));
+        if (!p.boards) throw new Error("not a backup");
+        replaceState(p);
+        commit();
+        toast("Imported " + p.boards.length + " report" + (p.boards.length === 1 ? "" : "s"));
+      } catch (err) {
+        toast("Couldn't read that file — is it a Slow Your Roll backup?");
+      }
+      e.target.value = "";
+    };
+    rd.readAsText(f);
+  });
+}
+
 export function initUI() {
-  // Encounter list — expand/collapse, reveal zero-score fillers, cycle item state.
-  $("sources").addEventListener("click", (/** @type {any} */ e) => {
-    const el = e.target.closest("[data-act]");
-    if (!el) return;
-    const card = e.target.closest(".card");
+  // Encounter list — expand/collapse, reveal what this loot spec can't be given, cycle item state.
+  on("sources", "click", "[data-act]", (el) => {
+    const card = el.closest(".card");
     if (!card) return;
     const b = active(), key = card.dataset.key, act = el.dataset.act;
     if (act === "wowhead") return; // the icon is a plain link out; let the browser have it
-    if (act === "toggle") { b._open = (b._open === key ? null : key); save(); render(); return; }
-    if (act === "showblocked") { b._showBlockedKey = (b._showBlockedKey === key ? null : key); render(); return; }
-    const itemEl = e.target.closest(".item");
-    if (act === "cycle" && itemEl) {
-      const id = itemEl.dataset.id, ok = key + ":" + id;
-      const cur = b.overlay[ok] || "want";
-      const nxt = cur === "want" ? "own" : (cur === "own" ? "rolled" : "want");
-      if (nxt === "want") delete b.overlay[ok]; else b.overlay[ok] = nxt;
-      save(); render();
+    if (act === "toggle") {
+      b._open = b._open === key ? null : key;
+      commit();
+    } else if (act === "showblocked") {
+      // Redrawn but not saved: which pool you last unfolded is not a thing to restore a week later.
+      b._showBlockedKey = b._showBlockedKey === key ? null : key;
+      render();
+    } else if (act === "cycle") {
+      cycleItem(b, key, el.closest(".item"));
     }
   });
 
   // Per-encounter token cost override.
-  $("sources").addEventListener("change", (/** @type {any} */ e) => {
-    const el = e.target.closest('[data-act="cost"]');
-    if (!el) return;
-    const card = e.target.closest(".card"), b = active(), key = card.dataset.key;
-    b.tokenOverride[key] = Math.max(1, parseInt(el.value, 10) || 1);
-    save(); render();
+  on("sources", "change", '[data-act="cost"]', (el) => {
+    active().tokenOverride[el.closest(".card").dataset.key] = Math.max(1, parseInt(el.value, 10) || 1);
+    commit();
   });
 
-  $("diffSeg").addEventListener("click", (/** @type {any} */ e) => {
-    const el = e.target.closest("[data-diff]");
-    if (!el) return;
-    active().raidDiff = el.dataset.diff; save(); render();
+  on("diffSeg", "click", "[data-diff]", (el) => { active().raidDiff = el.dataset.diff; commit(); });
+  on("metricSeg", "click", "[data-metric]", (el) => { active().metric = el.dataset.metric; commit(); });
+
+  // Vault — mark a pick as "taking it" (folds it into the ranking as Own).
+  on("vaultPanel", "click", "[data-vault]", (el) => {
+    const b = active(), id = Number(el.dataset.vault);
+    b.vaultTake = b.vaultTake === id ? null : id;
+    commit();
   });
-  $("metricSeg").addEventListener("click", (/** @type {any} */ e) => {
-    const el = e.target.closest("[data-metric]");
-    if (!el) return;
-    active().metric = el.dataset.metric; save(); render();
-  });
+
   initBoardPicker();
+
   // Changing loot spec changes which drops you're eligible for, and so the whole ranking.
   $("lootSpecSel").addEventListener("change", (/** @type {any} */ e) => {
-    active().lootSpec = e.target.value || null; save(); render();
+    active().lootSpec = e.target.value || null;
+    commit();
   });
+
   // Share the active report as a ?report= link. What travels is the report id alone —
   // the recipient fetches the same scores fresh; rolled history and overrides stay local.
   $("shareBoard").addEventListener("click", () => {
@@ -105,62 +172,32 @@ export function initUI() {
       () => prompt("Copy this link:", url),
     );
   });
+
   $("delBoard").addEventListener("click", () => {
     const b = active();
     if (!confirm("Remove " + b.player + " (" + b.spec + ")? Your rolled history for it is lost.")) return;
     state.boards = state.boards.filter((x) => x.id !== b.id);
     state.activeId = (state.boards[0] || {}).id || null;
-    save(); render(); toast("Removed");
+    commit();
+    toast("Removed");
   });
-  $("showAll").addEventListener("change", (/** @type {any} */ e) => { state.showAll = e.target.checked; save(); render(); });
+
+  $("showAll").addEventListener("change", (/** @type {any} */ e) => {
+    state.showAll = e.target.checked;
+    commit();
+  });
 
   $("loadBtn").addEventListener("click", loadReport);
   $("reportInput").addEventListener("keydown", (e) => { if (e.key === "Enter") loadReport(); });
   $("simcBtn").addEventListener("click", readSimc);
 
-  // Vault — mark a pick as "taking it" (folds it into the ranking as Own).
-  $("vaultPanel").addEventListener("click", (/** @type {any} */ e) => {
-    const el = e.target.closest("[data-vault]");
-    if (!el) return;
-    const b = active(), id = Number(el.dataset.vault);
-    b.vaultTake = (b.vaultTake === id ? null : id);
-    save(); render();
-  });
-
-  // Export / import a JSON backup.
-  $("exportBtn").addEventListener("click", () => {
-    const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "slowyourroll-backup.json";
-    document.body.appendChild(a); a.click(); a.remove();
-    URL.revokeObjectURL(a.href);
-    toast("Backup downloaded");
-  });
-  $("importBtn").addEventListener("click", () => $("importFile").click());
-  $("importFile").addEventListener("change", (/** @type {any} */ e) => {
-    const f = e.target.files[0];
-    if (!f) return;
-    const rd = new FileReader();
-    rd.onload = () => {
-      try {
-        const p = JSON.parse(String(rd.result));
-        if (!p.boards) throw new Error("bad");
-        replaceState(p); save(); render();
-        toast("Imported " + p.boards.length + " report" + (p.boards.length === 1 ? "" : "s"));
-      } catch (err) {
-        toast("Couldn't read that file — is it a Slow Your Roll backup?");
-      }
-      e.target.value = "";
-    };
-    rd.readAsText(f);
-  });
+  initBackup();
 
   // Theme toggle (defaults to the OS preference until first click).
   $("themeBtn").addEventListener("click", () => {
     const root = document.documentElement;
-    let cur = root.getAttribute("data-theme");
-    if (!cur) cur = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    const cur = root.getAttribute("data-theme") ||
+      (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
     root.setAttribute("data-theme", cur === "dark" ? "light" : "dark");
   });
 }

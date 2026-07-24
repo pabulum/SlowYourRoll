@@ -115,9 +115,9 @@ function allows(item, spec) {
   const me = specInfo(spec);
   if (!me) return true;
   // 1. An explicit spec list settles it outright.
-  if (item.p) return item.p.indexOf(Number(spec)) >= 0;
+  if (item.p) return item.p.includes(Number(spec));
   // 2. Armor type. Cloaks (Back) and jewelry (subclass 0) are worn by everyone.
-  if (item.c === 4 && item.u === 6) return SHIELD_CLASSES.indexOf(me.c) >= 0;
+  if (item.c === 4 && item.u === 6) return SHIELD_CLASSES.includes(me.c);
   if (item.c === 4 && item.iv !== BACK && item.u >= 1 && item.u <= 4 && item.u !== CLASS_ARMOR[me.c]) return false;
   // 3. Weapon training. A warglaive is a demon hunter's or nobody's.
   if (item.c === 2 && !weaponOk(item, me.c)) return false;
@@ -130,5 +130,5 @@ function allows(item, spec) {
 function weaponOk(item, cls) {
   const list = CLASS_WEAPONS[cls];
   if (!list || item.u == null || !WEAPON_NAME[item.u]) return true;
-  return list.indexOf(item.u) >= 0;
+  return list.includes(item.u);
 }

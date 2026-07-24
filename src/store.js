@@ -2,7 +2,7 @@
 // linked /simc data, and view preferences. Persisted to localStorage; exportable
 // as a JSON backup from the UI.
 
-import { toast } from "./util.js";
+import { toast } from "./dom.js";
 
 const KEY = "slowyourroll.v2";
 
@@ -42,7 +42,7 @@ export function save() {
 
 /** The currently selected board, or the first one as a fallback. */
 export function active() {
-  return state.boards.filter((b) => b.id === state.activeId)[0] || state.boards[0];
+  return state.boards.find((b) => b.id === state.activeId) || state.boards[0];
 }
 
 /** Stable identity key for a character: name~realm~specFirstWord, normalized. */

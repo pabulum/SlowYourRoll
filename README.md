@@ -132,13 +132,45 @@ IntelliSense and CI safety without a compile step.
 npm install          # one-time: install dev tooling
 npm run lint         # ESLint
 npm run typecheck    # tsc --noEmit (checkJs)
-npm test             # node:test — unit tests for the pure logic
+npm test             # node:test
 npm run check        # all three, as CI runs them
 ```
 
-Tests cover the pure logic (the EV model, report/`simc` parsing, formatting) and live in
-[`tests/`](tests/). CI runs `lint` + `typecheck` + `test` on every push and PR
-(`.github/workflows/ci.yml`).
+CI runs `lint` + `typecheck` + `test` on every push and PR (`.github/workflows/ci.yml`).
+
+### Building markup
+
+Every name on the page is text somebody else wrote — item names from QE Live's database, character
+and realm names from a pasted report. So markup is built with the `html` tagged template in
+[`src/html.js`](src/html.js), which **escapes every interpolated value** unless it is explicitly
+marked as markup:
+
+```js
+html`<div class="${cls}">${item.name}</div>`   // both escaped
+html`<ul>${rows.map(rowHTML)}</ul>`            // arrays join; nested html`` passes through
+html`${cond && html`<b>only sometimes</b>`}`   // false / null / undefined render as nothing
+```
+
+Safety is the default rather than a discipline: there is no `esc()` to forget. The one way past it
+is `raw()`, which is what to grep for when auditing. Interpolations are safe in text and in
+*double-quoted* attributes — write `class="${x}"`, never `class='${x}'`.
+
+### Reaching the page
+
+Element ids are declared once, in [`src/dom.js`](src/dom.js). `$` is typed against that list, so a
+rename in `index.html` is a type error everywhere the id is used rather than a `null` at runtime,
+and a missing element throws with its own name attached. `tests/dom.test.js` checks the list
+against the real markup in both directions — an id the app wants that the page lost, and an
+element in the page that nothing renders into.
+
+### Tests
+
+Tests run under `node:test` and live in [`tests/`](tests/). The pure logic is covered directly (the
+EV model, loot eligibility, report and `simc` parsing, the escaping contract). Rendering and event
+wiring are covered against **the real `index.html`**, parsed with `linkedom` — so a test can fail
+because an element id moved, because a fragment never reached the DOM, or because a hostile item
+name arrived as markup. A stub DOM that answers every lookup with the same object would agree with
+any markup at all, including markup that isn't there, which is why there isn't one.
 
 ## Project layout
 
@@ -150,17 +182,23 @@ src/
   data.js           Re-exports the encounter database + difficulty vocabulary
   season.js         Season config: name + token costs (see "Seasons" above)
   store.js          Persistent state (localStorage), boards, save/load
-  model.js          The EV model: encounter resolution, grouping, ranking
+  model.js          The EV model: encounter resolution, grouping, ranking, display scaling
+  loot.js           Who can be awarded what — loot spec eligibility
+  classes.js        Game constants: armor types, weapon training, class colours
   reports.js        Loading QE Live and Raidbots Droptimizer reports
   simc.js           Parsing the /simc addon export (vault, owned, roll history)
   render.js         All DOM rendering
   ui.js             Event wiring, theme toggle, export/import
+  html.js           The `html` tagged template — escaping by default
+  dom.js            Element-id registry, typed `$`, and the mutations the app makes
+  wowhead.js        Item links and the tooltip widget's payload
   types.js          JSDoc type definitions (no runtime code)
 data/
   qe-data.js        Generated encounter + item database (see src/data.js for its shape)
 scripts/
   build-data.mjs    Regenerates data/qe-data.js from a QuestionablyEpic checkout
-tests/              Unit tests (node:test)
+  serve.mjs         Zero-dependency static server for local development
+tests/              node:test suites; page.js supplies the real DOM
 ```
 
 ## Deploying to GitHub Pages
