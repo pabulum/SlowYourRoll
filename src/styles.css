@@ -33,6 +33,12 @@
    One accent, a gold at roughly 39° — not the orange this started as. Orange that far around the
    wheel reads as a warning light against near-black, and it's the wrong association for a page whose
    accent means "this is where your token pays". Both themes hold that hue; only lightness moves.
+
+   Gold is treated as the material rather than as a swatch: a thin line or a big struck statement,
+   never the medium weight in between, which is where it stops looking like metal and starts looking
+   like paint. See "struck, not painted" further down for the two lists that follow from that, and
+   check any new gold against it — most things that want to be gold should get a gold rule instead.
+
    Raid and dungeon are told apart by a cool ink instead of a second brand colour, and the WoW
    item-quality colours stay canon since they mean something outside this app — note that legendary
    orange is deliberately *not* the accent, so a legendary item never reads as a recommendation.
@@ -48,7 +54,12 @@
   --paper:#f2efe8; --paper-deep:#e8e4da; --panel:#fbf9f5; --panel-2:#f4f1e9; --panel-3:#ece8dd;
   --ink:#191713; --muted:#65615a; --faint:#948e82;
   --rule:#ded8cb; --rule-strong:#c2bbaa;
-  --accent:#956009; --accent-tint:#f6eddb; --accent-line:#cfa855;
+  --accent:#956009; --accent-tint:#f6eddb; --accent-line:#c19a45;
+  /* The two ends of the sheen. On paper both stay *darker* than the accent — a highlight lighter
+     than #a86f0c drops the hero numeral under 3:1 against the panel, and a 52px figure nobody can
+     read is not a stylish 52px figure. On ink the highlight goes properly bright, which is where
+     the metal actually comes from. */
+  --gold-hi:#a86f0c; --gold-lo:#5f3d02;
   --cool:#2b5f7e; --cool-tint:#e4edf3;
   --good:#2f6b3a; --danger:#a3271f;
   --q-rare:#1a5fb4; --q-epic:#7b2fb5; --q-legend:#b45309;
@@ -57,6 +68,12 @@
      of the page. Gold in both themes — the glow is the accent, not a neutral shadow. */
   --halo:rgba(200,155,50,.34); --halo-wide:rgba(200,155,50,.18); --wash:rgba(205,165,60,.11);
   --lift:0 14px 34px -16px rgba(30,24,12,.34),0 2px 6px -3px rgba(30,24,12,.18);
+
+  /* Shine. A flat fill can only ever be yellow; what makes a surface read as *gold* is luminance
+     moving across it, so the three elements that carry the accent as a surface get a rolled sheen
+     instead of a colour. Defined once — the var()s inside resolve per theme at the point of use. */
+  --sheen-y:linear-gradient(172deg, var(--gold-hi) 2%, var(--accent) 30%, var(--gold-lo) 62%, var(--accent) 86%, var(--gold-hi) 100%);
+  --sheen-x:linear-gradient(90deg, var(--gold-lo), var(--accent) 18%, var(--gold-hi) 38%, var(--accent) 58%, var(--gold-lo) 82%, var(--accent));
 
   /* Grain. Alpha-composited over paper it reads as fibre; multiply keeps it from hazing the whites. */
   --grain-blend:multiply; --grain-opacity:.05;
@@ -75,11 +92,12 @@
   --paper:#0d0d0f; --paper-deep:#08080a; --panel:#141416; --panel-2:#1b1b1f; --panel-3:#232328;
   --ink:#e8e4dc; --muted:#9a958b; --faint:#6b675f;
   --rule:#27272c; --rule-strong:#3c3c43;
-  --accent:#e9b551; --accent-tint:#282110; --accent-line:#7d642c;
+  --accent:#fbc140; --accent-tint:#2e2210; --accent-line:#c2932f;
+  --gold-hi:#ffe9a8; --gold-lo:#a3701a;
   --cool:#7db8dd; --cool-tint:#12222c;
   --good:#4fbb63; --danger:#ef6a5e;
   --q-rare:#4a9eff; --q-epic:#b57bff; --q-legend:#ff9d3c;
-  --halo:rgba(240,190,85,.24); --halo-wide:rgba(235,180,70,.13); --wash:rgba(240,190,80,.07);
+  --halo:rgba(251,193,64,.26); --halo-wide:rgba(251,180,64,.13); --wash:rgba(255,180,60,.055);
   --lift:0 18px 44px -18px rgba(0,0,0,.72),0 2px 8px -3px rgba(0,0,0,.6);
   /* Screen, not multiply: grain has to *lift* out of near-black to be seen at all. */
   --grain-blend:screen; --grain-opacity:.05;
@@ -88,11 +106,12 @@
   --paper:#0d0d0f; --paper-deep:#08080a; --panel:#141416; --panel-2:#1b1b1f; --panel-3:#232328;
   --ink:#e8e4dc; --muted:#9a958b; --faint:#6b675f;
   --rule:#27272c; --rule-strong:#3c3c43;
-  --accent:#e9b551; --accent-tint:#282110; --accent-line:#7d642c;
+  --accent:#fbc140; --accent-tint:#2e2210; --accent-line:#c2932f;
+  --gold-hi:#ffe9a8; --gold-lo:#a3701a;
   --cool:#7db8dd; --cool-tint:#12222c;
   --good:#4fbb63; --danger:#ef6a5e;
   --q-rare:#4a9eff; --q-epic:#b57bff; --q-legend:#ff9d3c;
-  --halo:rgba(240,190,85,.24); --halo-wide:rgba(235,180,70,.13); --wash:rgba(240,190,80,.07);
+  --halo:rgba(251,193,64,.26); --halo-wide:rgba(251,180,64,.13); --wash:rgba(255,180,60,.055);
   --lift:0 18px 44px -18px rgba(0,0,0,.72),0 2px 8px -3px rgba(0,0,0,.6);
   --grain-blend:screen; --grain-opacity:.05;
 }
@@ -128,7 +147,7 @@ body::after{
 h1,h2,h3{margin:0;text-wrap:balance;font-weight:600;letter-spacing:-.015em;}
 button{font-family:inherit;cursor:pointer;letter-spacing:inherit;}
 input,select,textarea{font-family:inherit;letter-spacing:inherit;}
-a{color:var(--accent);text-underline-offset:2px;}
+a{color:var(--ink);text-decoration-color:var(--accent);text-decoration-thickness:1px;text-underline-offset:2px;}
 .tnum{font-variant-numeric:tabular-nums;}
 /* Every figure that can change under the reader — scores, ilvls, EV — holds its column. */
 .rank,.iscore,.ilvl,.num-in,.item-group .n,.ev,.trade b,.vopt .couple b{font-variant-numeric:tabular-nums;}
@@ -148,12 +167,15 @@ a{color:var(--accent);text-underline-offset:2px;}
    or they read as a floating bar someone forgot to stretch. */
 .masthead{
   position:sticky;top:0;z-index:20;
-  margin:0 calc(50% - 50vw) 26px;padding:16px max(20px, calc(50vw - 510px)) 13px;
+  margin:0 calc(50% - 50vw) 26px;padding:19px max(20px, calc(50vw - 510px)) 13px;
   display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;
-  border-top:3px solid var(--accent);border-bottom:1px solid var(--rule);
+  border-bottom:1px solid var(--rule);
   background:color-mix(in srgb, var(--paper) 78%, transparent);
   -webkit-backdrop-filter:blur(14px) saturate(1.4); backdrop-filter:blur(14px) saturate(1.4);
 }
+/* The gilt edge of the page. A border can't hold a gradient, so the top rule is its own bar — three
+   pixels pinned to the top of the viewport with the light rolling along them. */
+.masthead::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:var(--sheen-x);}
 .brand{display:flex;align-items:center;gap:13px;}
 .brand .mark{width:26px;height:26px;flex:0 0 auto;color:var(--accent);
   filter:drop-shadow(0 0 10px var(--halo-wide));}
@@ -170,7 +192,7 @@ a{color:var(--accent);text-underline-offset:2px;}
 .btn:hover{background:var(--panel-3);border-color:var(--ink);}
 .btn:active{transform:translateY(.5px);}
 .btn.primary{background:var(--ink);border-color:var(--ink);color:var(--paper);}
-.btn.primary:hover{background:var(--accent);border-color:var(--accent);color:#fff;}
+.btn.primary:hover{background:var(--sheen-x);border-color:var(--accent);color:#1a1408;}
 .btn.icon{padding:7px 9px;}
 .btn.ghost{border-color:transparent;color:var(--muted);}
 .btn.ghost:hover{background:var(--panel-3);color:var(--ink);border-color:var(--rule);}
@@ -210,7 +232,7 @@ a{color:var(--accent);text-underline-offset:2px;}
 .simc summary{list-style:none;cursor:pointer;padding:11px 15px;font-size:13px;font-weight:600;color:var(--muted);display:flex;align-items:center;gap:9px;}
 .simc summary::-webkit-details-marker{display:none;}
 .simc summary:hover{color:var(--ink);}
-.simc summary .mk{color:var(--accent);transition:transform .18s;font-size:10px;} .simc[open] summary .mk{transform:rotate(90deg);}
+.simc summary .mk{color:var(--muted);transition:transform .18s;font-size:10px;} .simc[open] summary .mk{transform:rotate(90deg);}
 .simc summary code,.simc-actions code{font-family:var(--font-mono);font-size:12px;background:var(--panel-3);
   padding:1px 5px;color:var(--ink);}
 .simc[open] summary{border-bottom:1px solid var(--rule);}
@@ -228,7 +250,7 @@ a{color:var(--accent);text-underline-offset:2px;}
   border-left:2px solid var(--rule-strong);}
 .simc-note b{color:var(--ink);font-weight:650;}
 .simc-note.alert{border-left-color:var(--accent);background:linear-gradient(90deg,var(--accent-tint),transparent 70%),var(--panel);}
-.simc-note.alert b{color:var(--accent);}
+.simc-note.alert b{color:var(--ink);}
 .simc-note.alert code{font-family:var(--font-mono);font-size:11.5px;background:var(--panel-3);padding:1px 5px;}
 
 /* ── vault ── */
@@ -240,7 +262,7 @@ a{color:var(--accent);text-underline-offset:2px;}
 .trade.roll{border-left-color:var(--accent);}
 .trade.keep{border-left-color:var(--cool);}
 .trade .tlead{font-size:13.5px;font-weight:700;letter-spacing:-.01em;margin-bottom:3px;}
-.trade.roll .tlead{color:var(--accent);} .trade.keep .tlead{color:var(--cool);}
+.trade.roll .tlead{color:var(--ink);} .trade.keep .tlead{color:var(--cool);}
 .trade .tbody{font-size:12.5px;color:var(--muted);line-height:1.6;max-width:78ch;}
 .trade .tbody b{color:var(--ink);font-weight:650;}
 /* The cost of taking the item that outlives the week you take it in.
@@ -254,7 +276,7 @@ a{color:var(--accent);text-underline-offset:2px;}
   border-top:1px solid var(--rule);padding:10px 2px;}
 .vopt.taken{box-shadow:inset 2px 0 0 var(--accent);padding-left:11px;}
 .vopt .vname{font-weight:600;font-size:14px;}
-.vopt.taken .vname{color:var(--accent);}
+.vopt.taken .vname{color:var(--ink);}
 .vopt .vmeta{font-size:11.5px;color:var(--faint);margin-top:2px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
 .vopt .vmeta .warn{color:var(--danger);}
 .vopt .couple{font-size:12px;color:var(--muted);margin-top:5px;} .vopt .couple b{color:var(--ink);font-weight:650;}
@@ -311,7 +333,7 @@ select.board.slim{min-width:0;padding:6px 8px;font-size:13px;}
 .popt .pl{display:block;font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .popt .pm{display:block;font-size:11.5px;color:var(--faint);margin-top:1px;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.popt .pcheck{color:var(--accent);font-size:12px;opacity:0;}
+.popt .pcheck{color:var(--muted);font-size:12px;opacity:0;}
 .popt.on .pcheck{opacity:1;}
 .spacer{flex:1 1 auto;}
 .seg{display:inline-flex;border:1px solid var(--rule-strong);overflow:hidden;}
@@ -321,7 +343,7 @@ select.board.slim{min-width:0;padding:6px 8px;font-size:13px;}
 .seg button.on{background:var(--ink);color:var(--paper);}
 .seg-label{color:var(--faint);margin-right:1px;}
 .toggle{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--muted);cursor:pointer;user-select:none;}
-.toggle input{accent-color:var(--accent);width:15px;height:15px;}
+.toggle input{accent-color:var(--ink);width:15px;height:15px;}
 
 /* ── verdict ─────────────────────────────────────────────────────────────────────────────────────
    The answer. Everything else on the page is a way of checking it, so it gets the one thing nothing
@@ -331,11 +353,30 @@ select.board.slim{min-width:0;padding:6px 8px;font-size:13px;}
   background:linear-gradient(168deg,var(--accent-tint),transparent 58%),var(--panel);
   padding:20px 22px;margin-bottom:22px;display:flex;align-items:center;gap:22px;flex-wrap:wrap;
   box-shadow:0 6px 26px -10px var(--halo),0 26px 70px -34px var(--halo-wide);}
-.verdict .label{color:var(--accent);}
+.verdict .label{color:var(--muted);}
 .verdict .target{font-family:var(--font-display);font-size:27px;font-weight:600;letter-spacing:-.03em;line-height:1.12;margin-top:6px;}
 .verdict .why{color:var(--muted);font-size:13px;margin-top:6px;}
 .verdict .big{margin-left:auto;text-align:right;}
-.verdict .big .ev{font-family:var(--font-display);font-size:52px;font-weight:700;line-height:.9;color:var(--accent);letter-spacing:-.045em;}
+.verdict .big .ev{font-family:var(--font-display);font-size:52px;font-weight:700;line-height:.9;letter-spacing:-.045em;}
+
+/* ── struck, not painted ─────────────────────────────────────────────────────────────────────────
+   Gold behaves like the metal: it works as a thin line or as a big statement piece, and it is at
+   its worst in between, where a flat mid-size fill reads as yellow paint. So every gold surface on
+   this page is one or the other. The hairlines — the page's top rule, the verdict and rank-1
+   borders, the 2px bars marking an owned item or the selected report, focus rings — are flat gold,
+   because a 1px line has no room for a highlight anyway. Everything from 22px up is *struck*: the
+   sheen runs across it, which is the luminance variation that makes a surface read as metal at all.
+
+   Nothing between those two lives in gold. Small caps labels, 9.5px badges, "Own" buttons and
+   13px links are ink or muted, and where one of them needs marking it gets a gold rule beside it
+   rather than gold lettering. That is also why this list is short — three figures, all of them the
+   answer or the row carrying it. `color` is set first and stays the fallback: without
+   background-clip the figure is flat gold rather than invisible. */
+.verdict .big .ev,.card.rank-1 .rank,.card.rank-1 .ev-cell .ev{color:var(--accent);}
+@supports ((-webkit-background-clip:text) or (background-clip:text)){
+  .verdict .big .ev,.card.rank-1 .rank,.card.rank-1 .ev-cell .ev{
+    background:var(--sheen-y);-webkit-background-clip:text;background-clip:text;color:transparent;}
+}
 .verdict .big .ev-unit{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.15em;color:var(--faint);margin-top:9px;}
 /* Nothing to recommend: the halo goes out, because there is no answer to point at. */
 .verdict.empty{background:var(--panel);border-color:var(--rule);box-shadow:none;}
@@ -357,12 +398,12 @@ select.board.slim{min-width:0;padding:6px 8px;font-size:13px;}
 .card:hover{border-color:var(--rule-strong);}
 /* The row the verdict named, lit from the same lamp — the only other glow on the page. */
 .card.rank-1{border-color:var(--accent-line);box-shadow:0 4px 20px -10px var(--halo),0 18px 50px -30px var(--halo-wide);}
-.card.rank-1::before{content:"";position:absolute;left:-1px;top:-1px;bottom:-1px;width:2px;background:var(--accent);}
+.card.rank-1::before{content:"";position:absolute;left:-1px;top:-1px;bottom:-1px;width:2px;background:var(--sheen-y);}
 .card.depleted{opacity:.55;}
 .card-head{display:grid;grid-template-columns:46px 1fr auto 22px;align-items:center;gap:14px;padding:13px 16px;cursor:pointer;}
 /* Editorial numbering: big, quiet, in the gutter — a position, not a badge. */
 .rank{font-family:var(--font-display);font-weight:500;font-size:22px;color:var(--faint);text-align:center;letter-spacing:-.03em;}
-.card.rank-1 .rank{color:var(--accent);font-weight:700;}
+.card.rank-1 .rank{font-weight:700;}
 .name-cell{min-width:0;}
 .name-cell .name{font-family:var(--font-display);font-size:19px;font-weight:600;letter-spacing:-.025em;display:flex;align-items:center;gap:9px;}
 .name-cell .name .txt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -372,17 +413,17 @@ select.board.slim{min-width:0;padding:6px 8px;font-size:13px;}
 .type-tag,.pays,.special{font-family:var(--font-ui);}
 .type-tag{font-size:9.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;padding:2px 6px;
   border:1px solid;white-space:nowrap;}
-.type-tag.raid{color:var(--accent);border-color:var(--accent-line);}
+.type-tag.raid{color:var(--muted);border-color:var(--rule-strong);}
 .type-tag.dungeon{color:var(--cool);border-color:color-mix(in srgb, var(--cool) 45%, transparent);}
 /* Upgrade track a roll on this encounter pays out at, when that isn't simply the drop. */
 .pays{font-size:10px;font-weight:650;letter-spacing:.04em;color:var(--cool);white-space:nowrap;}
 /* End-of-raid encounter whose rewards are a tier apart — the one people bank a token for. */
-.special{font-size:9.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);
-  background:var(--accent-tint);padding:2px 6px;white-space:nowrap;}
-.swap-note.special-note b{color:var(--accent);}
+.special{font-size:9.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink);
+  border:1px solid var(--accent-line);padding:1px 5px;white-space:nowrap;}
+.swap-note.special-note b{color:var(--ink);}
 .ev-cell{text-align:right;}
 .ev-cell .ev{font-family:var(--font-display);font-size:25px;font-weight:600;line-height:1;letter-spacing:-.04em;}
-.card.rank-1 .ev-cell .ev{color:var(--accent);font-weight:700;}
+.card.rank-1 .ev-cell .ev{font-weight:700;}
 .ev-cell .math{font-size:11px;font-variant-numeric:tabular-nums;color:var(--faint);margin-top:5px;white-space:nowrap;}
 .chev{color:var(--faint);transition:transform .18s;font-size:11px;text-align:center;}
 .card.open .chev{transform:rotate(90deg);}
@@ -425,8 +466,8 @@ img.icon,.icon.blank{width:21px;height:21px;flex:0 0 auto;border:1px solid var(-
 .vr,.have,.only,.item .why{font-size:9px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
   border:1px solid var(--rule-strong);padding:1px 4px;color:var(--faint);
   white-space:nowrap;flex:0 0 auto;}
-.vr{color:var(--accent);border-color:var(--accent-line);}
-.have.dupe{color:var(--accent);border-color:var(--accent-line);}
+.vr{color:var(--muted);border-color:var(--accent-line);}
+.have.dupe{color:var(--muted);border-color:var(--accent-line);}
 .only{color:var(--cool);border-color:color-mix(in srgb, var(--cool) 40%, transparent);text-transform:none;letter-spacing:.03em;}
 .iscore{font-weight:650;font-size:13.5px;letter-spacing:-.01em;text-align:right;}
 .item.zero .iscore{color:var(--faint);font-weight:500;}
@@ -441,7 +482,7 @@ img.icon,.icon.blank{width:21px;height:21px;flex:0 0 auto;border:1px solid var(-
   font-size:9.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;width:100%;color:var(--muted);
   transition:color .12s,border-color .12s,background .12s;}
 .state-btn.want{color:var(--muted);}
-.state-btn.own{color:var(--accent);border-color:var(--accent-line);background:var(--accent-tint);}
+.state-btn.own{color:var(--muted);background:var(--panel-3);}
 .state-btn.rolled{color:var(--good);border-color:color-mix(in srgb, var(--good) 40%, transparent);}
 .state-btn:hover{color:var(--ink);border-color:var(--ink);}
 /* Divider between the tiers of a pool: upgrades, then filler, then what can't be awarded. */
@@ -465,7 +506,7 @@ img.icon,.icon.blank{width:21px;height:21px;flex:0 0 auto;border:1px solid var(-
 .legend{margin-top:28px;overflow:hidden;}
 .legend summary{list-style:none;cursor:pointer;padding:13px 17px;font-weight:650;font-size:14.5px;letter-spacing:-.01em;display:flex;align-items:center;gap:10px;}
 .legend summary::-webkit-details-marker{display:none;}
-.legend summary .mk{color:var(--accent);transition:transform .18s;font-size:10px;}
+.legend summary .mk{color:var(--muted);transition:transform .18s;font-size:10px;}
 .legend[open] summary{border-bottom:1px solid var(--rule);}
 .legend[open] summary .mk{transform:rotate(90deg);}
 .legend .body{padding:16px 17px 18px;color:var(--muted);font-size:13.5px;line-height:1.65;}
@@ -477,7 +518,7 @@ img.icon,.icon.blank{width:21px;height:21px;flex:0 0 auto;border:1px solid var(-
 .legend .pill{flex:0 0 auto;width:56px;text-align:center;font-size:9.5px;font-weight:700;letter-spacing:.11em;
   text-transform:uppercase;padding:2px 0;border:1px solid var(--rule-strong);}
 .legend .pill.w{color:var(--muted);}
-.legend .pill.o{color:var(--accent);border-color:var(--accent-line);background:var(--accent-tint);}
+.legend .pill.o{color:var(--muted);background:var(--panel-3);}
 .legend .pill.r{color:var(--good);border-color:color-mix(in srgb, var(--good) 40%, transparent);}
 
 .empty-state{text-align:center;padding:64px 20px;color:var(--muted);border:1px dashed var(--rule-strong);}
