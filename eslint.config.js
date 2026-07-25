@@ -3,7 +3,7 @@ import globals from "globals";
 
 export default [
   // The generated database is huge and not hand-maintained; don't lint it.
-  { ignores: ["data/qe-data.js", "node_modules/**"] },
+  { ignores: ["node_modules/**"] },
 
   js.configs.recommended,
 

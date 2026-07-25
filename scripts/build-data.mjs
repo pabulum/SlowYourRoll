@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Regenerates data/qe-data.js from a local QuestionablyEpic checkout.
+// Regenerates data/qe-data.json from a local QuestionablyEpic checkout.
 //
 //   npm run data                          # uses $QE_PATH, else ~/Projects/QuestionablyEpic
 //   npm run data -- --qe=/path/to/QELive  # explicit checkout
@@ -21,7 +21,7 @@ import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const OUT = join(ROOT, "data/qe-data.js");
+const OUT = join(ROOT, "data/qe-data.json");
 
 const argv = process.argv.slice(2);
 const CHECK = argv.includes("--check");
@@ -259,13 +259,24 @@ try {
   qeCommit = execFileSync("git", ["-C", QE, "rev-parse", "--short", "HEAD"], { encoding: "utf8" }).trim();
 } catch { /* not a git checkout — record it as unknown */ }
 
-const out =
-  "// @ts-nocheck  (generated data blob — not type-checked; typed via src/types.js QEData)\n" +
-  "// Encounter + item database, generated from QuestionablyEpic + Raidbots source data.\n" +
-  "// Regenerate rather than hand-edit: `npm run data` (see scripts/build-data.mjs).\n" +
-  "// Shape documented in src/data.js.\n" +
-  `// Source: QuestionablyEpic @ ${qeCommit} · QE seasonID ${constants.seasonID}\n` +
-  "export const QE_DATA=" + JSON.stringify(data) + ";\n";
+// Emitted as plain JSON, fetched at runtime (src/data.js). JSON isn't just the honest shape for
+// generated data — it is also the fast one: the browser reads it with its JSON parser instead of
+// running a ~640KB object literal through the full JS parser (tokenize, AST, bytecode), which
+// measured ~17.8ms vs ~9.6ms for this blob. A .js module can get the same win by wrapping the text
+// in JSON.parse("..."), but then the data lives as an escaped string inside a string and nothing
+// but this app can read it.
+//
+// JSON has no comments, so the provenance that used to sit in the header moves into `_meta`. It is
+// excluded from the drift comparison below: qeCommit advances on every upstream commit, and a
+// provenance-only change is not data drift.
+const out = JSON.stringify({
+  _meta: {
+    note: "Generated — do not hand-edit. Regenerate with `npm run data` (scripts/build-data.mjs). Shape: src/types.js QEData.",
+    source: `QuestionablyEpic @ ${qeCommit}`,
+    qeSeasonId: constants.seasonID,
+  },
+  ...data,
+}) + "\n";
 
 const counts =
   `${Object.keys(raids).length} instances · ${Object.keys(dungeons).length} dungeons · ` +
@@ -296,18 +307,20 @@ console.log(`Current raids: ${data.currentRaids.map((id) => id + " " + (raids[id
 console.log(`Current dungeons: ${data.currentDungeons.map((id) => id + " " + (dungeons[id] || "?")).join(", ")}`);
 
 if (CHECK) {
-  const prev = (await import(join(ROOT, "data/qe-data.js"))).QE_DATA;
+  // `_meta` is provenance, not data — dropped so a bare upstream commit bump doesn't read as drift.
+  const prev = JSON.parse(readFileSync(OUT, "utf8"));
+  delete prev._meta;
   const a = JSON.stringify(canonical(prev)), b = JSON.stringify(data);
   if (a === b) {
-    console.log(`\n✓ data/qe-data.js is up to date — ${counts}`);
+    console.log(`\n✓ data/qe-data.json is up to date — ${counts}`);
   } else {
-    console.log(`\n✗ data/qe-data.js differs from a fresh build — ${counts}`);
+    console.log(`\n✗ data/qe-data.json differs from a fresh build — ${counts}`);
     report(canonical(prev), data);
     process.exitCode = 1;
   }
 } else {
   writeFileSync(OUT, out);
-  console.log(`\nWrote data/qe-data.js — ${counts}`);
+  console.log(`\nWrote data/qe-data.json — ${counts}`);
 }
 
 /** Summarize what changed between the committed blob and a fresh build. */

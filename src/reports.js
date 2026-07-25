@@ -3,6 +3,7 @@
 //   - Raidbots Droptimizer (DPS/tanks): item values are the DPS gain from each drop.
 // Everything is fetched client-side; nothing is uploaded.
 
+import { loadQEData } from "./data.js";
 import { state, save, keyOf, uid } from "./store.js";
 import { $, toast } from "./dom.js";
 import { parseSimc, applySimc } from "./simc.js";
@@ -27,7 +28,17 @@ export function detectSource(v) {
 }
 
 /** Fetch a detected report ({ source, id }) and merge it into state. Always resolves. */
-function fetchReport(d) {
+async function fetchReport(d) {
+  // ingest() indexes the report against the item database, so it has to be in before we merge.
+  // A safety net rather than a hot path: main.js starts this fetch at boot and loadQEData() is
+  // memoized, so by the time anyone has pasted a link it has almost always settled — in which case
+  // this is a microtask. It only actually waits if someone pastes within the first few hundred ms.
+  try {
+    await loadQEData();
+  } catch {
+    toast("Couldn't load the encounter database — check your connection and try again");
+    return;
+  }
   if (d.source === "qe") {
     return fetch(QE_API + encodeURIComponent(d.id))
       .then((r) => r.json())

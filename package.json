@@ -11,7 +11,7 @@
     "check": "npm run lint && npm run typecheck && npm run test",
     "data": "node scripts/build-data.mjs",
     "data:check": "node scripts/build-data.mjs --check",
-    "serve": "node scripts/serve.mjs"
+    "dev": "node scripts/serve.mjs"
   },
   "engines": {
     "node": "^20.19.0 || ^22.13.0 || >=24"

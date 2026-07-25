@@ -1,7 +1,7 @@
 // Parsing and linking of the in-game /simc addon export: this week's vault choices,
 // logged bonus rolls, and the items the character already owns.
 
-import { QE_DATA } from "./data.js";
+import { QE_DATA, loadQEData } from "./data.js";
 import { state, save, keyOf } from "./store.js";
 import { $, toast } from "./dom.js";
 import { render } from "./render.js";
@@ -53,10 +53,18 @@ export function parseSimc(t) {
 }
 
 /** Read the /simc textarea, store the parsed data, and link it to any matching board. */
-export function readSimc() {
+export async function readSimc() {
   const t = $("simcInput").value || "";
   const d = parseSimc(t);
   if (!d.name || !d.realm) { toast("Couldn't find a character in that /simc text"); return; }
+  // applySimc() below reads the item database. Same memoized wait as reports.js: normally settled
+  // long before anyone has pasted their /simc dump.
+  try {
+    await loadQEData();
+  } catch {
+    toast("Couldn't load the encounter database — check your connection and try again");
+    return;
+  }
   const k = keyOf(d.name, d.realm, d.spec);
   state.simc[k] = { vault: d.vault, rolledIds: d.rolledIds, owned: d.owned, name: d.name, realm: d.realm, spec: d.spec };
   let applied = false;

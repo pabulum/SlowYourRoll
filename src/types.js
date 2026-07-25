@@ -27,7 +27,7 @@
  */
 
 /**
- * The full encounter + item database (data/qe-data.js).
+ * The full encounter + item database (data/qe-data.json).
  * @typedef {Object} QEData
  * @property {Record<string, { name: string, bosses: Record<string, string> }>} raids
  * @property {Record<string, string>} dungeons
@@ -36,6 +36,9 @@
  * @property {string[]} [ignoredInstances] Instances items reference that aren't bonus-roll sources
  *   (world bosses, leveling drops, catch-up vendors). Recorded so the app can drop them knowingly
  *   and still warn about instances it has genuinely never heard of.
+ * @property {{ note: string, source: string, qeSeasonId: number }} [_meta]  Build provenance. JSON
+ *   can't carry the comment header the old .js blob had, so it rides along as data instead. Nothing
+ *   reads it at runtime; scripts/build-data.mjs drops it before comparing for drift.
  * @property {number} [seasonId]  QE Live's CONSTANTS.seasonID at build time; see src/season.js.
  * @property {Record<string, Spec>} [specs]  Spec id -> name/class/primary stat; see src/loot.js.
  * @property {Record<string, Item>} items

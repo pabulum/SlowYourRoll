@@ -8,7 +8,7 @@
 // Elements are addressed through src/dom.js rather than by raw id, so a rename in index.html is a
 // type error rather than a null.
 
-import { QE_DATA } from "./data.js";
+import { QE_DATA, loadQEData } from "./data.js";
 import { SEASON, SEASON_LABEL, seasonDrift } from "./season.js";
 import { state, active } from "./store.js";
 import { $, setHTML, setText, setShown, setDisplayed } from "./dom.js";
@@ -64,14 +64,14 @@ function renderDataNote(built) {
       but ${many ? "their names and item lists" : "the name and item list"} may be incomplete. This
       usually means new content just went live; it clears up once the site's data catches up.`);
     console.warn("[SlowYourRoll] Encounter database is missing: " + built.unknown.join(", ") +
-      ". Maintainer fix: rerun `npm run data` against a current QuestionablyEpic checkout and commit data/qe-data.js.");
+      ". Maintainer fix: rerun `npm run data` against a current QuestionablyEpic checkout and commit data/qe-data.json.");
   }
   if (seasonDrift(QE_DATA.seasonId)) {
     parts.push(html`<b>The site's item data is from a newer season than the rest of the page.</b>
       Bonus-roll token costs and the season label above may be out of date, which can put raid and
       dungeon encounters in the wrong order relative to each other. Each encounter's own item list is
       still accurate.`);
-    console.warn("[SlowYourRoll] Season drift: data/qe-data.js reports QE season id " + QE_DATA.seasonId +
+    console.warn("[SlowYourRoll] Season drift: data/qe-data.json reports QE season id " + QE_DATA.seasonId +
       ", but src/season.js is configured for " + SEASON.qeSeasonId + ". Maintainer fix: bump ACTIVE in src/season.js.");
   }
   setShown("dataNote", parts.length > 0);
@@ -198,6 +198,21 @@ export function render() {
     setHTML("sources", html`<div class="empty-state"><div class="big">${DIE}</div><div>Paste a QE Live
       (healer) or Raidbots Droptimizer (DPS/tank) report above to see which encounter to roll
       on.</div><div class="sub">Your report stays in this browser — nothing is uploaded.</div></div>`);
+    return;
+  }
+  // A saved report is waiting but the database hasn't landed yet (see src/data.js). Everything below
+  // reads QE_DATA.items, so hold the frame and come back. Self-healing rather than caller-enforced:
+  // render() is reached from a paste, an import, a share link and the boot path, and one of those
+  // will eventually run before the fetch resolves.
+  if (!QE_DATA) {
+    setShown("dataNote", false);
+    setHTML("verdict", "");
+    setHTML("sources", html`<div class="empty-state"><div class="big">${DIE}</div><div>Loading the
+      encounter database…</div></div>`);
+    loadQEData().then(render, () => {
+      setHTML("sources", html`<div class="empty-state"><div class="big">⚠️</div><div>Couldn't load the
+        encounter database (<code>data/qe-data.json</code>).</div></div>`);
+    });
     return;
   }
   const b = active();

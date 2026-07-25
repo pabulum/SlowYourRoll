@@ -63,7 +63,7 @@ auto-mark owned gear, and import your logged bonus-roll history.
 
 Two things are season-dependent, and they're kept apart because they change at different times.
 
-**Which encounters are current** lives in the generated database (`data/qe-data.js`), mirroring
+**Which encounters are current** lives in the generated database (`data/qe-data.json`), mirroring
 QE Live's own constants. Regenerate it from a local [QuestionablyEpic](https://github.com/Voulk/QuestionablyEpic)
 checkout — nothing in it is hand-maintained:
 
@@ -96,7 +96,7 @@ encounter `999`, world drops under a negative encounter id). So the warning only
 database is behind."
 
 QE Live reports are the exception: they carry only item ids, and the loot table comes entirely from
-`data/qe-data.js`. A new season's items won't resolve to any source until you regenerate.
+`data/qe-data.json`. A new season's items won't resolve to any source until you regenerate.
 
 ## Sharing a report
 
@@ -113,8 +113,8 @@ URL). Any static server works — there is **no build step**, and the shipped si
 runtime dependencies**:
 
 ```sh
-npm run serve                  # http://localhost:8000
-npm run serve -- --port=3000   # or set $PORT
+npm run dev                  # http://localhost:8000
+npm run dev -- --port=3000   # or set $PORT
 ```
 
 That's [`scripts/serve.mjs`](scripts/serve.mjs) — a zero-dependency Node static server, so
@@ -194,9 +194,9 @@ src/
   wowhead.js        Item links and the tooltip widget's payload
   types.js          JSDoc type definitions (no runtime code)
 data/
-  qe-data.js        Generated encounter + item database (see src/data.js for its shape)
+  qe-data.json      Generated encounter + item database (see src/types.js QEData for its shape)
 scripts/
-  build-data.mjs    Regenerates data/qe-data.js from a QuestionablyEpic checkout
+  build-data.mjs    Regenerates data/qe-data.json from a QuestionablyEpic checkout
   serve.mjs         Zero-dependency static server for local development
 tests/              node:test suites; page.js supplies the real DOM
 ```
@@ -215,6 +215,6 @@ related marks are trademarks of Blizzard Entertainment, Inc.
 
 ## License
 
-[MIT](LICENSE) for the application code. Note that `data/qe-data.js` is derived from
+[MIT](LICENSE) for the application code. Note that `data/qe-data.json` is derived from
 QuestionablyEpic / Raidbots data, which carries its own terms — check those before
 redistributing the database.

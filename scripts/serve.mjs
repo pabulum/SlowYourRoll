@@ -2,9 +2,9 @@
 // Static file server for local development. Zero dependencies — the app is buildless
 // and ships no runtime deps, so serving it shouldn't drag in a toolchain either.
 //
-//   npm run serve              # http://localhost:8000
-//   npm run serve -- --port=3000
-//   PORT=3000 npm run serve
+//   npm run dev                # http://localhost:8000
+//   npm run dev -- --port=3000
+//   PORT=3000 npm run dev
 //
 // Unlike a stock static server this sends no-cache headers: ES modules are fetched
 // individually and a 304 on a stale module is a confusing way to lose an edit.
@@ -68,7 +68,7 @@ const server = createServer(async (req, res) => {
 
 server.on("error", (err) => {
   if (err.code === "EADDRINUSE") {
-    console.error(`Port ${PORT} is already in use. Try: npm run serve -- --port=${PORT + 1}`);
+    console.error(`Port ${PORT} is already in use. Try: npm run dev -- --port=${PORT + 1}`);
     process.exit(1);
   }
   throw err;
