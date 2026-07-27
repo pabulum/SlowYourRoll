@@ -10,7 +10,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { QE_DATA } from "../src/data.js";
 import { state } from "../src/store.js";
-import { canLoot, specId, specInfo } from "../src/loot.js";
+import { canLoot, specId, specInfo, specIdInClass } from "../src/loot.js";
 import { buildGroups } from "../src/model.js";
 
 const MISTWEAVER = "270";
@@ -259,4 +259,25 @@ test("changing loot spec changes the pool", () => {
     0,
     "the report never simmed Windwalker, so nothing has a value yet",
   );
+});
+
+// Half the spec names in the game belong to two classes, so `specId` refuses to guess at a bare
+// one. A /simc writes `loot_spec=holy` bare, but names its class two lines above, so within a
+// class the name is unambiguous — which is the only reason the loot spec is readable at all.
+test("a bare spec name that two classes share resolves within one class", () => {
+  const holyPaladin = specId("Holy Paladin");
+  const holyPriest = specId("Holy Priest");
+  assert.equal(
+    specId("holy"),
+    null,
+    "ambiguous on its own, and stays that way",
+  );
+  assert.equal(specIdInClass("holy", holyPaladin), holyPaladin);
+  assert.equal(specIdInClass("holy", holyPriest), holyPriest);
+});
+
+test("a spec name no spec of that class has resolves to nothing", () => {
+  assert.equal(specIdInClass("frost", specId("Mistweaver Monk")), null);
+  assert.equal(specIdInClass("windwalker", null), null);
+  assert.equal(specIdInClass("", specId("Holy Paladin")), null);
 });

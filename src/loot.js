@@ -79,6 +79,26 @@ export function specInfo(id) {
   return (id && (QE_DATA.specs || {})[id]) || null;
 }
 
+/**
+ * Resolve a bare spec name *within one class*, where `specId` can't.
+ *
+ * Half the spec names in the game are shared — Holy is a Priest and a Paladin, Frost a Mage and a
+ * Death Knight, Restoration a Druid and a Shaman — so `specId("holy")` correctly refuses to guess.
+ * But a `/simc` writes `loot_spec=holy` bare, and there it isn't ambiguous at all: the file says
+ * `paladin="Handshake"` two lines above. Given a spec of the class, the name resolves exactly.
+ *
+ * @param {string} name  A bare spec name, as `/simc` spells it.
+ * @param {string|null} inClassOf  Any spec id of the class to resolve within.
+ * @returns {string|null}
+ */
+export function specIdInClass(name, inClassOf) {
+  const want = norm(name);
+  if (!want || !inClassOf) return null;
+  return (
+    classSpecs(inClassOf).find((id) => norm(specInfo(id).n) === want) || null
+  );
+}
+
 /** Every spec of the same class, in id order. */
 export function classSpecs(id) {
   const me = specInfo(id);

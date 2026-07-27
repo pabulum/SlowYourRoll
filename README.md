@@ -119,6 +119,19 @@ bonus roll or a NEED in RCLootCouncil. With that box ticked the report states th
 level, the merge keeps it, and the item marks **Own**. With the defaults it states the real one, and
 a roll that pays out higher stays **Want** with a `have N` tag. Neither is overridden.
 
+Two footnotes on that, both observed on real reports:
+
+- **Upgrade ALL only moves items that have an upgrade track.** The guard is
+  `if (protoItem.upgradeTrack && protoItem.upgradeTrack in itemLevelCaps)`, so gear from a previous
+  expansion is left alone however the box is set.
+- **The two sources can disagree without either being stale.** For legacy scaling gear — a line
+  carrying `drop_level=` and an old `content_tuning=` — the addon reports an item level QE
+  recomputes far lower (554 against 79 on one observed shoulder). Taking the higher value adopts
+  the addon's, which for those items is the wrong one. It has no effect in practice because those
+  items are not in current bonus-roll pools, and it is preferred to the alternative: a `/simc` is
+  refreshed far more often than a report is re-simmed, so on current gear the higher value is
+  normally the fresher one.
+
 **The loot spec lives in `/simc`, not in either report.** The addon writes it commented out, as
 `# loot_spec=windwalker` under `spec=mistweaver`, because SimulationCraft has no use for it. It is
 the only place either format says what Blizzard will actually award against, and for a healer who

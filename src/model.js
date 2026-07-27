@@ -6,7 +6,7 @@
 import { QE_DATA, QE_RAID_DIFFICULTIES, DIFF_ORDER } from "./data.js";
 import { SEASON, rollReward } from "./season.js";
 import { state } from "./store.js";
-import { canLoot, specId, classSpecs } from "./loot.js";
+import { canLoot, specId, classSpecs, specIdInClass } from "./loot.js";
 
 /**
  * Resolve an (instId, encId) pair to a display name and type. instId === -1 is a M+ dungeon.
@@ -556,13 +556,23 @@ function ownedGear(b) {
  * @returns {string|null} spec id, or null when nothing resolves.
  */
 export function activeLootSpec(b) {
-  if (b.lootSpec) return b.lootSpec;
-  const own = specId(b.spec);
-  const fromSimc = specId((state.simc[b.key] || {}).lootSpec || "");
-  // Only honour it if it's a spec of the same class. A stale /simc from another character, or a
-  // name that resolves oddly, must not silently re-point the pool at an unrelated class.
-  if (fromSimc && own && classSpecs(own).includes(fromSimc)) return fromSimc;
-  return own;
+  return b.lootSpec || simcLootSpec(b) || specId(b.spec);
+}
+
+/**
+ * The loot spec a linked `/simc` reports, resolved to a spec id, or null.
+ *
+ * Resolved *within the report's own class* rather than globally, which is the only way it resolves
+ * at all for the many spec names two classes share — a `/simc` writes `loot_spec=holy`, and on its
+ * own that is a Priest or a Paladin. Confining the lookup to the class both disambiguates it and
+ * makes it impossible for a stale `/simc` from another character to re-point the pool.
+ *
+ * @param {import("./types.js").Board} b
+ * @returns {string|null}
+ */
+export function simcLootSpec(b) {
+  const raw = (state.simc[b.key] || {}).lootSpec;
+  return raw ? specIdInClass(raw, specId(b.spec)) : null;
 }
 
 export function buildGroups(b) {

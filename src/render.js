@@ -21,6 +21,7 @@ import {
   rawUnitOf,
   hasPct,
   activeLootSpec,
+  simcLootSpec,
   dv,
   vaultChoice,
   priceWith,
@@ -139,9 +140,15 @@ function renderLootSpec(b) {
   // the difference is the whole point of the control: the report says what was simmed, a linked
   // /simc says what the game will actually award.
   const cur = activeLootSpec(b);
-  const fromSimc = specId((state.simc[b.key] || {}).lootSpec || "");
-  const tag = (id) =>
-    id === fromSimc ? " (in game)" : id === own ? " (report)" : "";
+  const fromSimc = simcLootSpec(b);
+  // Both tags, when one spec is both — dropping either would leave the reader unable to tell
+  // whether the two sources agree or whether one of them simply had nothing to say.
+  const tag = (id) => {
+    const src = [];
+    if (id === own) src.push("report");
+    if (id === fromSimc) src.push("in game");
+    return src.length ? " (" + src.join(", ") + ")" : "";
+  };
   setHTML(
     "lootSpecSel",
     mine.map(

@@ -18,6 +18,7 @@ import {
   diffLabel,
   diffKey,
   activeLootSpec,
+  simcLootSpec,
 } from "../src/model.js";
 
 // A current raid + one of its bosses, pulled from the live database so the test
@@ -472,5 +473,33 @@ test("a loot spec from another class is ignored", () => {
   };
   state.simc = { lskey: { lootSpec: "frost", owned: {} } };
   assert.equal(activeLootSpec(b), specId("mistweaver"));
+  state.simc = {};
+});
+
+// Regression: resolving the /simc loot spec globally instead of within the class silently dropped
+// it for every name two classes share, which is half of them. A Holy Paladin's `loot_spec=holy`
+// resolved to nothing and the pool quietly fell back to the report's spec.
+test("an ambiguous /simc loot spec still resolves inside the report's class", () => {
+  const b = {
+    ...makeQEBoard(),
+    key: "amb",
+    spec: "Holy Paladin",
+    lootSpec: null,
+  };
+  state.simc = { amb: { lootSpec: "holy", owned: {} } };
+  assert.equal(simcLootSpec(b), specId("Holy Paladin"));
+  assert.equal(activeLootSpec(b), specId("Holy Paladin"));
+  state.simc = {};
+});
+
+test("a /simc loot spec naming a different spec of the same class is honoured", () => {
+  const b = {
+    ...makeQEBoard(),
+    key: "amb",
+    spec: "Holy Paladin",
+    lootSpec: null,
+  };
+  state.simc = { amb: { lootSpec: "retribution", owned: {} } };
+  assert.equal(activeLootSpec(b), specId("Retribution Paladin"));
   state.simc = {};
 });
