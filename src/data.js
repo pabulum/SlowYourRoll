@@ -49,8 +49,25 @@ export function setQEData(d) {
   pending = Promise.resolve(d);
 }
 
-/** Rank names for QE reports, best-first (they encode difficulty as a numeric index). */
-export const DIFF_NAMES = ["Mythic", "Heroic", "Normal", "LFR", "Raid"];
+/**
+ * QE Live's raid-difficulty slider. A QE report's `dropDifficulty` is an index straight into this
+ * list, so it is a lookup table and not a guess — mirrored from `convertRaidDifficultyToString` in
+ * QE's `UpgradeFinderEngine.js`, and ordered worst-to-best, which is also the numeric order.
+ *
+ * "(Max)" is the same difficulty at the top of its upgrade track rather than a difficulty of its
+ * own: QE's own item levels put Mythic at 272 and Mythic (Max) at 289. Both pay out on the Mythic
+ * track, which is why `diffKey` folds the suffix away before asking the season what a roll is worth.
+ */
+export const QE_RAID_DIFFICULTIES = [
+  "Raid Finder",
+  "Raid Finder (Max)",
+  "Normal",
+  "Normal (Max)",
+  "Heroic",
+  "Heroic (Max)",
+  "Mythic",
+  "Mythic (Max)",
+];
 
 /** Sort weight for a named difficulty; higher = harder / better loot. */
 export const DIFF_ORDER = {

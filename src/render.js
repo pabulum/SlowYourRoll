@@ -18,7 +18,9 @@ import {
   resolve,
   diffLabel,
   unitOf,
+  rawUnitOf,
   hasPct,
+  activeLootSpec,
   dv,
   vaultChoice,
   priceWith,
@@ -120,8 +122,9 @@ function renderDataNote(built) {
 
 /**
  * The loot-spec picker. In game you choose which spec a boss loots you for, and that decides which
- * drops you're eligible for — so it decides the pool, and the ranking with it. Defaults to the
- * spec the report was run as; only shown when the class has another spec to switch to.
+ * drops you're eligible for — so it decides the pool, and the ranking with it. Defaults to what a
+ * linked /simc says you have set in game, then to the report's own spec; see `activeLootSpec`.
+ * Only shown when the class has another spec to switch to.
  */
 function renderLootSpec(b) {
   const own = specId(b.spec);
@@ -132,13 +135,19 @@ function renderLootSpec(b) {
   setShown("lootNote", false);
   if (!show) return;
 
-  const cur = b.lootSpec || own;
+  // Each option says where that spec came from, because the two sources routinely disagree and
+  // the difference is the whole point of the control: the report says what was simmed, a linked
+  // /simc says what the game will actually award.
+  const cur = activeLootSpec(b);
+  const fromSimc = specId((state.simc[b.key] || {}).lootSpec || "");
+  const tag = (id) =>
+    id === fromSimc ? " (in game)" : id === own ? " (report)" : "";
   setHTML(
     "lootSpecSel",
     mine.map(
       (id) =>
         html` <option value="${id}" ${id === cur ? "selected" : ""}>
-          ${specInfo(id).n}${id === own ? " (report)" : ""}
+          ${specInfo(id).n}${tag(id)}
         </option>`,
     ),
   );
@@ -325,11 +334,10 @@ export function render() {
 
   const built = buildGroups(b);
 
-  // What the numbers on this page are. Raw throughput is the default everywhere and the left-hand
-  // button; the only alternative any report offers is a Droptimizer's percentage of its own
-  // baseline DPS. A QE report carries no baseline to divide by (see `hasPct`), so rather than drop
-  // the control it becomes a readout — the unit still has to be on screen, whether or not there's
-  // a second one to switch to.
+  // What the numbers on this page are: HPS off a healing report, DPS off a damage sim, either of
+  // them optionally as a percentage of the character's own throughput. Raw is the default and the
+  // left-hand button. Where no baseline can be established the control still renders, as a readout
+  // — the unit has to be on screen whether or not there's a second one to switch to.
   setHTML(
     "metricSeg",
     hasPct(b)
@@ -337,7 +345,7 @@ export function render() {
             data-metric="raw"
             class="${b.metric !== "pct" ? "on" : ""}"
           >
-            DPS</button
+            ${rawUnitOf(b)}</button
           ><button data-metric="pct" class="${b.metric === "pct" ? "on" : ""}">
             %
           </button>`
@@ -568,10 +576,10 @@ function renderVerdict(built, b) {
         </div>
         <div class="why">
           ${
-      top.length
-        ? html`carried by ${join(top, ", ")}`
-        : html`${dv(b, best.num)} ${unitOf(b)} in the pool`
-    }
+            top.length
+              ? html`carried by ${join(top, ", ")}`
+              : html`${dv(b, best.num)} ${unitOf(b)} in the pool`
+          }
           · ${best.remaining} in pool ·
           ${next ? html`${dv(b, best.ev - next.ev)} ahead of ${next.g.name}` : "your only live source"}
         </div>
@@ -746,20 +754,20 @@ function itemsHTML(b, r) {
   return html`<div class="items">
       ${upgrades.map((it) => itemRow(b, it))}
       ${
-      filler.length > 0 &&
-      html` ${group(upgrades.length ? "No upgrade, still dilutes the pool" : "Nothing here is an upgrade", filler.length)}
-      ${filler.map((it) => itemRow(b, it))}`
-    }
+        filler.length > 0 &&
+        html` ${group(upgrades.length ? "No upgrade, still dilutes the pool" : "Nothing here is an upgrade", filler.length)}
+        ${filler.map((it) => itemRow(b, it))}`
+      }
       ${
-      /* The blocked tier is reference, not work: it's out of the pool and can't be changed from here,
+        /* The blocked tier is reference, not work: it's out of the pool and can't be changed from here,
           so it folds away. What it's *for* is the alt-spec lines below, which read from it. */
-      blocked.length > 0 &&
-      html` <div class="item-group tap" data-act="showblocked">
-          ${showBlocked ? "Hide" : "Show"} what this loot spec can’t get
-          <span class="n">${blocked.length}</span>
-        </div>
-        ${showBlocked && blocked.map((it) => itemRow(b, it))}`
-    }
+        blocked.length > 0 &&
+        html` <div class="item-group tap" data-act="showblocked">
+            ${showBlocked ? "Hide" : "Show"} what this loot spec can’t get
+            <span class="n">${blocked.length}</span>
+          </div>
+          ${showBlocked && blocked.map((it) => itemRow(b, it))}`
+      }
     </div>
     ${altNotes(b, r)}`;
 }
@@ -866,8 +874,8 @@ function itemRow(b, it) {
     </button>
     <div class="iname">
       ${iconHTML(it.id, lvl)}${nameHTML(it.id, it.name, it.q, lvl)}${
-      it.vr && html`<span class="vr">very rare</span>`
-    }${exclusive(it)}${haveBadge(it)}
+        it.vr && html`<span class="vr">very rare</span>`
+      }${exclusive(it)}${haveBadge(it)}
     </div>
     <div class="ilvl">${ilvlCell(it)}</div>
     <div class="iscore tnum">${it.score > 0 ? "+" + dv(b, it.score) : "—"}</div>

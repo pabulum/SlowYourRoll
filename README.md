@@ -14,16 +14,17 @@ QuestionablyEpic / Raidbots; nothing is uploaded, and your state is saved to `lo
 EV = ( Σ score of items you still want ÷ items still in the pool ) ÷ token cost
 ```
 
-Item scores come straight from your report: **QE Live** upgrade reports for healers, scored in
-**HPS**, and **Raidbots Droptimizer** sims for everyone else, scored in **DPS**. Raw throughput is
-what the page shows by default; a Droptimizer also carries a baseline, so its scores can be
-switched to a percentage of it from the _Units_ control. A QE report brings no baseline, so there
-is nothing to switch to and the control reads out `HPS` instead. Each item in a pool is in one of
-three states you can cycle by tapping it:
+Item scores come straight from your report: **QE Live** upgrade reports for healers, in **HPS**,
+and **Raidbots Droptimizer** sims for everyone else, in **DPS**. Either can also be shown as a
+percentage of the character's own throughput from the _Units_ control; raw is the default. See
+[Reading a report's numbers](#reading-a-reports-numbers) for where each of those comes from.
+
+Each item in a pool is in one of three states you can cycle by tapping it:
 
 - **Want** — an upgrade still in the pool; its score counts toward EV.
 - **Own** — you have it (or took it from the vault). It still dilutes the pool but is worth 0
-  to you. Copies in your `/simc` export at ≥ the drop's item level auto-mark as Own.
+  to you. Anything you hold at ≥ the item level a roll would pay out auto-marks Own, taken from
+  the gear the report was run in and from your `/simc` export if you pasted one.
 - **Rolled** — you already bonus-rolled it; removed from the pool for good.
 
 **The pool is the boss's whole loot table, not just what your report scored.** A report only
@@ -61,6 +62,69 @@ common filler, which is usually a reason to chase it rather than shy off it.
 
 Optionally paste your in-game `/simc` addon export to fold in this week's Great Vault choices,
 auto-mark owned gear, and import your logged bonus-roll history.
+
+## Reading a report's numbers
+
+Neither report format is quite what it looks like, and both quirks are load-bearing. The details
+below are from QE Live's own source (`UpgradeFinderEngine.js`, `UpgradeFinderFront.js`) rather than
+from inspecting payloads, so they name the fields as upstream writes them.
+
+**A QE result carries the same upgrade three times.** `rawDiff` is the HPS gained, `percDiff` is
+that same gain as a percentage, and `score` is _whichever of the two the person running the report
+had selected_ under QE's "Upgrade Finder metric" setting:
+
+```js
+const rawDiff = Math.round(((newScore - baseScore) / baseScore) * baseHPS);
+const percDiff = (newScore - baseScore) / baseScore;
+if (getSetting(userSettings, "upgradeFinderMetric") === "Show HPS")
+  differential = rawDiff;
+else differential = percDiff; // ← QE's default
+```
+
+That setting defaults to `"Show % Upgrade"`, so `score` on a typical report is a bare ratio like
+`0.0234`. Reading it as HPS understates every figure by a factor of the character's throughput, and
+makes two reports saved under different settings incomparable. So [`scoreOf`](src/model.js) reads
+`rawDiff`, and falls back to `score` only for a report old enough to predate it (QE has sent both
+since April 2023).
+
+**That pair is also where the percentage toggle comes from.** QE never sends `baseHPS`, but
+`rawDiff / percDiff × 100` recovers it, and it's fixed for the whole report.
+[`baselineOf`](src/model.js) sums both fields across every result before dividing, because each is
+rounded on the way out (`rawDiff` to an integer, `percDiff` to three decimals) and the small items
+are where that hurts. A Droptimizer states its baseline outright, at
+`sim.players[0].collected_data.dps.mean`.
+
+**A QE `dropDifficulty` is an index, not a rank.** It indexes QE's own difficulty slider —
+`["Raid Finder", "Raid Finder (Max)", "Normal", "Normal (Max)", "Heroic", "Heroic (Max)", "Mythic",
+"Mythic (Max)"]` — mirrored as `QE_RAID_DIFFICULTIES` in [`src/data.js`](src/data.js). `(Max)` is
+the same difficulty at the top of its upgrade track (QE prices Mythic at 272 and Mythic (Max) at
+289), so `diffKey` folds the suffix away before asking the season what a roll pays.
+
+**A QE report also ships the gear it was run in**, as `equippedItems`. Reduced at ingest to
+`{ itemId: ilvl }` and merged with any `/simc` data by taking the higher item level, so a healer who
+pastes nothing but a report link still gets dupe detection.
+
+Those item levels are whatever QE's import dialog produced, and it has two checkboxes that change
+them (`SimCraftDialog.js`, applied in `SimCImportEngine.ts`):
+
+| Checkbox                   | Default | Effect                                                       |
+| -------------------------- | ------- | ------------------------------------------------------------ |
+| Upgrade ALL to Max Level   | off     | every tracked item is reported at its track's item-level cap |
+| Upgrade Vault to Max Level | on      | vault items only are reported at their cap                   |
+
+Taking the higher of report and `/simc` is deliberate, and it makes the app follow whichever
+convention the report was made under. Many guilds ask raiders to import with **Upgrade ALL** on, so
+that gear they intend to upgrade does not keep showing as a fresh upgrade and prompting a wasted
+bonus roll or a NEED in RCLootCouncil. With that box ticked the report states the upgraded item
+level, the merge keeps it, and the item marks **Own**. With the defaults it states the real one, and
+a roll that pays out higher stays **Want** with a `have N` tag. Neither is overridden.
+
+**The loot spec lives in `/simc`, not in either report.** The addon writes it commented out, as
+`# loot_spec=windwalker` under `spec=mistweaver`, because SimulationCraft has no use for it. It is
+the only place either format says what Blizzard will actually award against, and for a healer who
+loots as a DPS spec to shed intellect trinkets it is not the report's spec. `activeLootSpec` in
+[`src/model.js`](src/model.js) prefers an explicit choice in the dropdown, then `/simc`, then the
+report's own spec, and ignores a loot spec belonging to another class.
 
 ## Seasons
 

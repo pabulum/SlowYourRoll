@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { QE_DATA } from "../src/data.js";
 import { SEASON } from "../src/season.js";
 import { state } from "../src/store.js";
+import { specId } from "../src/loot.js";
 import {
   resolve,
   buildGroups,
@@ -10,6 +11,13 @@ import {
   isDupe,
   vaultChoice,
   finalBosses,
+  baselineOf,
+  hasPct,
+  unitOf,
+  dv,
+  diffLabel,
+  diffKey,
+  activeLootSpec,
 } from "../src/model.js";
 
 // A current raid + one of its bosses, pulled from the live database so the test
@@ -281,4 +289,188 @@ test("an item the report never scored is not auto-owned on item level alone", ()
   assert.equal(it.lvl, 0);
   assert.equal(it.rollIlvl, null);
   assert.equal(it.dupe, false);
+});
+
+/* ---------- QE reports: which field the value actually lives in ----------
+   A QE result carries the same upgrade three ways. `rawDiff` is the HPS gained and `percDiff` is
+   that gain as a percentage, both regardless of settings; `score` is whichever of the two the
+   person running the report had selected, and QE defaults that to the percentage. So `score` on a
+   typical report is a bare ratio, and a board that read it reported hundredths of an HPS. These
+   fix the field the model reads and the baseline it recovers from the pair. */
+
+/** A QE board whose results carry both metrics, as QE Live's upgrade report sends them. */
+function makeQEBoard(over = {}) {
+  const item = Number(
+    Object.keys(QE_DATA.items).find((id) =>
+      QE_DATA.items[id].s.some((s) => s[0] === RAID_ID && s[1] === ENC_ID),
+    ),
+  );
+  return {
+    id: "q",
+    key: "qekey",
+    reportId: "r",
+    player: "Heals",
+    realm: "area-52",
+    spec: "holy",
+    source: "qe",
+    metric: "raw",
+    // baseHPS of 10,000: a 250 HPS gain is 2.5% of it, a 100 HPS gain 1%.
+    results: [
+      {
+        item,
+        score: 0.025,
+        rawDiff: 250,
+        percDiff: 2.5,
+        level: 272,
+        dropDifficulty: 6,
+      },
+    ],
+    overlay: {},
+    tokenOverride: {},
+    vaultTake: null,
+    raidDiff: null,
+    ...over,
+  };
+}
+
+test("a QE result is valued by its HPS, not by the metric the report was saved under", () => {
+  state.showAll = false;
+  state.simc = {};
+  const b = makeQEBoard();
+  const it = buildGroups(b).rows[0].items.find((x) => x.score > 0);
+  assert.equal(it.score, 250, "rawDiff, not the 0.025 sitting in `score`");
+});
+
+test("a QE report old enough to lack rawDiff still falls back to its score", () => {
+  state.showAll = false;
+  state.simc = {};
+  const b = makeQEBoard();
+  delete b.results[0].rawDiff;
+  delete b.results[0].percDiff;
+  b.results[0].score = 250;
+  const it = buildGroups(b).rows[0].items.find((x) => x.score > 0);
+  assert.equal(it.score, 250);
+});
+
+test("a QE baseline is recovered from the two metrics of the same upgrade", () => {
+  const b = makeQEBoard();
+  assert.equal(baselineOf(b), 10000);
+  assert.equal(hasPct(b), true, "so the percentage toggle is offered");
+  assert.equal(unitOf(b), "HPS");
+  assert.equal(unitOf({ ...b, metric: "pct" }), "% HPS");
+});
+
+test("percentages scale off that baseline: 250 of 10,000 HPS reads as 2.5", () => {
+  const b = makeQEBoard();
+  assert.equal(dv(b, 250), "250");
+  assert.equal(dv({ ...b, metric: "pct" }, 250), "2.5");
+});
+
+test("a report with no usable pair offers no percentage rather than a wrong one", () => {
+  const b = makeQEBoard();
+  b.results[0].percDiff = 0; // a zero gain says nothing about the ratio
+  assert.equal(baselineOf(b), 0);
+  assert.equal(hasPct(b), false);
+  assert.equal(dv(b, 250), "250", "and raw values are untouched");
+});
+
+/* ---------- QE difficulty is an index into QE's slider, not a rank ---------- */
+
+test("a QE difficulty index resolves through QE's own table", () => {
+  const b = makeQEBoard();
+  assert.equal(diffLabel(b, 6), "Mythic");
+  assert.equal(diffLabel(b, 4), "Heroic");
+  assert.equal(diffLabel(b, 2), "Normal");
+  assert.equal(diffLabel(b, 0), "Raid Finder");
+});
+
+// The old positional mapping read the board's difficulties best-first and named them off a rank
+// list, so a report holding Normal and Mythic — with nothing in between — called Normal "Heroic",
+// and the season's reward table was then asked about the wrong upgrade track.
+test("a gap in a report's difficulties doesn't shift the labels below it", () => {
+  const b = makeQEBoard();
+  b.results = [
+    { ...b.results[0], dropDifficulty: 6 },
+    { ...b.results[0], dropDifficulty: 2 },
+  ];
+  assert.equal(diffLabel(b, 2), "Normal");
+  assert.equal(diffKey(b, 2), "normal");
+});
+
+test("a maxed-out difficulty pays out on its own track, not one of its own", () => {
+  const b = makeQEBoard();
+  assert.equal(diffLabel(b, 7), "Mythic (Max)");
+  assert.equal(diffKey(b, 7), "mythic");
+  assert.equal(
+    diffKey(b, 1),
+    "lfr",
+    "Raid Finder is keyed the way people say it",
+  );
+});
+
+/* ---------- gear the report was run in ---------- */
+
+test("a QE report's own equipped gear marks a dupe without any /simc", () => {
+  state.showAll = false;
+  state.simc = {};
+  const b = makeQEBoard();
+  const id = b.results[0].item;
+  b.equipped = { [id]: 9999 };
+  const it = buildGroups(b).rows[0].items.find((x) => x.id === id);
+  assert.equal(it.ownedIlvl, 9999);
+  assert.equal(it.state, "own");
+});
+
+test("where both sources know an item, the better copy wins", () => {
+  state.showAll = false;
+  const b = makeQEBoard();
+  const id = b.results[0].item;
+  b.equipped = { [id]: 260 };
+  state.simc = { qekey: { owned: { [id]: 285 } } }; // a bag copy the report never saw
+  const it = buildGroups(b).rows[0].items.find((x) => x.id === id);
+  assert.equal(it.ownedIlvl, 285);
+  state.simc = {};
+});
+
+/* ---------- which spec the game would actually loot you as ----------
+   The report only knows the spec it was simmed as. A /simc knows the loot spec, and for a healer
+   who loots as a DPS spec to dodge intellect trinkets the two differ — which changes the pool. */
+
+test("a linked /simc's loot spec outranks the spec the report was simmed as", () => {
+  const b = {
+    ...makeQEBoard(),
+    key: "lskey",
+    spec: "Mistweaver Monk",
+    lootSpec: null,
+  };
+  state.simc = { lskey: { lootSpec: "windwalker", owned: {} } };
+  assert.equal(activeLootSpec(b), specId("windwalker"));
+  state.simc = {};
+  assert.equal(
+    activeLootSpec(b),
+    specId("mistweaver"),
+    "and falls back to the report's",
+  );
+});
+
+test("an explicit choice in the dropdown outranks both", () => {
+  const b = { ...makeQEBoard(), key: "lskey", spec: "Mistweaver Monk" };
+  state.simc = { lskey: { lootSpec: "windwalker", owned: {} } };
+  b.lootSpec = specId("brewmaster");
+  assert.equal(activeLootSpec(b), specId("brewmaster"));
+  state.simc = {};
+});
+
+// A /simc left over from a different character must not silently re-point the pool at another
+// class — the loot-spec dropdown only ever offers specs of this character's own class.
+test("a loot spec from another class is ignored", () => {
+  const b = {
+    ...makeQEBoard(),
+    key: "lskey",
+    spec: "Mistweaver Monk",
+    lootSpec: null,
+  };
+  state.simc = { lskey: { lootSpec: "frost", owned: {} } };
+  assert.equal(activeLootSpec(b), specId("mistweaver"));
+  state.simc = {};
 });

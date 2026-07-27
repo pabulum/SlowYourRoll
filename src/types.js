@@ -49,9 +49,13 @@
  * subsets of these fields.
  * @typedef {Object} Result
  * @property {number} item   Item id.
- * @property {number} score  Value (QE score or DPS gain), never negative.
+ * @property {number} score  On a Droptimizer, the DPS gain. On a QE report, whichever metric the
+ *   person who ran it had selected, so not safe to read directly — see `scoreOf` in src/model.js.
+ * @property {number} [rawDiff]  QE: the HPS gained, whatever that report's metric setting was.
+ * @property {number} [percDiff] QE: the same gain as a percentage of the character's HPS.
  * @property {number} [level] Item level of the drop.
- * @property {string|number} [dropDifficulty] QE difficulty.
+ * @property {string|number} [dropDifficulty] QE difficulty, an index into QE_RAID_DIFFICULTIES.
+ * @property {string} [dropLoc] QE source category ("Raid", "Dungeon", "Crafted", "Delves").
  * @property {number} [inst]  Droptimizer instance id.
  * @property {number} [enc]   Droptimizer encounter id.
  * @property {string} [diff]  Droptimizer difficulty.
@@ -78,12 +82,14 @@
  * @property {number} [tokenDungeon]      Legacy; token costs now come from src/season.js.
  * @property {string|number|null} raidDiff Selected raid difficulty.
  * @property {string|null} [lootSpec]     Spec id to be looted as; null follows the report's spec.
- * @property {"raw"|"pct"} [metric]        Droptimizer display metric.
- * @property {number} [baseline]           Droptimizer baseline DPS.
+ * @property {"raw"|"pct"} [metric]        Raw throughput or a percentage of the character's own.
+ * @property {number} [baseline]           Droptimizer baseline DPS. A QE board has none stored;
+ *   `baselineOf` recovers its HPS equivalent from the report's own numbers.
+ * @property {Object<number, number>} [equipped]  Gear worn when a QE report ran, itemId -> ilvl.
  * @property {string} [fetchedAt]
  * @property {string} [gameType]
  * @property {string} [contentType]
- * @property {string} [unit]
+ * @property {string} [unit]               Legacy; the unit now follows the report's source.
  * @property {Object} [ufSettings]
  * @property {string|null} [_open]         Currently expanded encounter key.
  * @property {string|null} [_showBlockedKey] Encounter whose ineligible items are revealed.
@@ -98,6 +104,8 @@
  * @property {string} [name]
  * @property {string} [realm]
  * @property {string} [spec]
+ * @property {string|null} [lootSpec]  The loot spec set in game, which is what a bonus roll is
+ *   actually awarded against. Often not the spec the report was simmed as.
  */
 
 /**

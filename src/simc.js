@@ -7,10 +7,11 @@ import { $, toast } from "./dom.js";
 import { render } from "./render.js";
 
 /**
- * Parse a raw /simc export into { name, realm, spec, region, vault, rolledIds, owned }.
+ * Parse a raw /simc export into { name, realm, spec, lootSpec, region, vault, rolledIds, owned }.
  *   vault:     [{ name, ilvl, id }] this week's Great Vault choices
  *   rolledIds: item ids the addon logged as already bonus-rolled
  *   owned:     { [itemId]: highestIlvlHeld } from equipped + bags (excludes the vault block)
+ *   lootSpec:  the character's in-game loot spec, which decides what a bonus roll can award
  */
 export function parseSimc(t) {
   const g = (re) => {
@@ -21,6 +22,12 @@ export function parseSimc(t) {
     realm = g(/^server=(.+)$/m),
     spec = g(/^spec=(.+)$/m),
     region = g(/^region=(.+)$/m);
+
+  // The addon writes the loot spec commented out, because SimulationCraft has no use for it —
+  // `# loot_spec=windwalker` on the line after `spec=mistweaver`. This app has every use for it:
+  // loot spec is what Blizzard actually awards against, so it decides the pool and the ranking.
+  // Matched with the `#` optional, in case the addon ever stops commenting it.
+  const lootSpec = g(/^#?\s*loot_spec=(.+)$/m);
 
   const vault = [],
     vb = t.indexOf("### Weekly Reward Choices");
@@ -62,7 +69,7 @@ export function parseSimc(t) {
     if (!owned[iid] || il > owned[iid]) owned[iid] = il;
   }
 
-  return { name, realm, spec, region, vault, rolledIds, owned };
+  return { name, realm, spec, lootSpec, region, vault, rolledIds, owned };
 }
 
 /** Read the /simc textarea, store the parsed data, and link it to any matching board. */
@@ -91,6 +98,7 @@ export async function readSimc() {
     name: d.name,
     realm: d.realm,
     spec: d.spec,
+    lootSpec: d.lootSpec,
   };
   let applied = false;
   state.boards.forEach((b) => {

@@ -3,7 +3,7 @@
 //
 //   EV = ( Σ score of items you still "want" ÷ items still in the pool ) ÷ token cost
 
-import { QE_DATA, DIFF_NAMES, DIFF_ORDER } from "./data.js";
+import { QE_DATA, QE_RAID_DIFFICULTIES, DIFF_ORDER } from "./data.js";
 import { SEASON, rollReward } from "./season.js";
 import { state } from "./store.js";
 import { canLoot, specId, classSpecs } from "./loot.js";
@@ -107,6 +107,30 @@ function diffOf(b, r) {
   return b.source === "droptimizer" ? r.diff : r.dropDifficulty;
 }
 
+/**
+ * One result's value in the board's raw unit, which for a QE report is not the field it looks like.
+ *
+ * A QE result carries the same upgrade three times: `rawDiff` (HPS gained), `percDiff` (that gain
+ * as a percentage), and `score` — whichever of the two the person who ran the report had selected
+ * under QE's own "Upgrade Finder metric" setting. That setting defaults to "Show % Upgrade", so
+ * `score` on a typical report is a bare ratio like `0.0234`, and reading it as HPS understated every
+ * number on this page by a factor of the character's throughput. It never reordered anything, since
+ * the factor is constant across a report, but "spend your token here for 0.02 HPS" is not a figure
+ * anyone can act on, and two reports saved under different settings couldn't be compared at all.
+ *
+ * So the metric-independent field is the one to read. `score` is kept only as a fallback for a
+ * report old enough to predate `rawDiff` (QE has sent it since April 2023).
+ *
+ * A Droptimizer has no such ambiguity: `parseDroptimizer` computes the DPS delta itself.
+ *
+ * @param {import("./types.js").Result} r
+ * @returns {number} HPS or DPS gained, never negative.
+ */
+export function scoreOf(r) {
+  const v = typeof r.rawDiff === "number" ? r.rawDiff : r.score;
+  return typeof v === "number" && v > 0 ? v : 0;
+}
+
 function diffRank(d) {
   d = String(d).toLowerCase();
   if (DIFF_ORDER[d] != null) return DIFF_ORDER[d];
@@ -130,25 +154,36 @@ export function raidDiffs(b) {
   return Object.keys(set).sort((a, c) => diffRank(c) - diffRank(a));
 }
 
-/** Human label for a difficulty value (named string, or a QE numeric index). */
+/**
+ * Human label for a difficulty value. The two report formats encode it differently: a Droptimizer
+ * sends a name ("raid-mythic"), a QE report sends an index into QE's own difficulty slider.
+ *
+ * The index is looked up in `QE_RAID_DIFFICULTIES`, which is that slider. It used to be resolved by
+ * position instead — the board's difficulties sorted best-first, then read off a list of rank names
+ * — which is right only when a report happens to contain a run of adjacent difficulties ending at
+ * Mythic. A report with Normal and Mythic in it labelled Normal "Heroic", and since `diffKey` feeds
+ * the season's reward table, that mislabelling also picked the wrong upgrade track.
+ */
 export function diffLabel(b, d) {
   d = String(d);
   if (/[a-z]/i.test(d)) {
     const t = d.split("-").pop(); // "raid-mythic" -> "mythic"
     return t.charAt(0).toUpperCase() + t.slice(1);
   }
-  const ds = raidDiffs(b),
-    i = ds.indexOf(d); // QE numeric index -> rank name
-  return DIFF_NAMES[i] || "Diff " + d;
+  return QE_RAID_DIFFICULTIES[Number(d)] || "Diff " + d;
 }
 
 /**
  * Canonical difficulty key ("mythic", "heroic", …) for a board's selected difficulty, for looking
- * up what a roll at that difficulty pays. Both encodings pass through `diffLabel`: Droptimizer's
- * named strings and QE's numeric index into the board's own difficulty list.
+ * up what a roll at that difficulty pays.
+ *
+ * Two normalisations on top of the label. "(Max)" is dropped, because a maxed-out Mythic item is
+ * still Mythic loot and a roll on it pays the Mythic track. "Raid Finder" becomes "lfr", which is
+ * both what the season table is keyed on and what everyone calls it.
  */
 export function diffKey(b, d) {
-  return diffLabel(b, d).toLowerCase();
+  const k = diffLabel(b, d).toLowerCase().replace(" (max)", "");
+  return k === "raid finder" ? "lfr" : k;
 }
 
 /**
@@ -395,7 +430,7 @@ function collectScored(b, sp, diffs, selDiff, unknown) {
         });
       // The same item can be simmed more than once for one source; keep its best showing.
       const ex = g.items[r.item],
-        sc = r.score || 0;
+        sc = scoreOf(r);
       if (!ex || sc > ex.score)
         g.items[r.item] = poolItem(
           r.item,
@@ -486,8 +521,52 @@ function priceGroup(b, g, selDiff, ownedMap, sp) {
  * @param {import("./types.js").Board} b
  * @returns {{ rows: import("./types.js").Row[], selDiff: string, diffs: string[], unknown: string[] }}
  */
+/**
+ * The best copy of each item the character is known to hold, as `{ itemId: ilvl }`.
+ *
+ * Two sources, and they aren't rivals. A QE report ships the gear that was equipped when it ran, so
+ * a healer who pastes nothing but a report link still gets dupe detection. A `/simc` export covers
+ * bags as well as equipped and can be refreshed without re-simming, so it's usually the fuller and
+ * fresher of the two. Merged by taking the higher item level, which is the question actually being
+ * asked: is the copy you hold already as good as what a roll here would hand you?
+ *
+ * @param {import("./types.js").Board} b
+ * @returns {Record<number, number>}
+ */
+function ownedGear(b) {
+  const fromSimc = (state.simc[b.key] || {}).owned || {};
+  if (!b.equipped) return fromSimc;
+  const out = { ...b.equipped };
+  Object.keys(fromSimc).forEach((id) => {
+    if (!out[id] || fromSimc[id] > out[id]) out[id] = fromSimc[id];
+  });
+  return out;
+}
+
+/**
+ * The spec a bonus roll would actually award against, best source first.
+ *
+ * 1. What the user picked in the loot-spec dropdown. An explicit choice outranks everything.
+ * 2. What the game says, via `loot_spec` in a linked `/simc`. This is the real answer, and it is
+ *    routinely not the spec the report was run as — a Mistweaver who loots as Windwalker to dodge
+ *    intellect trinkets is the standard case, and the report has no idea.
+ * 3. The report's own spec, which is only a guess at the loot spec, but the only one left.
+ *
+ * @param {import("./types.js").Board} b
+ * @returns {string|null} spec id, or null when nothing resolves.
+ */
+export function activeLootSpec(b) {
+  if (b.lootSpec) return b.lootSpec;
+  const own = specId(b.spec);
+  const fromSimc = specId((state.simc[b.key] || {}).lootSpec || "");
+  // Only honour it if it's a spec of the same class. A stale /simc from another character, or a
+  // name that resolves oddly, must not silently re-point the pool at an unrelated class.
+  if (fromSimc && own && classSpecs(own).includes(fromSimc)) return fromSimc;
+  return own;
+}
+
 export function buildGroups(b) {
-  const sp = b.lootSpec || specId(b.spec);
+  const sp = activeLootSpec(b);
   const diffs = raidDiffs(b);
   const selDiff =
     b.raidDiff != null && diffs.includes(String(b.raidDiff))
@@ -498,9 +577,8 @@ export function buildGroups(b) {
   const groups = collectScored(b, sp, diffs, selDiff, unknown);
   fillTable(groups, sp);
 
-  const ownedMap = (state.simc[b.key] || {}).owned || {};
   const rows = Object.values(groups).map((g) =>
-    priceGroup(b, g, selDiff, ownedMap, sp),
+    priceGroup(b, g, selDiff, ownedGear(b), sp),
   );
   rows.sort(
     (a, c) => c.ev - a.ev || c.num - a.num || a.g.name.localeCompare(c.g.name),
@@ -532,8 +610,8 @@ export function vaultChoice(b) {
 
   const scored = {};
   b.results.forEach((r) => {
-    if (scored[r.item] == null || r.score > scored[r.item])
-      scored[r.item] = r.score || 0;
+    const sc = scoreOf(r);
+    if (scored[r.item] == null || sc > scored[r.item]) scored[r.item] = sc;
   });
   const options = simc.vault.map((v) => ({
     id: v.id,
@@ -603,16 +681,55 @@ function dragOf(rows, keep) {
    Kept beside the model rather than in a formatting module because the scaling factor is a property
    of the board, which is a model concept.
 
-   The report decides the unit, because the two tools measure different things: a Droptimizer sims
-   damage, so its scores are DPS whoever ran it, and QE Live is a healing tool, so its scores are
-   HPS. Raw throughput is the default on both. A Droptimizer can also show each score as a percentage
-   of the sim's own baseline DPS; QE reports carry no baseline to divide by, so they have no
-   percentage to offer and the toggle stays hidden for them. */
+   The tool decides the unit, because the two measure different things: a Droptimizer sims damage, so
+   its scores are DPS whoever ran it, and QE Live is a healing tool, so its scores are HPS. Both can
+   also be shown as a percentage of the character's own throughput, which is the comparable figure
+   across characters — raw is the default, since it's the one you can weigh against a real number.
+
+   Both conversions are one multiply by a per-board constant, so the EV can be scaled after the fact
+   rather than the pool being re-priced. See `baselineOf` for where that constant comes from. */
 
 function facOf(b) {
-  return b.source === "droptimizer" && b.metric === "pct"
-    ? 100 / (b.baseline || 1)
-    : 1;
+  if (b.metric !== "pct") return 1;
+  const base = baselineOf(b);
+  return base > 0 ? 100 / base : 1;
+}
+
+/**
+ * The character's own throughput, which is what a percentage is a percentage *of*.
+ *
+ * A Droptimizer states it outright: `sim.players[0].collected_data.dps.mean`, stashed at ingest.
+ * A QE report never sends it, but it sends enough to recover it exactly. Every QE result carries
+ * both metrics of the same upgrade — `rawDiff`, the HPS gained, and `percDiff`, that same gain as a
+ * percentage — and QE computes them from one `baseHPS` fixed for the whole report:
+ *
+ *     rawDiff = ((newScore - baseScore) / baseScore) * baseHPS     percDiff = the same ratio × 100
+ *
+ * so baseHPS is `rawDiff / percDiff * 100` from any single result. Summed over all of them instead
+ * of taken from one, because both fields are rounded — `rawDiff` to a whole number and `percDiff`
+ * to three decimals — and the small items are where that rounding bites hardest.
+ *
+ * Cached against the results array rather than the board: reloading a report replaces that array,
+ * which is exactly when the baseline can change, and a WeakMap needs no invalidation to notice.
+ */
+const qeBaselines = new WeakMap();
+export function baselineOf(b) {
+  if (b.source === "droptimizer") return b.baseline || 0;
+  if (!Array.isArray(b.results)) return 0;
+  const hit = qeBaselines.get(b.results);
+  if (hit !== undefined) return hit;
+
+  let raw = 0,
+    pct = 0;
+  b.results.forEach((r) => {
+    if (typeof r.rawDiff !== "number" || typeof r.percDiff !== "number") return;
+    if (r.rawDiff <= 0 || r.percDiff <= 0) return; // a zero tells us nothing about the ratio
+    raw += r.rawDiff;
+    pct += r.percDiff;
+  });
+  const base = pct > 0 ? (raw / pct) * 100 : 0;
+  qeBaselines.set(b.results, base);
+  return base;
 }
 
 /** Format a number to at most 2 decimals with locale grouping. */
@@ -623,15 +740,19 @@ export function fmt(n) {
   });
 }
 
-/** Unit label for a board's scores: "DPS", "% DPS" or "HPS". */
-export function unitOf(b) {
-  if (b.source !== "droptimizer") return "HPS";
-  return b.metric === "pct" ? "% DPS" : "DPS";
+/** Unit a board's raw scores are in: HPS for a healing report, DPS for a damage sim. */
+export function rawUnitOf(b) {
+  return b.source === "droptimizer" ? "DPS" : "HPS";
 }
 
-/** Can this board's scores be shown as a percentage? Only where the report brought a baseline. */
+/** Unit label for a board's scores as currently displayed: "DPS", "% HPS", and so on. */
+export function unitOf(b) {
+  return (b.metric === "pct" ? "% " : "") + rawUnitOf(b);
+}
+
+/** Can this board's scores be shown as a percentage? Only where we have a baseline to divide by. */
 export function hasPct(b) {
-  return b.source === "droptimizer" && b.baseline > 0;
+  return baselineOf(b) > 0;
 }
 
 /** Format a raw score in the board's chosen display unit. */

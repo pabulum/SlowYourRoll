@@ -35,15 +35,13 @@ test("a nested fragment is markup, not text", () => {
   assert.equal(s(html`<p>${html`<b>hi</b>`}</p>`), "<p><b>hi</b></p>");
 });
 
+// Written on one line on purpose: the assertion is about what the *interpolation* contributes, so
+// any literal whitespace in the template would be counted as part of the expected output. (A
+// formatter reflowing this onto several lines is enough to fail it, which is the point.)
 test("an array of fragments joins with nothing between", () => {
-  assert.equal(
-    s(
-      html`<ul>
-        ${[1, 2, 3].map((n) => html`<li>${n}</li>`)}
-      </ul>`,
-    ),
-    "<ul><li>1</li><li>2</li><li>3</li></ul>",
-  );
+  // prettier-ignore
+  const out = s(html`<ul>${[1, 2, 3].map((n) => html`<li>${n}</li>`)}</ul>`);
+  assert.equal(out, "<ul><li>1</li><li>2</li><li>3</li></ul>");
 });
 
 // The `cond && html` idiom is how every optional badge and note on the page is written, so the
@@ -71,7 +69,9 @@ test("raw is the only way past the escaping", () => {
 
 test("join puts a separator between fragments and escapes it like anything else", () => {
   assert.equal(s(join([html`<b>a</b>`, "b<"], " · ")), "<b>a</b> · b&lt;");
-  assert.equal(s(join(["a", "b"], html`<br />`)), "a<br>b");
+  // A non-void element on purpose: `html` passes its literals through byte for byte, so a void tag
+  // here would assert the formatter's preference between `<br>` and `<br />` rather than join's.
+  assert.equal(s(join(["a", "b"], html`<i>·</i>`)), "a<i>·</i>b");
 });
 
 test("join of nothing is nothing", () => {

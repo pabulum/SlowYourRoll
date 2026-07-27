@@ -206,6 +206,28 @@ function ingestDroptimizer(id, data) {
   render();
 }
 
+/**
+ * The gear the character had on when the report was run, as `{ itemId: ilvl }`.
+ *
+ * QE sends its whole `Item` object per equipped piece — stats, gems, effects, the lot — and all
+ * this app can use is "you already hold this, at this level", which is the same shape `/simc`
+ * produces. Reduced here rather than stored whole, since a board goes to localStorage and the rest
+ * of that payload is dead weight.
+ *
+ * @param {any} data  A parsed QE upgrade report.
+ * @returns {Record<number, number>}
+ */
+function equippedMap(data) {
+  const owned = {};
+  (data.equippedItems || []).forEach((it) => {
+    const id = Number(it && it.id),
+      lvl = Number(it && it.level);
+    if (!id || !lvl) return;
+    if (!owned[id] || lvl > owned[id]) owned[id] = lvl;
+  });
+  return owned;
+}
+
 function ingest(code, data) {
   // Update the existing board for the same character (name+realm+spec), else create one.
   const k = keyOf(data.playername, data.realm, data.spec);
@@ -213,6 +235,7 @@ function ingest(code, data) {
   if (b) {
     b.reportId = code;
     b.results = data.results;
+    b.equipped = equippedMap(data);
     b.ufSettings = data.ufSettings || {};
     b.contentType = data.contentType;
     b.fetchedAt = data.dateCreated || "";
@@ -224,7 +247,8 @@ function ingest(code, data) {
       key: k,
       reportId: code,
       source: "qe",
-      unit: "value",
+      metric: "raw",
+      equipped: equippedMap(data),
       player: data.playername || "Unknown",
       realm: data.realm || "",
       region: data.region || "",
