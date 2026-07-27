@@ -26,7 +26,12 @@ const WOWHEAD = "https://www.wowhead.com/item=";
  * `raw` because it is markup, written here, not a value from anywhere.
  */
 function whAttr(id, lvl) {
-  return raw('data-wowhead="item=' + Number(id) + (lvl ? "&amp;ilvl=" + Number(lvl) : "") + '"');
+  return raw(
+    'data-wowhead="item=' +
+      Number(id) +
+      (lvl ? "&amp;ilvl=" + Number(lvl) : "") +
+      '"',
+  );
 }
 
 /**
@@ -36,11 +41,31 @@ function whAttr(id, lvl) {
 export function iconHTML(id, lvl) {
   const it = QE_DATA.items[id];
   if (!it || !it.ic) return html`<span class="icon blank"></span>`;
-  return html`<a class="icon-link" href="${WOWHEAD + id}" target="_blank" rel="noopener" ${whAttr(id, lvl)} data-act="wowhead"
-    ><img class="icon" loading="lazy" alt="" src="${ICON_CDN + it.ic + ".jpg"}" onerror="this.style.visibility='hidden'"></a>`;
+  return html`<a
+    class="icon-link"
+    href="${WOWHEAD + id}"
+    target="_blank"
+    rel="noopener"
+    ${whAttr(id, lvl)}
+    data-act="wowhead"
+    ><img
+      class="icon"
+      loading="lazy"
+      alt=""
+      src="${ICON_CDN + it.ic + ".jpg"}"
+      onerror="this.style.visibility='hidden'"
+  /></a>`;
 }
 
 /** The item's name as a Wowhead link, coloured by quality. */
 export function nameHTML(id, name, q, lvl) {
-  return html`<a class="iname-link q${q || 3}" href="${WOWHEAD + id}" target="_blank" rel="noopener" ${whAttr(id, lvl)} data-act="wowhead">${name}</a>`;
+  return html`<a
+    class="iname-link q${q || 3}"
+    href="${WOWHEAD + id}"
+    target="_blank"
+    rel="noopener"
+    ${whAttr(id, lvl)}
+    data-act="wowhead"
+    >${name}</a
+  >`;
 }

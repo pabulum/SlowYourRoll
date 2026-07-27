@@ -3,12 +3,21 @@ import assert from "node:assert/strict";
 import { detectSource, parseDroptimizer } from "../src/reports.js";
 
 test("detectSource recognizes Raidbots links and long ids", () => {
-  assert.deepEqual(detectSource("https://www.raidbots.com/simbot/report/aB3xYz12345"), { source: "droptimizer", id: "aB3xYz12345" });
-  assert.deepEqual(detectSource("abcdefghij0123456789XY"), { source: "droptimizer", id: "abcdefghij0123456789XY" });
+  assert.deepEqual(
+    detectSource("https://www.raidbots.com/simbot/report/aB3xYz12345"),
+    { source: "droptimizer", id: "aB3xYz12345" },
+  );
+  assert.deepEqual(detectSource("abcdefghij0123456789XY"), {
+    source: "droptimizer",
+    id: "abcdefghij0123456789XY",
+  });
 });
 
 test("detectSource recognizes QE report links and short codes", () => {
-  assert.deepEqual(detectSource("https://questionablyepic.com/upgradereport/AbC123"), { source: "qe", id: "AbC123" });
+  assert.deepEqual(
+    detectSource("https://questionablyepic.com/upgradereport/AbC123"),
+    { source: "qe", id: "AbC123" },
+  );
   assert.deepEqual(detectSource("AbC123"), { source: "qe", id: "AbC123" });
 });
 
@@ -21,12 +30,18 @@ test("detectSource returns null on empty or junk input", () => {
 test("parseDroptimizer computes deltas, dedups, and clamps negatives to zero", () => {
   const data = {
     sim: {
-      players: [{ name: "Foo", specialization: "Holy Priest", collected_data: { dps: { mean: 1000 } } }],
+      players: [
+        {
+          name: "Foo",
+          specialization: "Holy Priest",
+          collected_data: { dps: { mean: 1000 } },
+        },
+      ],
       profilesets: {
         results: [
           { name: "1273/2607/mythic/12345/639/0/head///", mean: 1100 }, // +100
           { name: "1273/2607/mythic/12345/639/0/head///", mean: 1050 }, // dup, lower — ignored
-          { name: "1273/2611/mythic/67890/639/0/neck///", mean: 900 },  // -100 -> 0
+          { name: "1273/2611/mythic/67890/639/0/neck///", mean: 900 }, // -100 -> 0
         ],
       },
     },

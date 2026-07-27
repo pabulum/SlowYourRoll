@@ -14,7 +14,13 @@
 // should have made; wrongly showing one only dilutes a number they can see.
 
 import { QE_DATA } from "./data.js";
-import { CLASS_ARMOR, ARMOR_NAME, SHIELD_CLASSES, CLASS_WEAPONS, WEAPON_NAME } from "./classes.js";
+import {
+  CLASS_ARMOR,
+  ARMOR_NAME,
+  SHIELD_CLASSES,
+  CLASS_WEAPONS,
+  WEAPON_NAME,
+} from "./classes.js";
 
 // An item's `st` is the set of primary stats it can roll, as a code string: "i" is intellect only,
 // "ai" the agility-or-intellect that every leather and mail drop is. A spec takes exactly one.
@@ -23,8 +29,13 @@ const STAT_NAME = { a: "Agility", s: "Strength", i: "Intellect" };
 
 /** "Agility or Intellect" — how to describe an item's possible stats in a sentence. */
 export function statLabel(set) {
-  const names = String(set || "").split("").map((ch) => STAT_NAME[ch]).filter(Boolean);
-  return names.length > 1 ? names.slice(0, -1).join(", ") + " or " + names[names.length - 1] : (names[0] || "");
+  const names = String(set || "")
+    .split("")
+    .map((ch) => STAT_NAME[ch])
+    .filter(Boolean);
+  return names.length > 1
+    ? names.slice(0, -1).join(", ") + " or " + names[names.length - 1]
+    : names[0] || "";
 }
 const BACK = 16; // inventoryType: cloaks are filed as cloth but everyone wears them
 
@@ -38,7 +49,9 @@ export function gearLabel(item) {
 
 /** Normalize a spec name for matching: "Mistweaver Monk" / "mistweaver" -> "mistweaver". */
 function norm(s) {
-  return String(s || "").toLowerCase().replace(/[^a-z]/g, "");
+  return String(s || "")
+    .toLowerCase()
+    .replace(/[^a-z]/g, "");
 }
 
 /**
@@ -54,7 +67,9 @@ export function specId(spec) {
   const all = QE_DATA.specs || {};
   const hits = Object.keys(all).filter((id) => {
     const s = all[id];
-    return want === norm(s.n) || want === norm(s.n + s.c) || want === norm(s.c + s.n);
+    return (
+      want === norm(s.n) || want === norm(s.n + s.c) || want === norm(s.c + s.n)
+    );
   });
   return hits.length === 1 ? hits[0] : null;
 }
@@ -86,22 +101,46 @@ export function canLoot(item, spec) {
 
   // Blocked. Whether a sibling spec could take it is the whole difference between "wrong class,
   // forget it" and "swap loot spec and roll again", so it's worth the second pass.
-  const others = classSpecs(spec).filter((k) => k !== spec && allows(item, k)).map((k) => specInfo(k).n);
+  const others = classSpecs(spec)
+    .filter((k) => k !== spec && allows(item, k))
+    .map((k) => specInfo(k).n);
   if (item.p) {
     return others.length
       ? { ok: false, why: others.join(" / ") + " only", swap: others }
       : { ok: false, why: "No " + me.c + " spec can loot this" };
   }
   const armor = CLASS_ARMOR[me.c];
-  if (item.c === 4 && item.u === 6) return { ok: false, why: me.c + "s can't use shields" };
-  if (item.c === 4 && item.u >= 1 && item.u <= 4 && item.u !== armor && item.iv !== BACK) {
-    return { ok: false, why: (ARMOR_NAME[item.u] || "Armor") + " — " + me.c + " wears " + ARMOR_NAME[armor] };
+  if (item.c === 4 && item.u === 6)
+    return { ok: false, why: me.c + "s can't use shields" };
+  if (
+    item.c === 4 &&
+    item.u >= 1 &&
+    item.u <= 4 &&
+    item.u !== armor &&
+    item.iv !== BACK
+  ) {
+    return {
+      ok: false,
+      why:
+        (ARMOR_NAME[item.u] || "Armor") +
+        " — " +
+        me.c +
+        " wears " +
+        ARMOR_NAME[armor],
+    };
   }
   if (item.c === 2 && !weaponOk(item, me.c)) {
-    return { ok: false, why: (WEAPON_NAME[item.u] || "Weapon") + " — not a " + me.c + " weapon" };
+    return {
+      ok: false,
+      why: (WEAPON_NAME[item.u] || "Weapon") + " — not a " + me.c + " weapon",
+    };
   }
   return others.length
-    ? { ok: false, why: statLabel(item.st) + " — " + others.join(" / ") + " only", swap: others }
+    ? {
+        ok: false,
+        why: statLabel(item.st) + " — " + others.join(" / ") + " only",
+        swap: others,
+      }
     : { ok: false, why: statLabel(item.st) + " item" };
 }
 
@@ -118,7 +157,14 @@ function allows(item, spec) {
   if (item.p) return item.p.includes(Number(spec));
   // 2. Armor type. Cloaks (Back) and jewelry (subclass 0) are worn by everyone.
   if (item.c === 4 && item.u === 6) return SHIELD_CLASSES.includes(me.c);
-  if (item.c === 4 && item.iv !== BACK && item.u >= 1 && item.u <= 4 && item.u !== CLASS_ARMOR[me.c]) return false;
+  if (
+    item.c === 4 &&
+    item.iv !== BACK &&
+    item.u >= 1 &&
+    item.u <= 4 &&
+    item.u !== CLASS_ARMOR[me.c]
+  )
+    return false;
   // 3. Weapon training. A warglaive is a demon hunter's or nobody's.
   if (item.c === 2 && !weaponOk(item, me.c)) return false;
   // 4. Primary stat: the line between a class's own specs. A flexible item (leather rolls agility

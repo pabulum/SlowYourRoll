@@ -18,10 +18,30 @@ const KEY = RAID_ID + ":" + ENC_ID;
 
 function makeBoard() {
   return {
-    id: "t", key: "testkey", reportId: "r", player: "Foo", realm: "area-52", spec: "holy",
-    source: "droptimizer", metric: "raw", baseline: 1000,
-    results: [{ item: 900001, inst: RAID_ID, enc: ENC_ID, diff: "mythic", level: 639, score: 10 }],
-    overlay: {}, tokenOverride: {}, vaultTake: null, raidDiff: null, _open: KEY,
+    id: "t",
+    key: "testkey",
+    reportId: "r",
+    player: "Foo",
+    realm: "area-52",
+    spec: "holy",
+    source: "droptimizer",
+    metric: "raw",
+    baseline: 1000,
+    results: [
+      {
+        item: 900001,
+        inst: RAID_ID,
+        enc: ENC_ID,
+        diff: "mythic",
+        level: 639,
+        score: 10,
+      },
+    ],
+    overlay: {},
+    tokenOverride: {},
+    vaultTake: null,
+    raidDiff: null,
+    _open: KEY,
   };
 }
 
@@ -29,7 +49,11 @@ function makeBoard() {
 function boot(extra = {}) {
   const doc = loadPage();
   const board = makeBoard();
-  Object.assign(state, { boards: [board], activeId: "t", showAll: false, simc: {} }, extra);
+  Object.assign(
+    state,
+    { boards: [board], activeId: "t", showAll: false, simc: {} },
+    extra,
+  );
   initUI();
   render();
   return { doc, board };
@@ -65,7 +89,10 @@ test("the cycle survives the re-render it causes", () => {
   // rows rather than to #sources, this second click would do nothing.
   click(doc, sel);
   assert.equal(board.overlay[KEY + ":900001"], "rolled");
-  assert.match(doc.querySelector('#sources .item[data-id="900001"]').getAttribute("class"), /st-rolled/);
+  assert.match(
+    doc.querySelector('#sources .item[data-id="900001"]').getAttribute("class"),
+    /st-rolled/,
+  );
 });
 
 test("tapping a card head expands and collapses it", () => {
@@ -79,7 +106,7 @@ test("tapping a card head expands and collapses it", () => {
 
 test("clicking an item's Wowhead link is left to the browser", () => {
   const { doc, board } = boot();
-  click(doc, '#sources .item .icon-link, #sources .item .iname-link');
+  click(doc, "#sources .item .icon-link, #sources .item .iname-link");
   assert.deepEqual(board.overlay, {}, "a link out is not a state change");
 });
 
@@ -100,7 +127,9 @@ test("a token cost override is clamped to at least one token", () => {
 
 test("taking a vault item toggles, and toggles back off", () => {
   const { doc, board } = boot({
-    simc: { testkey: { owned: {}, vault: [{ id: 900001, ilvl: 639, name: "V" }] } },
+    simc: {
+      testkey: { owned: {}, vault: [{ id: 900001, ilvl: 639, name: "V" }] },
+    },
   });
   click(doc, '#vaultPanel [data-vault="900001"]');
   assert.equal(board.vaultTake, 900001);
@@ -117,7 +146,12 @@ test("the show-older-content toggle drives the shared filter, not the board", ()
 });
 
 test("switching report makes it the active one", () => {
-  const second = { ...makeBoard(), id: "t2", key: "testkey2", spec: "discipline" };
+  const second = {
+    ...makeBoard(),
+    id: "t2",
+    key: "testkey2",
+    spec: "discipline",
+  };
   const { doc } = boot();
   state.boards.push(second);
   render();

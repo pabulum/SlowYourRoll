@@ -3,10 +3,10 @@
 Self-hosted rather than pulled from a CDN: the app's only third-party request stays Wowhead's
 tooltip widget, and the type doesn't change if a font host is blocked or slow.
 
-| File | Family | Axes | Role |
-| --- | --- | --- | --- |
-| `inter-latin.woff2`, `inter-latin-ext.woff2` | [Inter](https://rsms.me/inter/) | `opsz` 14–32, `wght` 100–900 | `--font-ui` — everything readable |
-| `space-grotesk-latin.woff2`, `space-grotesk-latin-ext.woff2` | [Space Grotesk](https://floriankarsten.github.io/space-grotesk/) | `wght` 300–700 | `--font-display` — type ≥19px only |
+| File                                                         | Family                                                           | Axes                         | Role                               |
+| ------------------------------------------------------------ | ---------------------------------------------------------------- | ---------------------------- | ---------------------------------- |
+| `inter-latin.woff2`, `inter-latin-ext.woff2`                 | [Inter](https://rsms.me/inter/)                                  | `opsz` 14–32, `wght` 100–900 | `--font-ui` — everything readable  |
+| `space-grotesk-latin.woff2`, `space-grotesk-latin-ext.woff2` | [Space Grotesk](https://floriankarsten.github.io/space-grotesk/) | `wght` 300–700               | `--font-display` — type ≥19px only |
 
 Both are variable fonts, so the whole weight range costs one file per subset. Latin-ext is a
 separate `@font-face` with its own `unicode-range`; it only downloads when an accented character

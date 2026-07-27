@@ -54,9 +54,14 @@ export const DIFF_NAMES = ["Mythic", "Heroic", "Normal", "LFR", "Raid"];
 
 /** Sort weight for a named difficulty; higher = harder / better loot. */
 export const DIFF_ORDER = {
-  "raid-mythic": 40, "mythic": 40,
-  "raid-heroic": 30, "heroic": 30,
-  "raid-normal": 20, "normal": 20,
-  "raid-lfr": 10, "lfr": 10, "raid-finder": 10,
+  "raid-mythic": 40,
+  mythic: 40,
+  "raid-heroic": 30,
+  heroic: 30,
+  "raid-normal": 20,
+  normal: 20,
+  "raid-lfr": 10,
+  lfr: 10,
+  "raid-finder": 10,
   "mythic-plus": 25,
 };

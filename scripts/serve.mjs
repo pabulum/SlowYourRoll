@@ -68,12 +68,16 @@ const server = createServer(async (req, res) => {
 
 server.on("error", (err) => {
   if (err.code === "EADDRINUSE") {
-    console.error(`Port ${PORT} is already in use. Try: npm run dev -- --port=${PORT + 1}`);
+    console.error(
+      `Port ${PORT} is already in use. Try: npm run dev -- --port=${PORT + 1}`,
+    );
     process.exit(1);
   }
   throw err;
 });
 
 server.listen(PORT, () => {
-  console.log(`Slow Your Roll → http://localhost:${PORT}  (serving ${ROOT}, Ctrl-C to stop)`);
+  console.log(
+    `Slow Your Roll → http://localhost:${PORT}  (serving ${ROOT}, Ctrl-C to stop)`,
+  );
 });

@@ -13,7 +13,11 @@ import { setQEData } from "../src/data.js";
 // The app fetches the database over HTTP (src/data.js); Node's fetch can't read a file:// URL, and
 // test files read QE_DATA at module scope. `--import` awaits this module before any of them
 // evaluate, so injecting it here means the suites see a loaded database exactly as the browser does.
-setQEData(JSON.parse(readFileSync(new URL("../data/qe-data.json", import.meta.url), "utf8")));
+setQEData(
+  JSON.parse(
+    readFileSync(new URL("../data/qe-data.json", import.meta.url), "utf8"),
+  ),
+);
 
 /** @type {Map<string, string>} */
 const store = new Map();

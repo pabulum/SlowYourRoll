@@ -9,7 +9,8 @@ import { $, toast } from "./dom.js";
 import { parseSimc, applySimc } from "./simc.js";
 import { render } from "./render.js";
 
-const QE_API = "https://questionablyepic.com/api/getUpgradeReport.php?reportID=";
+const QE_API =
+  "https://questionablyepic.com/api/getUpgradeReport.php?reportID=";
 const DROPT_URL = "https://www.raidbots.com/reports/";
 
 /** Detect which source a pasted link/code refers to. Returns { source, id } or null. */
@@ -36,7 +37,9 @@ async function fetchReport(d) {
   try {
     await loadQEData();
   } catch {
-    toast("Couldn't load the encounter database — check your connection and try again");
+    toast(
+      "Couldn't load the encounter database. Check your connection and try again",
+    );
     return;
   }
   if (d.source === "qe") {
@@ -44,25 +47,41 @@ async function fetchReport(d) {
       .then((r) => r.json())
       .then((data) => {
         if (typeof data === "string") data = JSON.parse(data);
-        if (!data || data.status === "Report not found" || !data.results) throw new Error("nf");
+        if (!data || data.status === "Report not found" || !data.results)
+          throw new Error("nf");
         ingest(d.id, data);
       })
-      .catch(() => toast("Couldn't load that QE report — check the code, or QE may be down"));
+      .catch(() =>
+        toast(
+          "Couldn't load that QE report. Check the code, or QE may be down",
+        ),
+      );
   }
   return fetch(DROPT_URL + encodeURIComponent(d.id) + "/data.json")
-    .then((r) => { if (!r.ok) throw new Error("nf"); return r.json(); })
+    .then((r) => {
+      if (!r.ok) throw new Error("nf");
+      return r.json();
+    })
     .then((data) => ingestDroptimizer(d.id, data))
-    .catch(() => toast("Couldn't load that Raidbots report — it may have expired (they're kept ~30 days)"));
+    .catch(() =>
+      toast("Couldn't load that Raidbots report. They expire after ~30 days"),
+    );
 }
 
 /** Load whichever report is in the input box and merge it into state. */
 export function loadReport() {
   const d = detectSource($("reportInput").value);
-  if (!d) { toast("Paste a QE Live or Raidbots report link (or code)"); return; }
+  if (!d) {
+    toast("Paste a QE Live or Raidbots report link (or code)");
+    return;
+  }
   const btn = $("loadBtn");
   btn.disabled = true;
   btn.textContent = "Loading…";
-  fetchReport(d).then(() => { btn.disabled = false; btn.textContent = "Load report"; });
+  fetchReport(d).then(() => {
+    btn.disabled = false;
+    btn.textContent = "Load report";
+  });
 }
 
 /**
@@ -76,21 +95,35 @@ export function loadSharedReport() {
   if (!v) return;
   history.replaceState(null, "", location.pathname + location.hash);
   const d = detectSource(v);
-  if (!d) { toast("That share link's report code wasn't recognised"); return; }
+  if (!d) {
+    toast("That share link's report code wasn't recognised");
+    return;
+  }
   const existing = state.boards.find((b) => b.reportId === d.id);
-  if (existing) { state.activeId = existing.id; save(); render(); return; }
+  if (existing) {
+    state.activeId = existing.id;
+    save();
+    render();
+    return;
+  }
   fetchReport(d);
 }
 
 /* ---------- Raidbots Droptimizer ----------
    profileset name = "instId/encId/difficulty/itemId/ilvl/enchant/slot///" */
 export function parseDroptimizer(data) {
-  const sim = data.sim || {}, p0 = (sim.players || [])[0] || {}, sb = data.simbot || {};
-  const baseline = (((p0.collected_data || {}).dps || {}).mean) || 0;
+  const sim = data.sim || {},
+    p0 = (sim.players || [])[0] || {},
+    sb = data.simbot || {};
+  const baseline = ((p0.collected_data || {}).dps || {}).mean || 0;
   const results = (sim.profilesets || {}).results || [];
   const idn = sb.input
     ? parseSimc(sb.input)
-    : { name: sb.player || p0.name, realm: null, spec: sb.spec || p0.specialization || "" };
+    : {
+        name: sb.player || p0.name,
+        realm: null,
+        spec: sb.spec || p0.specialization || "",
+      };
   if (!idn.name) idn.name = sb.player || p0.name || "Droptimizer";
   if (!idn.spec) idn.spec = sb.spec || p0.specialization || "";
 
@@ -98,12 +131,25 @@ export function parseDroptimizer(data) {
   results.forEach((r) => {
     const f = String(r.name || "").split("/");
     if (f.length < 5) return;
-    const inst = parseInt(f[0], 10), enc = parseInt(f[1], 10), diff = f[2] || "",
-      item = parseInt(f[3], 10), lvl = parseInt(f[4], 10) || 0;
+    const inst = parseInt(f[0], 10),
+      enc = parseInt(f[1], 10),
+      diff = f[2] || "",
+      item = parseInt(f[3], 10),
+      lvl = parseInt(f[4], 10) || 0;
     if (!item || isNaN(inst) || isNaN(enc)) return;
-    const delta = (r.mean || 0) - baseline, k = inst + ":" + enc + ":" + item, ex = byKey[k];
+    const delta = (r.mean || 0) - baseline,
+      k = inst + ":" + enc + ":" + item,
+      ex = byKey[k];
     if (!ex || delta > ex.rawDelta) {
-      byKey[k] = { item, inst, enc, diff, level: lvl, rawDelta: delta, score: Math.max(0, Math.round(delta * 10) / 10) };
+      byKey[k] = {
+        item,
+        inst,
+        enc,
+        diff,
+        level: lvl,
+        rawDelta: delta,
+        score: Math.max(0, Math.round(delta * 10) / 10),
+      };
     }
   });
   return { idn, baseline, results: Object.values(byKey) };
@@ -111,23 +157,44 @@ export function parseDroptimizer(data) {
 
 function ingestDroptimizer(id, data) {
   const d = parseDroptimizer(data);
-  if (!d.results.length) { toast("No drop results in that report — was it a gear/stat sim instead of a Droptimizer?"); return; }
+  if (!d.results.length) {
+    toast(
+      "No drop results in there. Was it a gear or stat sim instead of a Droptimizer?",
+    );
+    return;
+  }
   const k = keyOf(d.idn.name, d.idn.realm, d.idn.spec);
   let b = state.boards.find((x) => x.key === k);
   if (b) {
-    b.reportId = id; b.results = d.results; b.baseline = d.baseline; b.source = "droptimizer";
+    b.reportId = id;
+    b.results = d.results;
+    b.baseline = d.baseline;
+    b.source = "droptimizer";
     b.spec = d.idn.spec || b.spec;
     b.fetchedAt = new Date().toISOString();
     toast("Updated " + d.idn.name + " (Droptimizer)");
   } else {
     b = {
-      id: uid(), key: k, reportId: id, player: d.idn.name || "Unknown", realm: d.idn.realm || "", region: d.idn.region || "",
-      spec: d.idn.spec || "", source: "droptimizer", metric: "raw", baseline: d.baseline, gameType: "Retail",
+      id: uid(),
+      key: k,
+      reportId: id,
+      player: d.idn.name || "Unknown",
+      realm: d.idn.realm || "",
+      region: d.idn.region || "",
+      spec: d.idn.spec || "",
+      source: "droptimizer",
+      metric: "raw",
+      baseline: d.baseline,
+      gameType: "Retail",
       // Raidbots doesn't date its report data, so this is when it was pulled — close enough,
       // since a Droptimizer link is normally loaded the day it's simmed.
       fetchedAt: new Date().toISOString(),
-      results: d.results, ufSettings: {}, raidDiff: null,
-      vaultTake: null, overlay: {}, tokenOverride: {},
+      results: d.results,
+      ufSettings: {},
+      raidDiff: null,
+      vaultTake: null,
+      overlay: {},
+      tokenOverride: {},
     };
     state.boards.push(b);
     toast("Loaded " + b.player + " (Droptimizer)");
@@ -135,7 +202,8 @@ function ingestDroptimizer(id, data) {
   applySimc(b);
   state.activeId = b.id;
   $("reportInput").value = "";
-  save(); render();
+  save();
+  render();
 }
 
 function ingest(code, data) {
@@ -143,22 +211,40 @@ function ingest(code, data) {
   const k = keyOf(data.playername, data.realm, data.spec);
   let b = state.boards.find((x) => x.key === k);
   if (b) {
-    b.reportId = code; b.results = data.results; b.ufSettings = data.ufSettings || {}; b.contentType = data.contentType;
-    b.fetchedAt = data.dateCreated || ""; b.gameType = data.gameType || "Retail";
-    toast("Updated " + (data.playername || "report") + " — rolled history kept");
+    b.reportId = code;
+    b.results = data.results;
+    b.ufSettings = data.ufSettings || {};
+    b.contentType = data.contentType;
+    b.fetchedAt = data.dateCreated || "";
+    b.gameType = data.gameType || "Retail";
+    toast("Updated " + (data.playername || "report") + ", rolled history kept");
   } else {
     b = {
-      id: uid(), key: k, reportId: code, source: "qe", unit: "value", player: data.playername || "Unknown",
-      realm: data.realm || "", region: data.region || "", spec: data.spec || "", contentType: data.contentType || "",
-      gameType: data.gameType || "Retail", fetchedAt: data.dateCreated || "", results: data.results,
-      ufSettings: data.ufSettings || {}, raidDiff: null,
-      vaultTake: null, overlay: {}, tokenOverride: {},
+      id: uid(),
+      key: k,
+      reportId: code,
+      source: "qe",
+      unit: "value",
+      player: data.playername || "Unknown",
+      realm: data.realm || "",
+      region: data.region || "",
+      spec: data.spec || "",
+      contentType: data.contentType || "",
+      gameType: data.gameType || "Retail",
+      fetchedAt: data.dateCreated || "",
+      results: data.results,
+      ufSettings: data.ufSettings || {},
+      raidDiff: null,
+      vaultTake: null,
+      overlay: {},
+      tokenOverride: {},
     };
     state.boards.push(b);
-    toast("Loaded " + b.player + " — " + b.spec);
+    toast("Loaded " + b.player + ", " + b.spec);
   }
   applySimc(b);
   state.activeId = b.id;
   $("reportInput").value = "";
-  save(); render();
+  save();
+  render();
 }

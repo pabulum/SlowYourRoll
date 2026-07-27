@@ -65,7 +65,8 @@ export const SEASONS = {
     qeSeasonId: 34,
     tokenRaid: 2,
     tokenDungeon: 1,
-    tokenNote: "A raid boss costs 2 tokens in Season 1 and a M+ dungeon costs 1, so raid EV is halved against dungeon EV. Season 2 drops raids to 1 token.",
+    tokenNote:
+      "A raid boss costs 2 tokens in Season 1 and a M+ dungeon costs 1, so raid EV is halved against dungeon EV. Season 2 drops raids to 1 token.",
     rollReward: null, // a Season 1 roll hands you the item exactly as the boss drops it
     tokenFromVault: false,
     special: null,
@@ -76,7 +77,8 @@ export const SEASONS = {
     qeSeasonId: null, // unknown until Season 2 is live on QE Live; `npm run data` prints it
     tokenRaid: 1,
     tokenDungeon: 1,
-    tokenNote: "Everything costs 1 token in Season 2 — raid bosses and M+ dungeons alike. (Season 1 charged 2 for raid bosses, which is why older notes divide raid EV by 2.)",
+    tokenNote:
+      "1 token for everything in Season 2, raid bosses and M+ dungeons alike. (Season 1 charged 2 per raid boss, which is why older notes halve raid EV.)",
     // Weeks 1–7 the token comes out of a Great Vault slot, so a roll is bought with the item you'd
     // otherwise have taken. From week 8 it's a free weekly reward again and the trade disappears.
     tokenFromVault: true,
@@ -95,14 +97,25 @@ export const SEASONS = {
       mythic: { label: "Myth 6/6", ilvl: null, crests: 80, crestKind: "Myth" },
       heroic: { label: "Myth 1/6", ilvl: null, crests: 0, crestKind: "Myth" },
       normal: { label: "Hero 1/6", ilvl: null, crests: 0, crestKind: "Hero" },
-      lfr: { label: "Champion 1/8", ilvl: null, crests: 0, crestKind: "Champion" },
-      "mythic-plus": { label: "Myth 1/6", ilvl: null, crests: 0, crestKind: "Myth" },
+      lfr: {
+        label: "Champion 1/8",
+        ilvl: null,
+        crests: 0,
+        crestKind: "Champion",
+      },
+      "mythic-plus": {
+        label: "Myth 1/6",
+        ilvl: null,
+        crests: 0,
+        crestKind: "Myth",
+      },
     },
     special: {
       lastBosses: 2,
       badge: "Venomcursed 9/6",
-      note: "Its Mythic items are 9/6 with cantrip effects — a tier above anything else in the game, " +
-        "and the reason most raiders bank a token for the kill week rather than spend it on this ranking.",
+      note:
+        "Its Mythic items are 9/6 with cantrip effects, a tier above anything else in the game, " +
+        "and the reason most raiders bank a token for kill week instead of spending it here.",
     },
   },
 };
@@ -133,7 +146,12 @@ export const SEASON_LABEL = "WoW S" + SEASON.number + " " + SEASON.expansion;
 export function rewardOf(season, type, diffKey) {
   const table = season.rollReward;
   if (!table) return null;
-  return table[type === "dungeon" ? "mythic-plus" : String(diffKey)] || { label: "", ilvl: null };
+  return (
+    table[type === "dungeon" ? "mythic-plus" : String(diffKey)] || {
+      label: "",
+      ilvl: null,
+    }
+  );
 }
 
 /** `rewardOf` against the season this build targets. */

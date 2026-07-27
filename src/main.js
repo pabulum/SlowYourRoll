@@ -22,8 +22,17 @@ loadQEData().then(
     loadSharedReport();
   },
   () => {
-    setHTML("sources", html`<div class="empty-state"><div class="big">⚠️</div><div>Couldn't load the
-      encounter database (<code>data/qe-data.json</code>).</div><div class="sub">Make sure the page is
-      served with that file alongside it.</div></div>`);
+    setHTML(
+      "sources",
+      html`<div class="empty-state">
+        <div class="big">⚠️</div>
+        <div>
+          Couldn't load the encounter database (<code>data/qe-data.json</code>).
+        </div>
+        <div class="sub">
+          Make sure the page is served with that file alongside it.
+        </div>
+      </div>`,
+    );
   },
 );

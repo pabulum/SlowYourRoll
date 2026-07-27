@@ -13,7 +13,16 @@ import { SEASON, SEASON_LABEL, seasonDrift } from "./season.js";
 import { state, active } from "./store.js";
 import { $, setHTML, setText, setShown, setDisplayed } from "./dom.js";
 import { html, join } from "./html.js";
-import { buildGroups, resolve, diffLabel, unitOf, dv, vaultChoice, priceWith } from "./model.js";
+import {
+  buildGroups,
+  resolve,
+  diffLabel,
+  unitOf,
+  hasPct,
+  dv,
+  vaultChoice,
+  priceWith,
+} from "./model.js";
 import { specId, specInfo, classSpecs } from "./loot.js";
 import { CLASS_COLOR } from "./classes.js";
 import { iconHTML, nameHTML } from "./wowhead.js";
@@ -23,10 +32,17 @@ import { iconHTML, nameHTML } from "./wowhead.js";
  * brings a palette this page doesn't control. Kept in sync with the copy in index.html's masthead.
  */
 const DIE = html`<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-  <rect x="1.6" y="1.6" width="20.8" height="20.8" stroke="currentColor" stroke-width="1.7"/>
-  <circle cx="7.6" cy="7.6" r="1.85" fill="currentColor"/>
-  <circle cx="12" cy="12" r="1.85" fill="currentColor"/>
-  <circle cx="16.4" cy="16.4" r="1.85" fill="currentColor"/>
+  <rect
+    x="1.6"
+    y="1.6"
+    width="20.8"
+    height="20.8"
+    stroke="currentColor"
+    stroke-width="1.7"
+  />
+  <circle cx="7.6" cy="7.6" r="1.85" fill="currentColor" />
+  <circle cx="12" cy="12" r="1.85" fill="currentColor" />
+  <circle cx="16.4" cy="16.4" r="1.85" fill="currentColor" />
 </svg>`;
 
 /** Fill in the season-dependent copy. Runs once at boot; nothing here changes at runtime. */
@@ -36,11 +52,15 @@ export function renderSeason() {
   // Only shown in a season that promotes rolls, where "the drop" and "what you'd receive" part ways.
   setShown("rewardNote", !!SEASON.rollReward);
   if (!SEASON.rollReward) return;
-  setHTML("rewardNote", html`A bonus roll in Season ${SEASON.number} is paid out <strong>as if the item
-    came from your Great Vault</strong>, not from the boss — a Mythic boss hands back a fully upgraded
-    item, Heroic and M+ the first step of the Myth track. Item levels below are what the roll would
-    actually give you; the scores are still your report's, simmed at the item level each boss
-    <em>drops</em> at, so they run low wherever the roll promotes.`);
+  setHTML(
+    "rewardNote",
+    html`A Season ${SEASON.number} bonus roll pays out
+      <strong>as if the item came from your Great Vault</strong>, not off the
+      boss: a Mythic boss hands back a fully upgraded item, Heroic and M+ the
+      first step of Myth. The item levels below are what a roll would actually
+      give you. The scores are still your report's, simmed at the ilvl each boss
+      <em>drops</em> at, so they run low wherever a roll promotes.`,
+  );
 }
 
 /**
@@ -55,27 +75,47 @@ export function renderSeason() {
 function renderDataNote(built) {
   const parts = [];
   if (built.unknown.length) {
-    const n = built.unknown.length, many = n > 1;
+    const n = built.unknown.length,
+      many = n > 1;
     const list = join(built.unknown.slice(0, 4), ", ");
     const more = n > 4 ? " and " + (n - 4) + " more" : "";
-    parts.push(html`<b>${n} encounter${many ? "s in" : " in"} this report ${many ? "aren't" : "isn't"}
-      in the site's item data yet</b> — ${list}${more}. ${many ? "They're" : "It's"} still ranked, using
-      the numbers from your own report, so where ${many ? "they land" : "it lands"} in the list is real —
-      but ${many ? "their names and item lists" : "the name and item list"} may be incomplete. This
-      usually means new content just went live; it clears up once the site's data catches up.`);
-    console.warn("[SlowYourRoll] Encounter database is missing: " + built.unknown.join(", ") +
-      ". Maintainer fix: rerun `npm run data` against a current QuestionablyEpic checkout and commit data/qe-data.json.");
+    parts.push(
+      html`<b
+          >${n} encounter${many ? "s in" : " in"} this report
+          ${many ? "aren't" : "isn't"} in the site's item data yet:</b
+        >
+        ${list}${more}. ${many ? "They're" : "It's"} still ranked off your own
+        report's numbers, so where ${many ? "they land" : "it lands"} is real,
+        but ${many ? "their names and loot tables" : "the name and loot table"}
+        may be incomplete. Usually means new content just went live. Clears up
+        once the site's data catches up.`,
+    );
+    console.warn(
+      "[SlowYourRoll] Encounter database is missing: " +
+        built.unknown.join(", ") +
+        ". Maintainer fix: rerun `npm run data` against a current QuestionablyEpic checkout and commit data/qe-data.json.",
+    );
   }
   if (seasonDrift(QE_DATA.seasonId)) {
-    parts.push(html`<b>The site's item data is from a newer season than the rest of the page.</b>
-      Bonus-roll token costs and the season label above may be out of date, which can put raid and
-      dungeon encounters in the wrong order relative to each other. Each encounter's own item list is
-      still accurate.`);
-    console.warn("[SlowYourRoll] Season drift: data/qe-data.json reports QE season id " + QE_DATA.seasonId +
-      ", but src/season.js is configured for " + SEASON.qeSeasonId + ". Maintainer fix: bump ACTIVE in src/season.js.");
+    parts.push(
+      html`<b
+          >The site's item data is from a newer season than the rest of the
+          page.</b
+        >
+        Token costs and the season label above may be out of date, which can put
+        raid and dungeon rows in the wrong order against each other. Each
+        encounter's own loot table is still right.`,
+    );
+    console.warn(
+      "[SlowYourRoll] Season drift: data/qe-data.json reports QE season id " +
+        QE_DATA.seasonId +
+        ", but src/season.js is configured for " +
+        SEASON.qeSeasonId +
+        ". Maintainer fix: bump ACTIVE in src/season.js.",
+    );
   }
   setShown("dataNote", parts.length > 0);
-  setHTML("dataNote", join(parts, html`<br><br>`));
+  setHTML("dataNote", join(parts, html`<br /><br />`));
 }
 
 /**
@@ -93,17 +133,28 @@ function renderLootSpec(b) {
   if (!show) return;
 
   const cur = b.lootSpec || own;
-  setHTML("lootSpecSel", mine.map((id) => html`
-    <option value="${id}" ${id === cur ? "selected" : ""}>${specInfo(id).n}${id === own ? " (report)" : ""}</option>`));
+  setHTML(
+    "lootSpecSel",
+    mine.map(
+      (id) =>
+        html` <option value="${id}" ${id === cur ? "selected" : ""}>
+          ${specInfo(id).n}${id === own ? " (report)" : ""}
+        </option>`,
+    ),
+  );
 
   // Switching loot spec changes the pool honestly, but not the values: the report only ever simmed
   // one spec, so the other's gear sits at zero. Say so rather than let it read as "worth nothing".
   if (cur === own) return;
   const now = specInfo(cur).n;
   setShown("lootNote", true);
-  setHTML("lootNote", html`<b>Looting as ${now}, valued as ${specInfo(own).n}.</b> Pool sizes are
-    right for this loot spec, but every item only ${now} can use scores 0 — the report never simmed
-    it. Load a ${now} report to rank these for real.`);
+  setHTML(
+    "lootNote",
+    html`<b>Looting as ${now}, valued as ${specInfo(own).n}.</b> Pool sizes are
+      right for this loot spec, but anything only ${now} can use scores 0,
+      because the report never simmed it. Load a ${now} report to rank these
+      properly.`,
+  );
 }
 
 /* ---------- the report picker ----------
@@ -114,13 +165,16 @@ function renderLootSpec(b) {
 /** A report's spec as "Frost Mage" — the bare spec name collides across classes. */
 function specText(b) {
   const s = specInfo(specId(b.spec));
-  return s ? s.n + " " + s.c : (b.spec || "—");
+  return s ? s.n + " " + s.c : b.spec || "—";
 }
 
 /** The class-coloured dot for a report, or a neutral one when the spec didn't resolve. */
 function swatch(b) {
   const s = specInfo(specId(b.spec));
-  return html`<span class="cdot" style="--cls:${(s && CLASS_COLOR[s.c]) || "var(--faint)"}"></span>`;
+  return html`<span
+    class="cdot"
+    style="--cls:${(s && CLASS_COLOR[s.c]) || "var(--faint)"}"
+  ></span>`;
 }
 
 /** "Jul 22" from whatever date string the report carried; the raw text if it won't parse. */
@@ -136,7 +190,10 @@ function shortDate(s) {
 function boardMeta(b) {
   const drop = b.source === "droptimizer";
   const d = shortDate(b.fetchedAt);
-  return (drop ? "Droptimizer" : "QE Live") + (d ? " · " + (drop ? "loaded " : "simmed ") + d : "");
+  return (
+    (drop ? "Droptimizer" : "QE Live") +
+    (d ? " · " + (drop ? "loaded " : "simmed ") + d : "")
+  );
 }
 
 /** The realm, where there is one — a suffix on both the trigger and the menu rows. */
@@ -145,8 +202,13 @@ function realmTag(b) {
 }
 
 function renderBoardPicker(b) {
-  setHTML("boardBtn", html`${swatch(b)}<span class="nm">${b.player}</span><span class="sp">${specText(b)}</span
-    >${realmTag(b)}<span class="mk">▾</span>`);
+  setHTML(
+    "boardBtn",
+    html`${swatch(b)}<span class="nm">${b.player}</span
+      ><span class="sp">${specText(b)}</span>${realmTag(b)}<span class="mk"
+        >▾</span
+      >`,
+  );
   setText("specBadge", boardMeta(b));
   $("specBadge").title = b.fetchedAt || "";
 
@@ -155,17 +217,28 @@ function renderBoardPicker(b) {
   state.boards.forEach((x) => {
     const k = (x.player + "·" + x.realm).toLowerCase();
     let g = groups.find((y) => y.k === k);
-    if (!g) { g = { k, boards: [] }; groups.push(g); }
+    if (!g) {
+      g = { k, boards: [] };
+      groups.push(g);
+    }
     g.boards.push(x);
   });
 
-  setHTML("boardMenu", groups.map((g) => {
-    // A lone report has no sibling to be confused with, so it keeps the name on its own row;
-    // only a character with several specs loaded needs the name lifted into a heading.
-    const multi = g.boards.length > 1, g0 = g.boards[0];
-    const head = multi ? html`<div class="pgroup">${g0.player}${realmTag(g0)}</div>` : "";
-    return html`<div class="pgrp">${head}${g.boards.map((x) => boardOptionHTML(x, x.id === b.id, multi))}</div>`;
-  }));
+  setHTML(
+    "boardMenu",
+    groups.map((g) => {
+      // A lone report has no sibling to be confused with, so it keeps the name on its own row;
+      // only a character with several specs loaded needs the name lifted into a heading.
+      const multi = g.boards.length > 1,
+        g0 = g.boards[0];
+      const head = multi
+        ? html`<div class="pgroup">${g0.player}${realmTag(g0)}</div>`
+        : "";
+      return html`<div class="pgrp">
+        ${head}${g.boards.map((x) => boardOptionHTML(x, x.id === b.id, multi))}
+      </div>`;
+    }),
+  );
 
   // With a single report there's nothing to switch to — the trigger is just the nameplate.
   $("boardBtn").disabled = state.boards.length < 2;
@@ -176,9 +249,16 @@ function renderBoardPicker(b) {
 function boardOptionHTML(x, on, multi) {
   const lead = multi ? html`${specText(x)}` : html`${x.player}${realmTag(x)}`;
   const sub = (multi ? "" : specText(x) + " · ") + boardMeta(x);
-  return html`<button class="popt ${on ? "on" : ""}" role="menuitemradio" aria-checked="${on}" data-board="${x.id}"
-    >${swatch(x)}<span class="ptext"><span class="pl">${lead}</span><span class="pm">${sub}</span></span
-    ><span class="pcheck">✓</span></button>`;
+  return html`<button
+    class="popt ${on ? "on" : ""}"
+    role="menuitemradio"
+    aria-checked="${on}"
+    data-board="${x.id}"
+  >
+    ${swatch(x)}<span class="ptext"
+      ><span class="pl">${lead}</span><span class="pm">${sub}</span></span
+    ><span class="pcheck">✓</span>
+  </button>`;
 }
 
 /** Shut the picker. Every render passes through here — any state change closes it. */
@@ -195,9 +275,19 @@ export function render() {
   if (!has) {
     setShown("dataNote", false);
     setHTML("verdict", "");
-    setHTML("sources", html`<div class="empty-state"><div class="big">${DIE}</div><div>Paste a QE Live
-      (healer) or Raidbots Droptimizer (DPS/tank) report above to see which encounter to roll
-      on.</div><div class="sub">Your report stays in this browser — nothing is uploaded.</div></div>`);
+    setHTML(
+      "sources",
+      html`<div class="empty-state">
+        <div class="big">${DIE}</div>
+        <div>
+          Paste a QE Live report (healers) or a Raidbots Droptimizer (everyone
+          else) to see where your next roll pays best.
+        </div>
+        <div class="sub">
+          Your report stays in this browser. Nothing is uploaded.
+        </div>
+      </div>`,
+    );
     return;
   }
   // A saved report is waiting but the database hasn't landed yet (see src/data.js). Everything below
@@ -207,11 +297,24 @@ export function render() {
   if (!QE_DATA) {
     setShown("dataNote", false);
     setHTML("verdict", "");
-    setHTML("sources", html`<div class="empty-state"><div class="big">${DIE}</div><div>Loading the
-      encounter database…</div></div>`);
+    setHTML(
+      "sources",
+      html`<div class="empty-state">
+        <div class="big">${DIE}</div>
+        <div>Loading the encounter database…</div>
+      </div>`,
+    );
     loadQEData().then(render, () => {
-      setHTML("sources", html`<div class="empty-state"><div class="big">⚠️</div><div>Couldn't load the
-        encounter database (<code>data/qe-data.json</code>).</div></div>`);
+      setHTML(
+        "sources",
+        html`<div class="empty-state">
+          <div class="big">⚠️</div>
+          <div>
+            Couldn't load the encounter database
+            (<code>data/qe-data.json</code>).
+          </div>
+        </div>`,
+      );
     });
     return;
   }
@@ -222,22 +325,41 @@ export function render() {
 
   const built = buildGroups(b);
 
-  // Metric toggle (Droptimizer only: raw DPS vs % of baseline)
-  const isDrop = b.source === "droptimizer";
-  setDisplayed("metricLabel", isDrop);
-  setDisplayed("metricSeg", isDrop);
-  if (isDrop) {
-    setHTML("metricSeg", html`
-      <button data-metric="raw" class="${b.metric !== "pct" ? "on" : ""}">DPS</button>
-      <button data-metric="pct" class="${b.metric === "pct" ? "on" : ""}">%</button>`);
-  }
+  // What the numbers on this page are. Raw throughput is the default everywhere and the left-hand
+  // button; the only alternative any report offers is a Droptimizer's percentage of its own
+  // baseline DPS. A QE report carries no baseline to divide by (see `hasPct`), so rather than drop
+  // the control it becomes a readout — the unit still has to be on screen, whether or not there's
+  // a second one to switch to.
+  setHTML(
+    "metricSeg",
+    hasPct(b)
+      ? html`<button
+            data-metric="raw"
+            class="${b.metric !== "pct" ? "on" : ""}"
+          >
+            DPS</button
+          ><button data-metric="pct" class="${b.metric === "pct" ? "on" : ""}">
+            %
+          </button>`
+      : html`<span class="fixed">${unitOf(b)}</span>`,
+  );
 
   // Difficulty toggle (only when there's a choice to make)
   const hasDiffs = built.diffs.length > 1;
   setDisplayed("diffLabel", hasDiffs);
   setDisplayed("diffSeg", hasDiffs);
-  setHTML("diffSeg", built.diffs.map((d) =>
-    html`<button data-diff="${d}" class="${d === built.selDiff ? "on" : ""}">${diffLabel(b, d)}</button>`));
+  setHTML(
+    "diffSeg",
+    built.diffs.map(
+      (d) =>
+        html`<button
+          data-diff="${d}"
+          class="${d === built.selDiff ? "on" : ""}"
+        >
+          ${diffLabel(b, d)}
+        </button>`,
+    ),
+  );
 
   renderLootSpec(b);
   renderSimcNote(b);
@@ -246,11 +368,20 @@ export function render() {
   renderVerdict(built, b);
 
   if (!built.rows.length) {
-    setHTML("sources", html`<div class="empty-state"><div class="sub">No rollable encounters found
-      for this filter. Try “Show older content”.</div></div>`);
+    setHTML(
+      "sources",
+      html`<div class="empty-state">
+        <div class="sub">
+          Nothing rollable at this filter. Try “Show older content”.
+        </div>
+      </div>`,
+    );
     return;
   }
-  setHTML("sources", built.rows.map((r, i) => cardHTML(b, r, i)));
+  setHTML(
+    "sources",
+    built.rows.map((r, i) => cardHTML(b, r, i)),
+  );
 }
 
 /**
@@ -262,28 +393,49 @@ function renderSimcNote(b) {
   const silent = !!simc && !(simc.rolledIds || []).length;
   setShown("simcNote", silent);
   if (!silent) return;
-  setHTML("simcNote", html`<b>/simc linked, but it logged no bonus rolls.</b> The addon only records
-    rolls you make <b>after</b> updating to 12.1.0 (Jul 6, 2026) — it can’t backfill earlier ones, and
-    omits the line entirely when empty. Mark this season’s past rolls by tapping an item →
-    <b>Rolled</b>; future rolls import automatically.`);
+  setHTML(
+    "simcNote",
+    html`<b>/simc linked, but it logged no bonus rolls.</b> The addon only
+      records rolls you make <b>after</b> updating to 12.1.0 (Jul 6, 2026),
+      can’t backfill older ones, and leaves the line out entirely when it has
+      none. Mark this season’s earlier rolls by tapping an item to
+      <b>Rolled</b>. Future ones import on their own.`,
+  );
 }
 
 function renderVault(b, built) {
   const simc = state.simc[b.key];
-  if (!simc || !simc.vault || !simc.vault.length) { setHTML("vaultPanel", ""); return; }
+  if (!simc || !simc.vault || !simc.vault.length) {
+    setHTML("vaultPanel", "");
+    return;
+  }
   const rowByItem = {};
-  built.rows.forEach((r) => r.items.forEach((it) => { rowByItem[it.id] = r; }));
+  built.rows.forEach((r) =>
+    r.items.forEach((it) => {
+      rowByItem[it.id] = r;
+    }),
+  );
 
-  setHTML("vaultPanel", html`<div class="vault">
-    <h3>This week’s vault</h3>
-    <div class="vsub">Taking an item leaves it in your roll pool — worth 0 to you but still diluting
-      the odds, and a possible dupe if you also roll that source. Mark what you’ll take to fold it
-      into the ranking.</div>
-    ${tradeHTML(b, vaultChoice(b))}
-    <div class="vault-items">${simc.vault.map((v) => vaultOptionHTML(b, v, rowByItem[v.id]))}</div>
-    <div class="note">A taken pick becomes <b>Own</b> below. If a boss’s only upgrade is also your
-      vault pick, its roll EV collapses — take it from the vault and roll elsewhere.</div>
-  </div>`);
+  setHTML(
+    "vaultPanel",
+    html`<div class="vault">
+      <h3>This week’s vault</h3>
+      <div class="vsub">
+        Taking an item leaves it in your roll pool: worth 0 to you, still
+        diluting your odds, and a dupe if you roll that source too. Mark what
+        you’ll take to fold it into the ranking.
+      </div>
+      ${tradeHTML(b, vaultChoice(b))}
+      <div class="vault-items">
+        ${simc.vault.map((v) => vaultOptionHTML(b, v, rowByItem[v.id]))}
+      </div>
+      <div class="note">
+        A taken pick becomes <b>Own</b> below. If a boss’s only upgrade is also
+        your vault pick, its EV collapses. Take it from the vault and roll
+        somewhere else.
+      </div>
+    </div>`,
+  );
 }
 
 /**
@@ -294,13 +446,16 @@ function renderVault(b, built) {
 function vaultOptionHTML(b, v, row) {
   const meta = QE_DATA.items[v.id];
   const taken = b.vaultTake === v.id;
-  let encTxt, couple, warn = false;
+  let encTxt,
+    couple,
+    warn = false;
   if (row) {
     encTxt = row.g.name;
-    const leave = priceWith(row, v.id, "want"), take = priceWith(row, v.id, "own");
+    const leave = priceWith(row, v.id, "want"),
+      take = priceWith(row, v.id, "own");
     warn = leave.num > take.num;
-    couple = html`Roll ${row.g.name}: <b>${dv(b, leave.ev)}</b> if you leave it ·
-      <b>${dv(b, take.ev)}</b> if you take it`;
+    couple = html`Roll ${row.g.name}: <b>${dv(b, leave.ev)}</b> if you leave it
+      · <b>${dv(b, take.ev)}</b> if you take it`;
   } else {
     const src = meta && resolve(meta.s[0][0], meta.s[0][1]);
     encTxt = (src && src.name) || "—";
@@ -309,11 +464,16 @@ function vaultOptionHTML(b, v, row) {
   return html`<div class="vopt ${taken ? "taken" : ""}">
     <div>
       <div class="vname">${(meta && meta.n) || v.name}</div>
-      <div class="vmeta"><span>${encTxt}</span><span>·</span><span>ilvl ${v.ilvl}</span
-        >${warn && html`<span class="warn">· also in this roll pool — dupe risk</span>`}</div>
+      <div class="vmeta">
+        <span>${encTxt}</span><span>·</span
+        ><span>ilvl ${v.ilvl}</span
+        >${warn && html`<span class="warn">· also in this roll pool, dupe risk</span>`}
+      </div>
       <div class="couple">${couple}</div>
     </div>
-    <button class="btn tiny ${taken ? "primary" : ""}" data-vault="${v.id}">${taken ? "Taking ✓" : "Take this"}</button>
+    <button class="btn tiny ${taken ? "primary" : ""}" data-vault="${v.id}">
+      ${taken ? "Taking ✓" : "Take this"}
+    </button>
   </div>`;
 }
 
@@ -333,54 +493,94 @@ function vaultOptionHTML(b, v, row) {
  */
 function tradeHTML(b, vc) {
   if (!vc || !vc.top) return "";
-  const unit = unitOf(b), keep = vc.keep, roll = vc.top;
+  const unit = unitOf(b),
+    keep = vc.keep,
+    roll = vc.top;
   const keepTxt = keep.scored
     ? html`<b>${dv(b, keep.score)}</b> ${unit} guaranteed from ${keep.name}`
-    : html`${keep.name}, which your report never evaluated`;
+    : html`${keep.name}, which your report never scored`;
   const lead = SEASON.tokenFromVault
-    ? (vc.verdict === "roll" ? "Take the token" : "Take the item")
-    : (vc.verdict === "roll" ? "The roll is worth spending on" : "Your vault beats your best roll");
+    ? vc.verdict === "roll"
+      ? "Take the token"
+      : "Take the item"
+    : vc.verdict === "roll"
+      ? "The roll is worth it"
+      : "Your vault beats your best roll";
   return html`<div class="trade ${vc.verdict}">
     <div class="tlead">${lead}</div>
-    <div class="tbody"><b>${dv(b, vc.perRoll)}</b> ${unit} on average from one roll on ${roll.g.name},
-      against ${keepTxt}.
-      ${keep.scored && html` The gap is ${dv(b, Math.abs(vc.perRoll - keep.score))} ${unit}.`}
+    <div class="tbody">
+      <b>${dv(b, vc.perRoll)}</b> ${unit} on average from one roll on
+      ${roll.g.name}, against ${keepTxt}.
+      ${keep.scored && html` A gap of ${dv(b, Math.abs(vc.perRoll - keep.score))} ${unit}.`}
       ${roll.cost !== 1 && html` That roll costs ${roll.cost} tokens.`}
-      ${SEASON.tokenFromVault && html` Weeks 1–7 the token <em>is</em> a vault slot, so this is one
-        choice, not two — from week 8 the token is free and you get both.`}</div>
+      ${
+        SEASON.tokenFromVault &&
+        html` Weeks 1–7 the token <em>is</em> a vault slot, so it’s one choice,
+          not two. From week 8 the token is free and you get both.`
+      }
+    </div>
     ${vc.drag && dragHTML(b, vc.drag, keep, unit)}
   </div>`;
 }
 
 function dragHTML(b, d, keep, unit) {
-  return html`<div class="tdrag">And it doesn’t end this week: taking ${keep.name} leaves it in
-    ${d.name}’s pool for good — worth nothing to you there, still counted — which costs
-    ${d.isTop ? "the very encounter above" : "that encounter"} <b>${dv(b, d.amount)}</b> ${unit} on
-    every roll you make there from here on. A roll takes an item <em>out</em> of a pool.</div>`;
+  return html`<div class="tdrag">
+    It doesn’t end this week either. Taking ${keep.name} leaves it in
+    ${d.name}’s pool for good, worth nothing to you and still counted, which
+    costs ${d.isTop ? "the encounter above" : "that encounter"}
+    <b>${dv(b, d.amount)}</b> ${unit} on every roll you make there from now on.
+    A roll would have taken it <em>out</em>.
+  </div>`;
 }
 
 function renderVerdict(built, b) {
   const best = built.rows.find((r) => r.ev > 0);
   if (!best) {
     $("verdict").className = "verdict empty";
-    setHTML("verdict", html`<div><div class="label">Next roll</div><div class="target">No upgrades in
-      any pool right now — hold your token.</div></div>`);
+    setHTML(
+      "verdict",
+      html`<div>
+        <div class="label">Next roll</div>
+        <div class="target">
+          No upgrades left in any pool, so hold your token.
+        </div>
+      </div>`,
+    );
     return;
   }
   const next = built.rows.find((r) => r.ev > 0 && r.g.key !== best.g.key);
-  const top = best.items.filter((i) => i.state === "want" && i.score > 0).slice(0, 2)
+  const top = best.items
+    .filter((i) => i.state === "want" && i.score > 0)
+    .slice(0, 2)
     .map((i) => html`${i.name}${i.vr ? " ✦" : ""} (${dv(b, i.score)})`);
   const dl = best.g.type === "raid" ? diffLabel(b, built.selDiff) : "M+";
   $("verdict").className = "verdict";
-  setHTML("verdict", html`<div>
-    <div class="label">Spend your next roll on</div>
-    <div class="target">${best.g.name}<span class="type-tag ${best.g.type}"
-      style="margin-left:9px;vertical-align:middle">${best.g.type} · ${dl}</span></div>
-    <div class="why">${top.length ? html`carried by ${join(top, ", ")}` : html`${dv(b, best.num)} of value`}
-      · ${best.remaining} in pool
-      · ${next ? html`${dv(b, best.ev - next.ev)} ahead of ${next.g.name}` : "your only live source"}</div>
-    </div>
-    <div class="big"><div class="ev tnum">${dv(b, best.ev)}</div><div class="ev-unit">${unitOf(b)} / token</div></div>`);
+  setHTML(
+    "verdict",
+    html`<div>
+        <div class="label">Spend your next roll on</div>
+        <div class="target">
+          ${best.g.name}<span
+            class="type-tag ${best.g.type}"
+            style="margin-left:9px;vertical-align:middle"
+            >${best.g.type} · ${dl}</span
+          >
+        </div>
+        <div class="why">
+          ${
+      top.length
+        ? html`carried by ${join(top, ", ")}`
+        : html`${dv(b, best.num)} ${unitOf(b)} in the pool`
+    }
+          · ${best.remaining} in pool ·
+          ${next ? html`${dv(b, best.ev - next.ev)} ahead of ${next.g.name}` : "your only live source"}
+        </div>
+      </div>
+      <div class="big">
+        <div class="ev tnum">${dv(b, best.ev)}</div>
+        <div class="ev-unit">${unitOf(b)} / token</div>
+      </div>`,
+  );
 }
 
 /** "3 upgrades" — the count that says whether a pool is worth opening. */
@@ -389,40 +589,73 @@ function upgradeCount(n) {
 }
 
 function cardHTML(b, r, i) {
-  const g = r.g, depleted = r.remaining <= 0;
-  const cls = "card" + (i === 0 && r.ev > 0 ? " rank-1" : "") + (b._open === g.key ? " open" : "") + (depleted ? " depleted" : "");
-  const math = r.remaining > 0
-    ? dv(b, r.num) + " / " + r.remaining + (r.cost !== 1 ? " / " + r.cost : "")
-    : "pool empty";
-  const sub = (g.type === "raid" ? g.instName : "M+ dungeon") + upgradeCount(r.nWant);
+  const g = r.g,
+    depleted = r.remaining <= 0;
+  const cls =
+    "card" +
+    (i === 0 && r.ev > 0 ? " rank-1" : "") +
+    (b._open === g.key ? " open" : "") +
+    (depleted ? " depleted" : "");
+  const math =
+    r.remaining > 0
+      ? dv(b, r.num) +
+        " / " +
+        r.remaining +
+        (r.cost !== 1 ? " / " + r.cost : "")
+      : "pool empty";
+  const sub =
+    (g.type === "raid" ? g.instName : "M+ dungeon") + upgradeCount(r.nWant);
   // Where a roll pays out. Worth saying per encounter rather than once: this is the season where a
   // Mythic boss and a dungeon cost the same single token and pay five upgrade steps apart.
-  const pays = r.reward && r.reward.label && html`<span class="pays"
-    title="A bonus roll here is paid out as if the item came from your Great Vault">pays ${r.reward.label}</span>`;
-  const special = g.special && SEASON.special &&
-    html`<span class="special" title="${SEASON.special.note}">${SEASON.special.badge}</span>`;
+  const pays =
+    r.reward &&
+    r.reward.label &&
+    html`<span
+      class="pays"
+      title="Paid out as if the item came from your Great Vault"
+      >pays ${r.reward.label}</span
+    >`;
+  const special =
+    g.special &&
+    SEASON.special &&
+    html`<span class="special" title="${SEASON.special.note}"
+      >${SEASON.special.badge}</span
+    >`;
 
   return html`<div class="${cls}" data-key="${g.key}">
     <div class="card-head" data-act="toggle">
       <div class="rank tnum">${r.ev > 0 ? i + 1 : "–"}</div>
       <div class="name-cell">
-        <div class="name"><span class="txt">${g.name}</span
-          ><span class="type-tag ${g.type}">${g.type}</span>${special}${pays}</div>
+        <div class="name">
+          <span class="txt">${g.name}</span
+          ><span class="type-tag ${g.type}">${g.type}</span>${special}${pays}
+        </div>
         <div class="meta">${r.remaining} in pool · ${sub}${crestMeta(r)}</div>
       </div>
-      <div class="ev-cell"><div class="ev tnum">${dv(b, r.ev)}</div><div class="math">${math}</div></div>
+      <div class="ev-cell">
+        <div class="ev tnum">${dv(b, r.ev)}</div>
+        <div class="math">${math}</div>
+      </div>
       <div class="chev">▸</div>
     </div>
     <div class="card-body">
       <div class="cfg-row">
-        <div class="field"><label>Token cost</label>
-          <input class="num-in tnum" data-act="cost" type="number" min="1" value="${r.cost}"></div>
-        <span>Σ ${dv(b, r.num)} want · ${r.remaining} in pool${r.cost !== 1 ? " · ÷" + r.cost + " tokens" : ""}</span>
+        <div class="field">
+          <label>Token cost</label>
+          <input
+            class="num-in tnum"
+            data-act="cost"
+            type="number"
+            min="1"
+            value="${r.cost}"
+          />
+        </div>
+        <span
+          >Σ ${dv(b, r.num)} want · ${r.remaining} in
+          pool${r.cost !== 1 ? " · ÷" + r.cost + " tokens" : ""}</span
+        >
       </div>
-      ${specialNote(r)}
-      ${promoNote(r)}
-      ${crestNote(b, r)}
-      ${itemsHTML(b, r)}
+      ${specialNote(r)} ${promoNote(r)} ${crestNote(b, r)} ${itemsHTML(b, r)}
     </div>
   </div>`;
 }
@@ -438,9 +671,11 @@ function cardHTML(b, r, i) {
  */
 function promoNote(r) {
   if (!r.reward || !r.reward.label) return "";
-  return html`<div class="swap-note">A roll here is paid out as <b>${r.reward.label}</b>, above the
-    item level your report simmed each drop at — so the scores below are a floor, and they understate
-    this encounter against one that pays a lower track.</div>`;
+  return html`<div class="swap-note">
+    A roll here pays out at <b>${r.reward.label}</b>, above the ilvl your report
+    simmed each drop at. So the scores below are a floor, and they understate
+    this encounter against one that pays a lower track.
+  </div>`;
 }
 
 /**
@@ -472,20 +707,25 @@ function crestMeta(r) {
 function crestNote(b, r) {
   const c = r.reward && r.reward.crests;
   if (!c) return "";
-  return html`<div class="swap-note"><b>≈${c} ${r.reward.crestKind || ""} crests</b> per roll, whatever
-    it hands you — an item you want arrives already upgraded, and one you don’t still unlocks that
-    slot, so the piece you actually wear upgrades free. Uniform across the pool, so it can’t change
-    <em>which</em> item you want here, only whether this encounter beats another. Left out of the EV
-    above: folding it in would need a crests-to-${unitOf(b)} rate that depends on the item you’d have
-    spent them on, which no report computes.</div>`;
+  return html`<div class="swap-note">
+    <b>≈${c} ${r.reward.crestKind || ""} crests</b> per roll, whatever it hands
+    you. An item you want arrives already upgraded; one you don’t still unlocks
+    that slot, so the piece you actually wear upgrades free. Same for every item
+    here, so it can’t change <em>which</em> item you want, only whether this
+    encounter beats another. Not in the EV above: folding it in needs a
+    crests-to-${unitOf(b)} rate that depends on what you’d have spent them on,
+    which no report gives.
+  </div>`;
 }
 
 /** The end-of-raid encounters worth banking a token for, called out where the ranking can't see it. */
 function specialNote(r) {
   if (!r.g.special || !SEASON.special) return "";
-  return html`<div class="swap-note special-note"><b>${SEASON.special.badge}.</b> ${SEASON.special.note}
-    The EV above prices <em>this week</em> only — it has no way to weigh a token held for a kill week
-    against one spent now.</div>`;
+  return html`<div class="swap-note special-note">
+    <b>${SEASON.special.badge}.</b> ${SEASON.special.note} The EV above prices
+    <em>this week</em> only. It can’t weigh a token banked for kill week against
+    one spent now.
+  </div>`;
 }
 
 /**
@@ -496,22 +736,32 @@ function specialNote(r) {
  */
 function itemsHTML(b, r) {
   const showBlocked = active()._showBlockedKey === r.g.key;
-  const canGet = r.items.filter((i) => i.elig !== false), blocked = r.items.filter((i) => i.elig === false);
-  const upgrades = canGet.filter((i) => i.score > 0), filler = canGet.filter((i) => i.score <= 0);
-  const group = (label, n) => html`<div class="item-group">${label} <span class="n">${n}</span></div>`;
+  const canGet = r.items.filter((i) => i.elig !== false),
+    blocked = r.items.filter((i) => i.elig === false);
+  const upgrades = canGet.filter((i) => i.score > 0),
+    filler = canGet.filter((i) => i.score <= 0);
+  const group = (label, n) =>
+    html`<div class="item-group">${label} <span class="n">${n}</span></div>`;
 
   return html`<div class="items">
-    ${upgrades.map((it) => itemRow(b, it))}
-    ${filler.length > 0 && html`
-      ${group(upgrades.length ? "No upgrade — still dilutes the pool" : "Nothing here is an upgrade", filler.length)}
-      ${filler.map((it) => itemRow(b, it))}`}
-    ${/* The blocked tier is reference, not work: it's out of the pool and can't be changed from here,
+      ${upgrades.map((it) => itemRow(b, it))}
+      ${
+      filler.length > 0 &&
+      html` ${group(upgrades.length ? "No upgrade, still dilutes the pool" : "Nothing here is an upgrade", filler.length)}
+      ${filler.map((it) => itemRow(b, it))}`
+    }
+      ${
+      /* The blocked tier is reference, not work: it's out of the pool and can't be changed from here,
           so it folds away. What it's *for* is the alt-spec lines below, which read from it. */
-      blocked.length > 0 && html`
-      <div class="item-group tap" data-act="showblocked">${showBlocked ? "Hide" : "Show"} what this
-        loot spec can’t be awarded <span class="n">${blocked.length}</span></div>
-      ${showBlocked && blocked.map((it) => itemRow(b, it))}`}
-  </div>${altNotes(b, r)}`;
+      blocked.length > 0 &&
+      html` <div class="item-group tap" data-act="showblocked">
+          ${showBlocked ? "Hide" : "Show"} what this loot spec can’t get
+          <span class="n">${blocked.length}</span>
+        </div>
+        ${showBlocked && blocked.map((it) => itemRow(b, it))}`
+    }
+    </div>
+    ${altNotes(b, r)}`;
 }
 
 /**
@@ -521,8 +771,11 @@ function itemsHTML(b, r) {
 function altNotes(b, r) {
   return r.alts.slice(0, 2).map((a) => {
     const delta = a.remaining - r.remaining;
-    const parts = [html`<b>Loot as ${specInfo(a.spec).n}:</b> EV ${dv(b, a.ev)} vs ${dv(b, r.ev)} ·
-      ${a.remaining} in pool${delta ? ` (${delta > 0 ? "+" : ""}${delta})` : ""}`];
+    const parts = [
+      html`<b>Loot as ${specInfo(a.spec).n}:</b> EV ${dv(b, a.ev)} vs
+        ${dv(b, r.ev)} · ${a.remaining} in
+        pool${delta ? ` (${delta > 0 ? "+" : ""}${delta})` : ""}`,
+    ];
     if (a.dodges.length) parts.push(html`Dodges ${listOf(a.dodges)}`);
     if (a.gains.length) parts.push(html`Adds ${listOf(a.gains)}`);
     if (a.loses.length) parts.push(html`<b>Gives up ${listOf(a.loses)}</b>`);
@@ -549,8 +802,11 @@ function ilvlCell(it) {
   const lvl = rollIlvlOf(it);
   if (!lvl) return "";
   if (it.lvl && lvl !== it.lvl) {
-    return html`<span class="promoted"
-      title="Drops at ilvl ${it.lvl} — a bonus roll pays out at ilvl ${lvl}">${lvl}</span>`;
+    return html`<span
+      class="promoted"
+      title="Drops at ilvl ${it.lvl}, a bonus roll pays out at ilvl ${lvl}"
+      >${lvl}</span
+    >`;
   }
   return String(lvl);
 }
@@ -559,30 +815,60 @@ function ilvlCell(it) {
 function haveBadge(it) {
   if (it.ownedIlvl == null) return "";
   const why = it.dupe
-    ? "You already hold this item at ilvl " + it.ownedIlvl + " — rolling here would only duplicate it"
-    : (it.rollIlvl
-      ? "You hold this at ilvl " + it.ownedIlvl + "; a roll here pays out at ilvl " + it.rollIlvl + " — a real upgrade"
-      : "You hold this at ilvl " + it.ownedIlvl + ", but a roll here pays out on a higher upgrade track — probably still an upgrade");
-  return html`<span class="have ${it.dupe ? "dupe" : ""}" title="${why}">have ${it.ownedIlvl}</span>`;
+    ? "You already have this at ilvl " +
+      it.ownedIlvl +
+      ", so a roll here would just dupe it"
+    : it.rollIlvl
+      ? "You have this at ilvl " +
+        it.ownedIlvl +
+        "; a roll here pays out at ilvl " +
+        it.rollIlvl +
+        ", a real upgrade"
+      : "You have this at ilvl " +
+        it.ownedIlvl +
+        ", but a roll here pays out on a higher track, so probably still an upgrade";
+  return html`<span class="have ${it.dupe ? "dupe" : ""}" title="${why}"
+    >have ${it.ownedIlvl}</span
+  >`;
 }
 
 function itemRow(b, it) {
   const lvl = rollIlvlOf(it);
   if (it.elig === false) {
     return html`<div class="item blocked" data-id="${it.id}">
-      <span class="state-btn blocked" title="A bonus roll can't award this to your loot spec">Can't</span>
-      <div class="iname">${iconHTML(it.id, lvl)}${nameHTML(it.id, it.name, it.q, lvl)}<span
-        class="why">${it.why || "not for this spec"}</span></div>
+      <span
+        class="state-btn blocked"
+        title="Your loot spec can't be awarded this"
+        >Can't</span
+      >
+      <div class="iname">
+        ${iconHTML(it.id, lvl)}${nameHTML(it.id, it.name, it.q, lvl)}<span
+          class="why"
+          >${it.why || "not for this spec"}</span
+        >
+      </div>
       <div class="ilvl">${ilvlCell(it)}</div>
       <div class="iscore tnum">—</div>
     </div>`;
   }
   const st = it.state || "want";
-  const label = st === "want" ? "Want" : (st === "own" ? "Own" : "Rolled");
-  return html`<div class="item st-${st}${it.score <= 0 ? " zero" : ""}" data-id="${it.id}">
-    <button class="state-btn ${st}" data-act="cycle" title="Want → Own → Rolled">${label}</button>
-    <div class="iname">${iconHTML(it.id, lvl)}${nameHTML(it.id, it.name, it.q, lvl)}${
-      it.vr && html`<span class="vr">very rare</span>`}${exclusive(it)}${haveBadge(it)}</div>
+  const label = st === "want" ? "Want" : st === "own" ? "Own" : "Rolled";
+  return html`<div
+    class="item st-${st}${it.score <= 0 ? " zero" : ""}"
+    data-id="${it.id}"
+  >
+    <button
+      class="state-btn ${st}"
+      data-act="cycle"
+      title="Want → Own → Rolled"
+    >
+      ${label}
+    </button>
+    <div class="iname">
+      ${iconHTML(it.id, lvl)}${nameHTML(it.id, it.name, it.q, lvl)}${
+      it.vr && html`<span class="vr">very rare</span>`
+    }${exclusive(it)}${haveBadge(it)}
+    </div>
     <div class="ilvl">${ilvlCell(it)}</div>
     <div class="iscore tnum">${it.score > 0 ? "+" + dv(b, it.score) : "—"}</div>
   </div>`;
@@ -596,5 +882,7 @@ function exclusive(it) {
   const specs = it.specs || [];
   if (!specs.length || specs.length >= classSpecs(specs[0]).length) return "";
   const names = specs.map((s) => specInfo(s).n).join(" / ");
-  return html`<span class="only" title="Only ${names} can be awarded this">${names} only</span>`;
+  return html`<span class="only" title="Only ${names} can loot this"
+    >${names} only</span
+  >`;
 }

@@ -26,28 +26,34 @@ const OUT = join(ROOT, "data/qe-data.json");
 const argv = process.argv.slice(2);
 const CHECK = argv.includes("--check");
 const qeArg = argv.find((a) => a.startsWith("--qe="));
-const QE = qeArg ? qeArg.slice(5) : (process.env.QE_PATH || join(homedir(), "Projects/QuestionablyEpic"));
+const QE = qeArg
+  ? qeArg.slice(5)
+  : process.env.QE_PATH || join(homedir(), "Projects/QuestionablyEpic");
 
 // Raidbots republishes Blizzard's item and talent data. Downloaded rather than checked out, so
 // --items=/--talents= (or $RAIDBOTS_ITEMS/$RAIDBOTS_TALENTS) can point at saved copies offline.
 const RB = "https://www.raidbots.com/static/data/live/";
 const flag = (name, env) => {
   const a = argv.find((x) => x.startsWith("--" + name + "="));
-  return a ? a.slice(name.length + 3) : (process.env[env] || null);
+  return a ? a.slice(name.length + 3) : process.env[env] || null;
 };
 const ITEMS_FILE = flag("items", "RAIDBOTS_ITEMS");
 const TALENTS_FILE = flag("talents", "RAIDBOTS_TALENTS");
 
 /** Import a source string as an ES module (used to evaluate QE's database files). */
 function importSource(src) {
-  return import("data:text/javascript;base64," + Buffer.from(src, "utf8").toString("base64"));
+  return import(
+    "data:text/javascript;base64," + Buffer.from(src, "utf8").toString("base64")
+  );
 }
 
 function read(rel) {
   try {
     return readFileSync(join(QE, rel), "utf8");
   } catch {
-    console.error(`Can't read ${rel} under ${QE}\nPoint at a QuestionablyEpic checkout with --qe=<path> or $QE_PATH.`);
+    console.error(
+      `Can't read ${rel} under ${QE}\nPoint at a QuestionablyEpic checkout with --qe=<path> or $QE_PATH.`,
+    );
     process.exit(1);
   }
 }
@@ -57,7 +63,9 @@ async function raidbots(name, file) {
   if (file) return JSON.parse(readFileSync(file, "utf8"));
   const res = await fetch(RB + name + ".json");
   if (!res.ok) {
-    console.error(`Can't fetch ${RB}${name}.json (HTTP ${res.status}).\nSave a copy and pass --${name}=<path>.`);
+    console.error(
+      `Can't fetch ${RB}${name}.json (HTTP ${res.status}).\nSave a copy and pass --${name}=<path>.`,
+    );
     process.exit(1);
   }
   return res.json();
@@ -76,7 +84,8 @@ function canonical(v) {
 
 /** Sort numeric-looking keys by value, everything else lexically. */
 function numericAware(a, b) {
-  const na = Number(a), nb = Number(b);
+  const na = Number(a),
+    nb = Number(b);
   if (!Number.isNaN(na) && !Number.isNaN(nb)) return na - nb;
   return a < b ? -1 : a > b ? 1 : 0;
 }
@@ -84,11 +93,14 @@ function numericAware(a, b) {
 /* ---------------------------------------------------------------- read upstream */
 
 // CONSTANTS.ts carries no type annotations, so it evaluates as plain JS.
-const constants = (await importSource(read("src/General/Engine/CONSTANTS.ts"))).CONSTANTS;
+const constants = (await importSource(read("src/General/Engine/CONSTANTS.ts")))
+  .CONSTANTS;
 
 // InstanceDB.js imports CONSTANTS for a helper we don't use; stub it out so the module stands alone.
-const instanceSrc = read("src/Databases/InstanceDB.js")
-  .replace(/^import\s+\{[^}]*\}\s+from\s+["'][^"']*CONSTANTS["'].*$/m, "const CONSTANTS = { currentDungeonIDs: [] };");
+const instanceSrc = read("src/Databases/InstanceDB.js").replace(
+  /^import\s+\{[^}]*\}\s+from\s+["'][^"']*CONSTANTS["'].*$/m,
+  "const CONSTANTS = { currentDungeonIDs: [] };",
+);
 const instMod = await importSource(instanceSrc);
 const { encounterDB, retailInstanceDB, instanceDB } = instMod;
 
@@ -108,7 +120,10 @@ const rbTalents = await raidbots("talents", TALENTS_FILE);
 const raids = {};
 for (const [id, inst] of Object.entries(encounterDB)) {
   if (id === "-1" || !inst || !inst.bosses) continue;
-  raids[id] = { name: inst.name || instanceDB[id] || "Instance " + id, bosses: { ...inst.bosses } };
+  raids[id] = {
+    name: inst.name || instanceDB[id] || "Instance " + id,
+    bosses: { ...inst.bosses },
+  };
 }
 
 // Dungeons: the numeric keys of the retail "-1" bucket (bossOrder* are metadata, not dungeons).
@@ -122,8 +137,13 @@ for (const [id, name] of Object.entries(retailInstanceDB["-1"].Retail)) {
 // it drops — 73 is "agility or intellect", which is what every leather and mail piece is, and
 // reading it as a single stat would deny half a class its own armor.
 const PRIMARY = {
-  3: "a", 4: "s", 5: "i",
-  71: "asi", 72: "as", 73: "ai", 74: "si",
+  3: "a",
+  4: "s",
+  5: "i",
+  71: "asi",
+  72: "as",
+  73: "ai",
+  74: "si",
 };
 
 /** Secondary stats, for display only. 7 (stamina) is on everything and says nothing. */
@@ -132,7 +152,8 @@ const SECONDARY = { 32: "c", 36: "h", 40: "v", 49: "m" };
 /** The set of primary stats an item can roll, as a code string ("ai"), or "" if it has none. */
 function statSet(rb) {
   const seen = {};
-  for (const s of (rb && rb.stats) || []) for (const ch of PRIMARY[s.id] || "") seen[ch] = 1;
+  for (const s of (rb && rb.stats) || [])
+    for (const ch of PRIMARY[s.id] || "") seen[ch] = 1;
   return ["a", "s", "i"].filter((ch) => seen[ch]).join("");
 }
 
@@ -160,7 +181,11 @@ for (const t of rbTalents) {
   if (!t.specId || !t.specName) continue;
   const votes = statVotes[t.specId] || {};
   const best = Object.keys(votes).sort((a, b) => votes[b] - votes[a])[0];
-  specs[t.specId] = { n: t.specName, c: t.className, st: NAMED_STAT[best] || "" };
+  specs[t.specId] = {
+    n: t.specName,
+    c: t.className,
+    st: NAMED_STAT[best] || "",
+  };
 }
 const unstatted = Object.keys(specs).filter((id) => !specs[id].st);
 
@@ -186,7 +211,10 @@ function annotate(e, rb) {
   if (st) e.st = st;
   if (rb.icon) e.ic = rb.icon;
   // Secondaries in the item's own order (biggest allocation first), for the hover card.
-  const sec = (rb.stats || []).map((x) => SECONDARY[x.id]).filter(Boolean).join("");
+  const sec = (rb.stats || [])
+    .map((x) => SECONDARY[x.id])
+    .filter(Boolean)
+    .join("");
   if (sec) e.sc = sec;
   return e;
 }
@@ -200,7 +228,11 @@ const items = {};
 let annotated = 0;
 for (const it of itemDB) {
   if (!it.sources || !it.sources.length) continue;
-  const s = it.sources.map((x) => (x.veryRare ? [x.instanceId, x.encounterId, 1] : [x.instanceId, x.encounterId]));
+  const s = it.sources.map((x) =>
+    x.veryRare
+      ? [x.instanceId, x.encounterId, 1]
+      : [x.instanceId, x.encounterId],
+  );
   const rb = rbById.get(it.id);
   if (rb) annotated++;
   items[it.id] = annotate({ n: it.name, q: it.quality, s }, rb);
@@ -213,7 +245,10 @@ let added = 0;
 for (const rb of rbItems) {
   if (items[rb.id] || !rb.sources || !rb.sources.length) continue;
   const s = rb.sources
-    .filter((x) => raids[x.instanceId] || (x.instanceId === -1 && dungeons[x.encounterId]))
+    .filter(
+      (x) =>
+        raids[x.instanceId] || (x.instanceId === -1 && dungeons[x.encounterId]),
+    )
     .map((x) => [x.instanceId, x.encounterId]);
   if (!s.length) continue;
   added++;
@@ -225,11 +260,14 @@ for (const rb of rbItems) {
 // leveling drops, and old catch-up vendors. None are bonus-roll targets, so the app drops them —
 // but it has to drop them *knowingly*. Recording them here is what keeps the runtime "unknown
 // source" warning meaningful: it can then only fire for content genuinely newer than this build.
-const ignoredInstances = [], unnamedDungeons = [], sentinelEncounters = new Set();
+const ignoredInstances = [],
+  unnamedDungeons = [],
+  sentinelEncounters = new Set();
 for (const it of Object.values(items)) {
   for (const [instId, encId] of it.s) {
     if (instId === -1) {
-      if (!dungeons[encId] && !unnamedDungeons.includes(encId)) unnamedDungeons.push(encId);
+      if (!dungeons[encId] && !unnamedDungeons.includes(encId))
+        unnamedDungeons.push(encId);
     } else if (instId > 0 && !raids[instId]) {
       if (!ignoredInstances.includes(instId)) ignoredInstances.push(instId);
     } else if (instId > 0 && (encId === 999 || encId < 0)) {
@@ -256,8 +294,12 @@ const data = canonical({
 
 let qeCommit = "unknown";
 try {
-  qeCommit = execFileSync("git", ["-C", QE, "rev-parse", "--short", "HEAD"], { encoding: "utf8" }).trim();
-} catch { /* not a git checkout — record it as unknown */ }
+  qeCommit = execFileSync("git", ["-C", QE, "rev-parse", "--short", "HEAD"], {
+    encoding: "utf8",
+  }).trim();
+} catch {
+  /* not a git checkout — record it as unknown */
+}
 
 // Emitted as plain JSON, fetched at runtime (src/data.js). JSON isn't just the honest shape for
 // generated data — it is also the fast one: the browser reads it with its JSON parser instead of
@@ -269,14 +311,15 @@ try {
 // JSON has no comments, so the provenance that used to sit in the header moves into `_meta`. It is
 // excluded from the drift comparison below: qeCommit advances on every upstream commit, and a
 // provenance-only change is not data drift.
-const out = JSON.stringify({
-  _meta: {
-    note: "Generated — do not hand-edit. Regenerate with `npm run data` (scripts/build-data.mjs). Shape: src/types.js QEData.",
-    source: `QuestionablyEpic @ ${qeCommit}`,
-    qeSeasonId: constants.seasonID,
-  },
-  ...data,
-}) + "\n";
+const out =
+  JSON.stringify({
+    _meta: {
+      note: "Generated — do not hand-edit. Regenerate with `npm run data` (scripts/build-data.mjs). Shape: src/types.js QEData.",
+      source: `QuestionablyEpic @ ${qeCommit}`,
+      qeSeasonId: constants.seasonID,
+    },
+    ...data,
+  }) + "\n";
 
 const counts =
   `${Object.keys(raids).length} instances · ${Object.keys(dungeons).length} dungeons · ` +
@@ -287,30 +330,47 @@ const counts =
 if (unstatted.length) {
   // A spec no item names explicitly. Its gear can't be stat-filtered, so it would over-report what
   // that spec can loot. Never seen; worth knowing about if Blizzard's data changes shape.
-  console.log(`WARNING: no primary stat inferable for spec ids: ${unstatted.join(", ")}`);
+  console.log(
+    `WARNING: no primary stat inferable for spec ids: ${unstatted.join(", ")}`,
+  );
 }
 
 if (ignoredInstances.length) {
-  const named = ignoredInstances.map((id) => id + (instanceDB[id] ? ` (${instanceDB[id]})` : "")).join(", ");
-  console.log(`Ignored instances — referenced by items, not described by encounterDB: ${named}`);
+  const named = ignoredInstances
+    .map((id) => id + (instanceDB[id] ? ` (${instanceDB[id]})` : ""))
+    .join(", ");
+  console.log(
+    `Ignored instances — referenced by items, not described by encounterDB: ${named}`,
+  );
 }
 if (sentinelEncounters.size) {
-  const named = [...sentinelEncounters].map((k) => k + ` (${raids[k.split("/")[0]].name})`).join(", ");
-  console.log(`Non-encounter raid sources — trash/catalyst and world drops, filtered at runtime: ${named}`);
+  const named = [...sentinelEncounters]
+    .map((k) => k + ` (${raids[k.split("/")[0]].name})`)
+    .join(", ");
+  console.log(
+    `Non-encounter raid sources — trash/catalyst and world drops, filtered at runtime: ${named}`,
+  );
 }
 if (unnamedDungeons.length) {
   // Never seen upstream. If it happens, these dungeons would render as "Unknown dungeon N" and
   // trip the staleness warning, so they want a real name here rather than silent passage.
-  console.log(`WARNING: M+ dungeon ids with no name in InstanceDB: ${unnamedDungeons.join(", ")}`);
+  console.log(
+    `WARNING: M+ dungeon ids with no name in InstanceDB: ${unnamedDungeons.join(", ")}`,
+  );
 }
-console.log(`Current raids: ${data.currentRaids.map((id) => id + " " + (raids[id] ? raids[id].name : "?")).join(", ")}`);
-console.log(`Current dungeons: ${data.currentDungeons.map((id) => id + " " + (dungeons[id] || "?")).join(", ")}`);
+console.log(
+  `Current raids: ${data.currentRaids.map((id) => id + " " + (raids[id] ? raids[id].name : "?")).join(", ")}`,
+);
+console.log(
+  `Current dungeons: ${data.currentDungeons.map((id) => id + " " + (dungeons[id] || "?")).join(", ")}`,
+);
 
 if (CHECK) {
   // `_meta` is provenance, not data — dropped so a bare upstream commit bump doesn't read as drift.
   const prev = JSON.parse(readFileSync(OUT, "utf8"));
   delete prev._meta;
-  const a = JSON.stringify(canonical(prev)), b = JSON.stringify(data);
+  const a = JSON.stringify(canonical(prev)),
+    b = JSON.stringify(data);
   if (a === b) {
     console.log(`\n✓ data/qe-data.json is up to date — ${counts}`);
   } else {
@@ -326,12 +386,25 @@ if (CHECK) {
 /** Summarize what changed between the committed blob and a fresh build. */
 function report(prev, next) {
   for (const key of ["raids", "dungeons", "items"]) {
-    const pk = new Set(Object.keys(prev[key] || {})), nk = new Set(Object.keys(next[key] || {}));
-    const added = [...nk].filter((k) => !pk.has(k)), removed = [...pk].filter((k) => !nk.has(k));
-    const changed = [...nk].filter((k) => pk.has(k) && JSON.stringify(prev[key][k]) !== JSON.stringify(next[key][k]));
+    const pk = new Set(Object.keys(prev[key] || {})),
+      nk = new Set(Object.keys(next[key] || {}));
+    const added = [...nk].filter((k) => !pk.has(k)),
+      removed = [...pk].filter((k) => !nk.has(k));
+    const changed = [...nk].filter(
+      (k) =>
+        pk.has(k) &&
+        JSON.stringify(prev[key][k]) !== JSON.stringify(next[key][k]),
+    );
     if (!added.length && !removed.length && !changed.length) continue;
-    const label = (k) => (key === "dungeons" ? next[key][k] || prev[key][k] : (next[key][k] || prev[key][k]).n || (next[key][k] || prev[key][k]).name || k);
-    console.log(`  ${key}: +${added.length} -${removed.length} ~${changed.length}`);
+    const label = (k) =>
+      key === "dungeons"
+        ? next[key][k] || prev[key][k]
+        : (next[key][k] || prev[key][k]).n ||
+          (next[key][k] || prev[key][k]).name ||
+          k;
+    console.log(
+      `  ${key}: +${added.length} -${removed.length} ~${changed.length}`,
+    );
     for (const k of added.slice(0, 12)) console.log(`    + ${k} ${label(k)}`);
     if (added.length > 12) console.log(`    + …${added.length - 12} more`);
     for (const k of removed.slice(0, 12)) console.log(`    - ${k} ${label(k)}`);
@@ -339,9 +412,16 @@ function report(prev, next) {
     for (const k of changed.slice(0, 12)) console.log(`    ~ ${k} ${label(k)}`);
     if (changed.length > 12) console.log(`    ~ …${changed.length - 12} more`);
   }
-  for (const key of ["currentRaids", "currentDungeons", "ignoredInstances", "seasonId"]) {
+  for (const key of [
+    "currentRaids",
+    "currentDungeons",
+    "ignoredInstances",
+    "seasonId",
+  ]) {
     if (JSON.stringify(prev[key]) !== JSON.stringify(next[key])) {
-      console.log(`  ${key}: ${JSON.stringify(prev[key])} -> ${JSON.stringify(next[key])}`);
+      console.log(
+        `  ${key}: ${JSON.stringify(prev[key])} -> ${JSON.stringify(next[key])}`,
+      );
     }
   }
 }

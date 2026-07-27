@@ -11,13 +11,27 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 // The handful of browser globals outside the document that main.js reaches for on the way up.
-globalThis.location = /** @type {any} */ ({ search: "", pathname: "/", hash: "", href: "http://localhost/" });
+globalThis.location = /** @type {any} */ ({
+  search: "",
+  pathname: "/",
+  hash: "",
+  href: "http://localhost/",
+});
 globalThis.history = /** @type {any} */ ({ replaceState() {} });
 
 test("main.js wires up the app and renders without a report", async () => {
   await import("../src/main.js");
-  assert.match(document.getElementById("sources").textContent, /Paste a QE Live/);
-  assert.equal(document.getElementById("controls").hasAttribute("hidden"), true);
+  assert.match(
+    document.getElementById("sources").textContent,
+    /Paste a QE Live/,
+  );
+  assert.equal(
+    document.getElementById("controls").hasAttribute("hidden"),
+    true,
+  );
   // renderSeason ran: the label is filled from src/season.js, not baked into the markup.
-  assert.match(document.getElementById("seasonLabel").textContent, /^WoW S\d+ /);
+  assert.match(
+    document.getElementById("seasonLabel").textContent,
+    /^WoW S\d+ /,
+  );
 });

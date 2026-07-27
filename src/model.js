@@ -34,8 +34,18 @@ import { canLoot, specId, classSpecs } from "./loot.js";
 export function resolve(instId, encId) {
   if (instId === -1) {
     const dn = QE_DATA.dungeons[String(encId)];
-    if (dn) return { type: "dungeon", name: dn, current: QE_DATA.currentDungeons.includes(String(encId)) };
-    return { type: "dungeon", name: "Unknown dungeon " + encId, current: true, unknown: true };
+    if (dn)
+      return {
+        type: "dungeon",
+        name: dn,
+        current: QE_DATA.currentDungeons.includes(String(encId)),
+      };
+    return {
+      type: "dungeon",
+      name: "Unknown dungeon " + encId,
+      current: true,
+      unknown: true,
+    };
   }
   if (instId < 0) return null; // crafted / reputation / timewalking / PvP — never bonus-rollable
   // A raid's non-encounter drops are filed under sentinel *encounter* ids: 999 is "BoE Trash Drops
@@ -75,7 +85,7 @@ export function resolve(instId, encId) {
 function srcList(b, r) {
   return b.source === "droptimizer"
     ? [[r.inst, r.enc, isVR(r.item, r.inst, r.enc)]]
-    : ((QE_DATA.items[r.item] || {}).s) || [];
+    : (QE_DATA.items[r.item] || {}).s || [];
 }
 
 /**
@@ -113,7 +123,8 @@ export function raidDiffs(b) {
     srcList(b, r).forEach((s) => {
       if (s[0] === -1) return;
       const info = resolve(s[0], s[1]);
-      if (info && info.type === "raid" && (state.showAll || info.current)) set[String(rd)] = 1;
+      if (info && info.type === "raid" && (state.showAll || info.current))
+        set[String(rd)] = 1;
     });
   });
   return Object.keys(set).sort((a, c) => diffRank(c) - diffRank(a));
@@ -126,8 +137,9 @@ export function diffLabel(b, d) {
     const t = d.split("-").pop(); // "raid-mythic" -> "mythic"
     return t.charAt(0).toUpperCase() + t.slice(1);
   }
-  const ds = raidDiffs(b), i = ds.indexOf(d); // QE numeric index -> rank name
-  return DIFF_NAMES[i] || ("Diff " + d);
+  const ds = raidDiffs(b),
+    i = ds.indexOf(d); // QE numeric index -> rank name
+  return DIFF_NAMES[i] || "Diff " + d;
 }
 
 /**
@@ -159,8 +171,16 @@ export function diffKey(b, d) {
 export function priceOf(items, cost) {
   const inPool = items.filter((i) => i.elig !== false);
   const remaining = inPool.filter((i) => i.state !== "rolled").length;
-  const num = inPool.reduce((t, i) => t + (i.state === "want" ? i.score : 0), 0);
-  return { inPool, remaining, num, ev: remaining > 0 ? num / remaining / (cost || 1) : 0 };
+  const num = inPool.reduce(
+    (t, i) => t + (i.state === "want" ? i.score : 0),
+    0,
+  );
+  return {
+    inPool,
+    remaining,
+    num,
+    ev: remaining > 0 ? num / remaining / (cost || 1) : 0,
+  };
 }
 
 /**
@@ -173,7 +193,10 @@ export function priceOf(items, cost) {
  * @param {"want"|"own"|"rolled"} itemState
  */
 export function priceWith(row, itemId, itemState) {
-  return priceOf(row.items.map((i) => (i.id === itemId ? { ...i, state: itemState } : i)), row.cost);
+  return priceOf(
+    row.items.map((i) => (i.id === itemId ? { ...i, state: itemState } : i)),
+    row.cost,
+  );
 }
 
 /**
@@ -191,19 +214,32 @@ export function priceWith(row, itemId, itemState) {
 function altSpecs(items, sp, cost, ev) {
   if (!sp) return [];
   const live = items.filter((i) => i.state !== "rolled");
-  return classSpecs(sp).filter((s) => s !== sp).map((s) => {
-    const has = (i) => (i.specs || []).includes(s);
-    const p = priceOf(items.map((i) => ({ ...i, elig: has(i) })), cost);
-    return {
-      spec: s,
-      remaining: p.remaining,
-      num: p.num,
-      ev: p.ev,
-      dodges: live.filter((i) => i.elig !== false && !has(i)).map((i) => i.name),
-      gains: live.filter((i) => i.elig === false && has(i)).map((i) => i.name),
-      loses: live.filter((i) => i.elig !== false && !has(i) && i.score > 0).map((i) => i.name),
-    };
-  }).filter((a) => a.ev > ev).sort((a, c) => c.ev - a.ev);
+  return classSpecs(sp)
+    .filter((s) => s !== sp)
+    .map((s) => {
+      const has = (i) => (i.specs || []).includes(s);
+      const p = priceOf(
+        items.map((i) => ({ ...i, elig: has(i) })),
+        cost,
+      );
+      return {
+        spec: s,
+        remaining: p.remaining,
+        num: p.num,
+        ev: p.ev,
+        dodges: live
+          .filter((i) => i.elig !== false && !has(i))
+          .map((i) => i.name),
+        gains: live
+          .filter((i) => i.elig === false && has(i))
+          .map((i) => i.name),
+        loses: live
+          .filter((i) => i.elig !== false && !has(i) && i.score > 0)
+          .map((i) => i.name),
+      };
+    })
+    .filter((a) => a.ev > ev)
+    .sort((a, c) => c.ev - a.ev);
 }
 
 /**
@@ -227,7 +263,7 @@ function eligibleSpecs(meta, sp) {
  *   the season promotes the reward to a track whose item level isn't published yet.
  */
 export function rollIlvlFor(reward, dropIlvl) {
-  return reward ? reward.ilvl : (dropIlvl || null);
+  return reward ? reward.ilvl : dropIlvl || null;
 }
 
 /**
@@ -261,7 +297,9 @@ export function isDupe(ownedIlvl, rollIlvl) {
 export function finalBosses(instId, n) {
   const r = QE_DATA.raids[String(instId)];
   if (!r || !n) return [];
-  return Object.keys(r.bosses).sort((a, c) => Number(a) - Number(c)).slice(-n);
+  return Object.keys(r.bosses)
+    .sort((a, c) => Number(a) - Number(c))
+    .slice(-n);
 }
 
 /** Does this encounter carry the season's end-of-raid rewards? Memoised per raid. */
@@ -307,8 +345,16 @@ function itemsAt(key) {
 function poolItem(id, meta, sp, score, lvl, vr) {
   const lt = canLoot(meta, sp);
   return {
-    id: Number(id), name: meta.n || ("Item " + id), q: meta.q || 3, score, lvl, vr: !!vr,
-    elig: lt.ok, why: lt.why || "", swap: lt.swap || null, specs: eligibleSpecs(meta, sp),
+    id: Number(id),
+    name: meta.n || "Item " + id,
+    q: meta.q || 3,
+    score,
+    lvl,
+    vr: !!vr,
+    elig: lt.ok,
+    why: lt.why || "",
+    swap: lt.swap || null,
+    specs: eligibleSpecs(meta, sp),
   };
 }
 
@@ -322,7 +368,9 @@ function collectScored(b, sp, diffs, selDiff, unknown) {
   b.results.forEach((r) => {
     const rd = String(diffOf(b, r));
     srcList(b, r).forEach((s) => {
-      const instId = s[0], encId = s[1], vr = s.length > 2 && s[2];
+      const instId = s[0],
+        encId = s[1],
+        vr = s.length > 2 && s[2];
       const info = resolve(instId, encId);
       if (!info) return;
       if (!state.showAll && !info.current) return;
@@ -330,14 +378,33 @@ function collectScored(b, sp, diffs, selDiff, unknown) {
       const key = instId + ":" + encId;
       // Only count unknowns that survive the filters — an unidentified source the user can't
       // see isn't a staleness signal worth interrupting them over.
-      if (info.unknown) unknown[key] = info.type === "dungeon" ? info.name : info.instName + " · " + info.name;
-      const g = groups[key] || (groups[key] = {
-        key, type: info.type, name: info.name, instName: info.instName || "", items: {},
-        special: info.type === "raid" && isSpecial(instId, encId),
-      });
+      if (info.unknown)
+        unknown[key] =
+          info.type === "dungeon"
+            ? info.name
+            : info.instName + " · " + info.name;
+      const g =
+        groups[key] ||
+        (groups[key] = {
+          key,
+          type: info.type,
+          name: info.name,
+          instName: info.instName || "",
+          items: {},
+          special: info.type === "raid" && isSpecial(instId, encId),
+        });
       // The same item can be simmed more than once for one source; keep its best showing.
-      const ex = g.items[r.item], sc = r.score || 0;
-      if (!ex || sc > ex.score) g.items[r.item] = poolItem(r.item, QE_DATA.items[r.item] || {}, sp, sc, r.level, vr);
+      const ex = g.items[r.item],
+        sc = r.score || 0;
+      if (!ex || sc > ex.score)
+        g.items[r.item] = poolItem(
+          r.item,
+          QE_DATA.items[r.item] || {},
+          sp,
+          sc,
+          r.level,
+          vr,
+        );
     });
   });
   return groups;
@@ -371,26 +438,41 @@ function priceGroup(b, g, selDiff, ownedMap, sp) {
   // What a roll here hands you, which is not always what the boss drops. Same for every item in
   // the row: an upgrade track step is one item level, whichever item lands on it.
   const reward = rollReward(g.type, diffKey(b, selDiff));
-  const items = Object.values(g.items).map((it) => {
-    const ov = b.overlay[g.key + ":" + it.id];
-    it.ownedIlvl = ownedMap[it.id] != null ? ownedMap[it.id] : null;
-    // A copy you already hold only makes the roll redundant if it's at least as good as what the
-    // roll would hand you — and in a season that promotes rewards to a vault track, that is not
-    // the drop. Owning the Heroic version of an item doesn't dupe a roll that pays out on the
-    // Myth track.
-    it.rollIlvl = rollIlvlFor(reward, it.lvl);
-    it.dupe = isDupe(it.ownedIlvl, it.rollIlvl);
-    it.state = (ov === "rolled" || ov === "own") ? ov
-      : ((b.vaultTake === it.id || it.dupe) ? "own" : "want");
-    return it;
-  }).sort((a, c) => c.score - a.score || a.name.localeCompare(c.name));
+  const items = Object.values(g.items)
+    .map((it) => {
+      const ov = b.overlay[g.key + ":" + it.id];
+      it.ownedIlvl = ownedMap[it.id] != null ? ownedMap[it.id] : null;
+      // A copy you already hold only makes the roll redundant if it's at least as good as what the
+      // roll would hand you — and in a season that promotes rewards to a vault track, that is not
+      // the drop. Owning the Heroic version of an item doesn't dupe a roll that pays out on the
+      // Myth track.
+      it.rollIlvl = rollIlvlFor(reward, it.lvl);
+      it.dupe = isDupe(it.ownedIlvl, it.rollIlvl);
+      it.state =
+        ov === "rolled" || ov === "own"
+          ? ov
+          : b.vaultTake === it.id || it.dupe
+            ? "own"
+            : "want";
+      return it;
+    })
+    .sort((a, c) => c.score - a.score || a.name.localeCompare(c.name));
 
   // Token cost follows the season unless the user overrode this encounter. The per-board
   // tokenRaid/tokenDungeon fields older saves carry were never user-editable, so they're ignored.
-  const cost = b.tokenOverride[g.key] || (g.type === "raid" ? SEASON.tokenRaid : SEASON.tokenDungeon) || 1;
+  const cost =
+    b.tokenOverride[g.key] ||
+    (g.type === "raid" ? SEASON.tokenRaid : SEASON.tokenDungeon) ||
+    1;
   const p = priceOf(items, cost);
   return {
-    g, items, cost, reward, remaining: p.remaining, num: p.num, ev: p.ev,
+    g,
+    items,
+    cost,
+    reward,
+    remaining: p.remaining,
+    num: p.num,
+    ev: p.ev,
     nWant: p.inPool.filter((i) => i.state === "want" && i.score > 0).length,
     nBlocked: items.length - p.inPool.length,
     alts: altSpecs(items, sp, cost, p.ev),
@@ -407,15 +489,22 @@ function priceGroup(b, g, selDiff, ownedMap, sp) {
 export function buildGroups(b) {
   const sp = b.lootSpec || specId(b.spec);
   const diffs = raidDiffs(b);
-  const selDiff = (b.raidDiff != null && diffs.includes(String(b.raidDiff))) ? String(b.raidDiff) : diffs[0];
+  const selDiff =
+    b.raidDiff != null && diffs.includes(String(b.raidDiff))
+      ? String(b.raidDiff)
+      : diffs[0];
   const unknown = {};
 
   const groups = collectScored(b, sp, diffs, selDiff, unknown);
   fillTable(groups, sp);
 
-  const ownedMap = ((state.simc[b.key] || {}).owned) || {};
-  const rows = Object.values(groups).map((g) => priceGroup(b, g, selDiff, ownedMap, sp));
-  rows.sort((a, c) => c.ev - a.ev || c.num - a.num || a.g.name.localeCompare(c.g.name));
+  const ownedMap = (state.simc[b.key] || {}).owned || {};
+  const rows = Object.values(groups).map((g) =>
+    priceGroup(b, g, selDiff, ownedMap, sp),
+  );
+  rows.sort(
+    (a, c) => c.ev - a.ev || c.num - a.num || a.g.name.localeCompare(c.g.name),
+  );
   return { rows, selDiff, diffs, unknown: Object.values(unknown) };
 }
 
@@ -443,7 +532,8 @@ export function vaultChoice(b) {
 
   const scored = {};
   b.results.forEach((r) => {
-    if (scored[r.item] == null || r.score > scored[r.item]) scored[r.item] = r.score || 0;
+    if (scored[r.item] == null || r.score > scored[r.item])
+      scored[r.item] = r.score || 0;
   });
   const options = simc.vault.map((v) => ({
     id: v.id,
@@ -462,7 +552,14 @@ export function vaultChoice(b) {
   // against a single vault slot the question is what one roll returns, with its price alongside.
   const perRoll = top ? top.num / top.remaining : 0;
 
-  return { options, keep, top, perRoll, drag: dragOf(rows, keep), verdict: perRoll > keep.score ? "roll" : "keep" };
+  return {
+    options,
+    keep,
+    top,
+    perRoll,
+    drag: dragOf(rows, keep),
+    verdict: perRoll > keep.score ? "roll" : "keep",
+  };
 }
 
 /**
@@ -486,21 +583,36 @@ function dragOf(rows, keep) {
     const it = r.items.find((x) => x.id === keep.id);
     // Only an item that currently counts can stop counting. One already Own or Rolled — a dupe, or
     // one you've had before — is doing its damage to the pool either way.
-    if (!it || it.elig === false || it.state !== "want" || !it.score || r.remaining <= 0) return;
+    if (
+      !it ||
+      it.elig === false ||
+      it.state !== "want" ||
+      !it.score ||
+      r.remaining <= 0
+    )
+      return;
     const amount = it.score / r.remaining;
-    if (!worst || amount > worst.amount) worst = { amount, name: r.g.name, isTop: i === 0 };
+    if (!worst || amount > worst.amount)
+      worst = { amount, name: r.g.name, isTop: i === 0 };
   });
   return worst;
 }
 
 /* ---------- display scaling ----------
-   A score means whatever its report meant by it, so every number on screen goes out through here:
-   Droptimizer boards can show raw DPS or a percentage of the sim's baseline, QE boards have one
-   unit and no choice. Kept beside the model rather than in a formatting module because the scaling
-   factor is a property of the board, which is a model concept. */
+   A score means whatever its report meant by it, so every number on screen goes out through here.
+   Kept beside the model rather than in a formatting module because the scaling factor is a property
+   of the board, which is a model concept.
+
+   The report decides the unit, because the two tools measure different things: a Droptimizer sims
+   damage, so its scores are DPS whoever ran it, and QE Live is a healing tool, so its scores are
+   HPS. Raw throughput is the default on both. A Droptimizer can also show each score as a percentage
+   of the sim's own baseline DPS; QE reports carry no baseline to divide by, so they have no
+   percentage to offer and the toggle stays hidden for them. */
 
 function facOf(b) {
-  return (b.source === "droptimizer" && b.metric === "pct") ? 100 / (b.baseline || 1) : 1;
+  return b.source === "droptimizer" && b.metric === "pct"
+    ? 100 / (b.baseline || 1)
+    : 1;
 }
 
 /** Format a number to at most 2 decimals with locale grouping. */
@@ -511,9 +623,15 @@ export function fmt(n) {
   });
 }
 
-/** Unit label for a board's scores. */
+/** Unit label for a board's scores: "DPS", "% DPS" or "HPS". */
 export function unitOf(b) {
-  return b.source === "droptimizer" ? (b.metric === "pct" ? "% dps" : "dps") : "value";
+  if (b.source !== "droptimizer") return "HPS";
+  return b.metric === "pct" ? "% DPS" : "DPS";
+}
+
+/** Can this board's scores be shown as a percentage? Only where the report brought a baseline. */
+export function hasPct(b) {
+  return b.source === "droptimizer" && b.baseline > 0;
 }
 
 /** Format a raw score in the board's chosen display unit. */

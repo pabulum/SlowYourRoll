@@ -34,5 +34,8 @@ test("an item with no icon leaves a placeholder rather than a broken image", () 
 });
 
 test("item names are escaped, not interpolated raw", () => {
-  assert.match(markup(nameHTML(BRACERS, "<script>x</script>", 4, 0)), /&lt;script&gt;/);
+  assert.match(
+    markup(nameHTML(BRACERS, "<script>x</script>", 4, 0)),
+    /&lt;script&gt;/,
+  );
 });

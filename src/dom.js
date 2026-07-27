@@ -11,18 +11,45 @@ import { part } from "./html.js";
 /** Every element id in index.html the app addresses. In the order they appear in the markup. */
 export const IDS = /** @type {const} */ ([
   // masthead
-  "seasonLabel", "themeBtn", "importBtn", "exportBtn", "importFile",
+  "seasonLabel",
+  "themeBtn",
+  "importBtn",
+  "exportBtn",
+  "importFile",
   // report input
-  "reportInput", "loadBtn",
+  "reportInput",
+  "loadBtn",
   // /simc panel
-  "simcBox", "simcInput", "simcBtn",
+  "simcBox",
+  "simcInput",
+  "simcBtn",
   // controls bar
-  "controls", "boardPicker", "boardBtn", "boardMenu", "specBadge", "shareBoard", "delBoard",
-  "metricLabel", "metricSeg", "diffLabel", "diffSeg", "lootSpecLabel", "lootSpecSel", "showAll",
+  "controls",
+  "boardPicker",
+  "boardBtn",
+  "boardMenu",
+  "specBadge",
+  "shareBoard",
+  "delBoard",
+  "metricLabel",
+  "metricSeg",
+  "diffLabel",
+  "diffSeg",
+  "lootSpecLabel",
+  "lootSpecSel",
+  "showAll",
   // notices and the ranking itself
-  "dataNote", "lootNote", "simcNote", "vaultPanel", "verdict", "listHead", "sources",
+  "dataNote",
+  "lootNote",
+  "simcNote",
+  "vaultPanel",
+  "verdict",
+  "listHead",
+  "sources",
   // legend + transient
-  "tokenNote", "rewardNote", "toast",
+  "tokenNote",
+  "rewardNote",
+  "toast",
 ]);
 
 /** @typedef {typeof IDS[number]} ElementId */
@@ -40,7 +67,10 @@ export const IDS = /** @type {const} */ ([
  */
 export function $(id) {
   const el = document.getElementById(id);
-  if (!el) throw new Error("No element #" + id + " — src/dom.js and index.html disagree");
+  if (!el)
+    throw new Error(
+      "No element #" + id + " — src/dom.js and index.html disagree",
+    );
   return el;
 }
 

@@ -3,7 +3,14 @@ import assert from "node:assert/strict";
 import { QE_DATA } from "../src/data.js";
 import { SEASON } from "../src/season.js";
 import { state } from "../src/store.js";
-import { resolve, buildGroups, rollIlvlFor, isDupe, vaultChoice, finalBosses } from "../src/model.js";
+import {
+  resolve,
+  buildGroups,
+  rollIlvlFor,
+  isDupe,
+  vaultChoice,
+  finalBosses,
+} from "../src/model.js";
 
 // A current raid + one of its bosses, pulled from the live database so the test
 // adapts to data changes rather than hard-coding ids.
@@ -14,20 +21,45 @@ const ENC_ID = Number(Object.keys(RAID.bosses)[0]);
 // A pool is the boss's whole loot table, not just what the report scored — the two synthetic items
 // below land in it alongside everything else the encounter drops. The board's spec ("holy") is
 // deliberately ambiguous, so nothing is filtered out by loot spec and the pool is the full table.
-const TABLE = Object.keys(QE_DATA.items)
-  .filter((id) => QE_DATA.items[id].s.some((s) => s[0] === RAID_ID && s[1] === ENC_ID)).length;
+const TABLE = Object.keys(QE_DATA.items).filter((id) =>
+  QE_DATA.items[id].s.some((s) => s[0] === RAID_ID && s[1] === ENC_ID),
+).length;
 const POOL = TABLE + 2;
 
 /** A minimal Droptimizer board with two upgrades on the same boss. */
 function makeBoard() {
   return {
-    id: "t", key: "testkey", reportId: "r", player: "Foo", realm: "area-52", spec: "holy",
-    source: "droptimizer", metric: "raw", baseline: 1000,
+    id: "t",
+    key: "testkey",
+    reportId: "r",
+    player: "Foo",
+    realm: "area-52",
+    spec: "holy",
+    source: "droptimizer",
+    metric: "raw",
+    baseline: 1000,
     results: [
-      { item: 900001, inst: RAID_ID, enc: ENC_ID, diff: "mythic", level: 639, score: 10 },
-      { item: 900002, inst: RAID_ID, enc: ENC_ID, diff: "mythic", level: 639, score: 20 },
+      {
+        item: 900001,
+        inst: RAID_ID,
+        enc: ENC_ID,
+        diff: "mythic",
+        level: 639,
+        score: 10,
+      },
+      {
+        item: 900002,
+        inst: RAID_ID,
+        enc: ENC_ID,
+        diff: "mythic",
+        level: 639,
+        score: 20,
+      },
     ],
-    overlay: {}, tokenOverride: {}, vaultTake: null, raidDiff: null,
+    overlay: {},
+    tokenOverride: {},
+    vaultTake: null,
+    raidDiff: null,
   };
 }
 
@@ -44,12 +76,15 @@ test("buildGroups scores a pool as (Σ wanted ÷ pool size) ÷ token cost", () =
   const built = buildGroups(makeBoard());
   assert.equal(built.rows.length, 1);
   const row = built.rows[0];
-  assert.equal(row.num, 30);        // 10 + 20 wanted
-  assert.ok(TABLE > 0, "the boss has a known loot table to dilute the pool with");
+  assert.equal(row.num, 30); // 10 + 20 wanted
+  assert.ok(
+    TABLE > 0,
+    "the boss has a known loot table to dilute the pool with",
+  );
   assert.equal(row.remaining, POOL); // the scored pair plus every other drop, at zero value
-  assert.equal(row.cost, SEASON.tokenRaid);       // raid cost comes from the season
+  assert.equal(row.cost, SEASON.tokenRaid); // raid cost comes from the season
   assert.equal(row.ev, 30 / POOL / SEASON.tokenRaid);
-  assert.equal(row.nWant, 2);       // only the two the report actually valued
+  assert.equal(row.nWant, 2); // only the two the report actually valued
 });
 
 test("a Rolled item leaves the pool and stops counting toward EV", () => {
@@ -99,11 +134,15 @@ test("holding a copy at the roll's item level marks it Own and drops it from the
   state.simc = { testkey: { owned: { 900002: 639 } } };
   const row = buildGroups(b).rows[0];
   const it = row.items.filter((x) => x.id === 900002)[0];
-  assert.equal(it.rollIlvl, 639, "Season 1 pays the drop, so that's what a dupe is measured against");
+  assert.equal(
+    it.rollIlvl,
+    639,
+    "Season 1 pays the drop, so that's what a dupe is measured against",
+  );
   assert.equal(it.dupe, true);
   assert.equal(it.state, "own");
-  assert.equal(row.num, 10);          // only the item they don't already hold
-  assert.equal(row.remaining, POOL);  // an owned copy still dilutes the pool
+  assert.equal(row.num, 10); // only the item they don't already hold
+  assert.equal(row.remaining, POOL); // an owned copy still dilutes the pool
 });
 
 test("holding a weaker copy leaves the item Want, tagged with what you hold", () => {
@@ -140,7 +179,12 @@ test("a raid with fewer bosses than asked for yields all of them", () => {
 
 /** Put `ids` in this week's vault, as the /simc addon would report them. */
 function withVault(ids) {
-  state.simc = { testkey: { owned: {}, vault: ids.map((id) => ({ name: "V" + id, ilvl: 639, id })) } };
+  state.simc = {
+    testkey: {
+      owned: {},
+      vault: ids.map((id) => ({ name: "V" + id, ilvl: 639, id })),
+    },
+  };
 }
 
 test("with no vault imported there is no trade to weigh", () => {
@@ -164,7 +208,11 @@ test("a vault of nothing you want says spend the token", () => {
   withVault([900003]); // never scored by the report
   const vc = vaultChoice(makeBoard());
   assert.equal(vc.keep.score, 0);
-  assert.equal(vc.keep.scored, false, "unevaluated is not the same claim as worthless");
+  assert.equal(
+    vc.keep.scored,
+    false,
+    "unevaluated is not the same claim as worthless",
+  );
   assert.equal(vc.verdict, "roll");
 });
 
@@ -184,8 +232,16 @@ test("taking a vault item is charged for the pool it permanently pollutes", () =
   state.showAll = false;
   withVault([900002]);
   const vc = vaultChoice(makeBoard());
-  assert.equal(vc.drag.amount, 20 / POOL, "the numerator loses 20 over an unchanged pool");
-  assert.equal(vc.drag.isTop, true, "and it's the encounter the ranking would send you to");
+  assert.equal(
+    vc.drag.amount,
+    20 / POOL,
+    "the numerator loses 20 over an unchanged pool",
+  );
+  assert.equal(
+    vc.drag.isTop,
+    true,
+    "and it's the encounter the ranking would send you to",
+  );
 });
 
 test("an item already out of the running drags nothing further", () => {
@@ -215,10 +271,13 @@ test("the best vault option is the one the trade is measured against", () => {
 test("an item the report never scored is not auto-owned on item level alone", () => {
   state.showAll = false;
   const b = makeBoard();
-  const filler = Object.keys(QE_DATA.items)
-    .filter((id) => QE_DATA.items[id].s.some((s) => s[0] === RAID_ID && s[1] === ENC_ID))[0];
+  const filler = Object.keys(QE_DATA.items).filter((id) =>
+    QE_DATA.items[id].s.some((s) => s[0] === RAID_ID && s[1] === ENC_ID),
+  )[0];
   state.simc = { testkey: { owned: { [filler]: 9999 } } };
-  const it = buildGroups(b).rows[0].items.filter((x) => String(x.id) === filler)[0];
+  const it = buildGroups(b).rows[0].items.filter(
+    (x) => String(x.id) === filler,
+  )[0];
   assert.equal(it.lvl, 0);
   assert.equal(it.rollIlvl, null);
   assert.equal(it.dupe, false);

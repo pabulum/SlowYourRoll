@@ -10,19 +10,44 @@
 
 /** Armor subclass each class wears. */
 export const CLASS_ARMOR = {
-  Mage: 1, Priest: 1, Warlock: 1,
-  Druid: 2, Monk: 2, Rogue: 2, "Demon Hunter": 2,
-  Hunter: 3, Shaman: 3, Evoker: 3,
-  "Death Knight": 4, Paladin: 4, Warrior: 4,
+  Mage: 1,
+  Priest: 1,
+  Warlock: 1,
+  Druid: 2,
+  Monk: 2,
+  Rogue: 2,
+  "Demon Hunter": 2,
+  Hunter: 3,
+  Shaman: 3,
+  Evoker: 3,
+  "Death Knight": 4,
+  Paladin: 4,
+  Warrior: 4,
 };
 
-export const ARMOR_NAME = { 1: "Cloth", 2: "Leather", 3: "Mail", 4: "Plate", 6: "Shield" };
+export const ARMOR_NAME = {
+  1: "Cloth",
+  2: "Leather",
+  3: "Mail",
+  4: "Plate",
+  6: "Shield",
+};
 
 /** Blizzard's own class colours — used as a swatch so a character reads at a glance. */
 export const CLASS_COLOR = {
-  "Death Knight": "#c41e3a", "Demon Hunter": "#a330c9", Druid: "#ff7c0a", Evoker: "#33937f",
-  Hunter: "#aad372", Mage: "#3fc7eb", Monk: "#00ff98", Paladin: "#f48cba", Priest: "#ffffff",
-  Rogue: "#fff468", Shaman: "#0070dd", Warlock: "#8788ee", Warrior: "#c69b6d",
+  "Death Knight": "#c41e3a",
+  "Demon Hunter": "#a330c9",
+  Druid: "#ff7c0a",
+  Evoker: "#33937f",
+  Hunter: "#aad372",
+  Mage: "#3fc7eb",
+  Monk: "#00ff98",
+  Paladin: "#f48cba",
+  Priest: "#ffffff",
+  Rogue: "#fff468",
+  Shaman: "#0070dd",
+  Warlock: "#8788ee",
+  Warrior: "#c69b6d",
 };
 
 /** Classes that can equip a shield. */
@@ -46,7 +71,19 @@ export const CLASS_WEAPONS = {
 };
 
 export const WEAPON_NAME = {
-  0: "One-handed axe", 1: "Two-handed axe", 2: "Bow", 3: "Gun", 4: "One-handed mace",
-  5: "Two-handed mace", 6: "Polearm", 7: "One-handed sword", 8: "Two-handed sword",
-  9: "Warglaive", 10: "Staff", 13: "Fist weapon", 15: "Dagger", 18: "Crossbow", 19: "Wand",
+  0: "One-handed axe",
+  1: "Two-handed axe",
+  2: "Bow",
+  3: "Gun",
+  4: "One-handed mace",
+  5: "Two-handed mace",
+  6: "Polearm",
+  7: "One-handed sword",
+  8: "Two-handed sword",
+  9: "Warglaive",
+  10: "Staff",
+  13: "Fist weapon",
+  15: "Dagger",
+  18: "Crossbow",
+  19: "Wand",
 };

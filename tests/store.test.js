@@ -7,7 +7,10 @@ test("keyOf normalizes name, realm, and the first word of spec", () => {
 });
 
 test("keyOf is stable across spec's trailing words", () => {
-  assert.equal(keyOf("Foo", "Realm", "Holy Priest"), keyOf("Foo", "Realm", "Holy Paladin"));
+  assert.equal(
+    keyOf("Foo", "Realm", "Holy Priest"),
+    keyOf("Foo", "Realm", "Holy Paladin"),
+  );
 });
 
 test("uid produces unique values", () => {

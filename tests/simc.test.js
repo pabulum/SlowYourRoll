@@ -37,10 +37,16 @@ test("parseSimc extracts character identity", () => {
 test("parseSimc reads the weekly vault choices", () => {
   const d = parseSimc(SAMPLE);
   assert.equal(d.vault.length, 2);
-  assert.deepEqual(d.vault.map((v) => v.id), [1111, 2222]);
+  assert.deepEqual(
+    d.vault.map((v) => v.id),
+    [1111, 2222],
+  );
   assert.equal(d.vault[0].ilvl, 639);
   // The addon puts a bare "#" between entries; it must not end up in the name.
-  assert.deepEqual(d.vault.map((v) => v.name), ["Some Trinket", "Another Item"]);
+  assert.deepEqual(
+    d.vault.map((v) => v.name),
+    ["Some Trinket", "Another Item"],
+  );
 });
 
 test("parseSimc reads logged bonus rolls", () => {

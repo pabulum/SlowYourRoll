@@ -14,9 +14,12 @@ QuestionablyEpic / Raidbots; nothing is uploaded, and your state is saved to `lo
 EV = ( Σ score of items you still want ÷ items still in the pool ) ÷ token cost
 ```
 
-Item scores come straight from your report — **QE Live** upgrade reports for healers,
-**Raidbots Droptimizer** sims for DPS/tanks (values are the DPS gain per drop). Each item in a
-pool is in one of three states you can cycle by tapping it:
+Item scores come straight from your report: **QE Live** upgrade reports for healers, scored in
+**HPS**, and **Raidbots Droptimizer** sims for everyone else, scored in **DPS**. Raw throughput is
+what the page shows by default; a Droptimizer also carries a baseline, so its scores can be
+switched to a percentage of it from the _Units_ control. A QE report brings no baseline, so there
+is nothing to switch to and the control reads out `HPS` instead. Each item in a pool is in one of
+three states you can cycle by tapping it:
 
 - **Want** — an upgrade still in the pool; its score counts toward EV.
 - **Own** — you have it (or took it from the vault). It still dilutes the pool but is worth 0
@@ -33,25 +36,25 @@ can receive, so items it can't — a plate helm for a monk, a caster trinket for
 agility weapon for a Mistweaver — are left out of the math entirely and folded away with the
 reason attached.
 
-That makes loot spec a lever, not just a filter, and it cuts both ways: switching can *add* items
+That makes loot spec a lever, not just a filter, and it cuts both ways: switching can _add_ items
 you want, but more often the win is **dropping** ones you don't. A Mistweaver at Pit of Saron is
 the standard case — looting as Windwalker sheds Nevermelting Ice Crystal, which no agility spec
 can be given, and keeps every piece of leather. Same wanted value, one fewer item in the pool,
 better odds on each. So each encounter is costed as every spec of your class, and any that beats
 your current one is offered under the item list, named by what it dodges and what it gives up.
-Items only some of your specs can receive are badged as such. Note that your report's *values*
+Items only some of your specs can receive are badged as such. Note that your report's _values_
 still only describe the spec it was simmed as; the app says so when the two differ.
 
 **Icons and hover cards.** Item names and icons link to Wowhead, and Wowhead's tooltip widget
 (`widgets/power.js`, the same one QE Live and Raidbots use) renders its card on hover. Links carry
-the item level *this source* drops at, so the card describes the item you'd actually be handed
+the item level _this source_ drops at, so the card describes the item you'd actually be handed
 rather than a generic one. Icons come from Blizzard's icon CDN.
 
 That widget is the app's only third-party script, and the only thing that tells anyone else what
 you're doing: hovering an item tells Wowhead which item you hovered. Nothing from your report is
 involved either way. Blocked or offline, the links stay links and the app is unaffected.
 
-Items badged **very rare** (and flagged **✦** in the recommendation) are rare off a *boss kill*, but
+Items badged **very rare** (and flagged **✦** in the recommendation) are rare off a _boss kill_, but
 a bonus roll draws evenly from the pool — so they're weighted no differently here, and their EV is
 not discounted. That's intentional: the roll is the one place a very rare item costs the same as
 common filler, which is usually a reason to chase it rather than shy off it.
@@ -100,7 +103,7 @@ QE Live reports are the exception: they carry only item ids, and the loot table 
 
 ## Sharing a report
 
-The 🔗 button next to the report picker copies a link like `…/?report=<code>`. Opening it
+The link button next to the report picker copies a link like `…/?report=<code>`. Opening it
 loads that report before anything is pasted — handy for handing a character's board to a
 guild officer. Only the report id travels: the recipient fetches the same scores fresh from
 QE Live / Raidbots, while rolled history, Own/Rolled marks, and token overrides stay in each
@@ -146,14 +149,16 @@ and realm names from a pasted report. So markup is built with the `html` tagged 
 marked as markup:
 
 ```js
-html`<div class="${cls}">${item.name}</div>`   // both escaped
-html`<ul>${rows.map(rowHTML)}</ul>`            // arrays join; nested html`` passes through
-html`${cond && html`<b>only sometimes</b>`}`   // false / null / undefined render as nothing
+html`<div class="${cls}">${item.name}</div>`; // both escaped
+html`<ul>
+  ${rows.map(rowHTML)}
+</ul>`; // arrays join; nested html`` passes through
+html`${cond && html`<b>only sometimes</b>`}`; // false / null / undefined render as nothing
 ```
 
 Safety is the default rather than a discipline: there is no `esc()` to forget. The one way past it
 is `raw()`, which is what to grep for when auditing. Interpolations are safe in text and in
-*double-quoted* attributes — write `class="${x}"`, never `class='${x}'`.
+_double-quoted_ attributes — write `class="${x}"`, never `class='${x}'`.
 
 ### Reaching the page
 

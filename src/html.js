@@ -41,9 +41,16 @@ export function raw(s) {
 
 /** Escape a value for interpolation into text or a double-quoted attribute. */
 export function esc(t) {
-  return String(t == null ? "" : t).replace(/[&<>"]/g, (m) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;",
-  }[m]));
+  return String(t == null ? "" : t).replace(
+    /[&<>"]/g,
+    (m) =>
+      ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+      })[m],
+  );
 }
 
 /**
@@ -72,7 +79,8 @@ export function part(v) {
  */
 export function html(strings, ...values) {
   let out = strings[0];
-  for (let i = 0; i < values.length; i++) out += part(values[i]) + strings[i + 1];
+  for (let i = 0; i < values.length; i++)
+    out += part(values[i]) + strings[i + 1];
   return new Html(out);
 }
 

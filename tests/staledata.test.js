@@ -21,13 +21,37 @@ const FUTURE_DUNGEON = 999701;
 /** A Droptimizer board whose drops come from a raid this build has never heard of. */
 function futureBoard() {
   return {
-    id: "t", key: "futurekey", reportId: "r", player: "Foo", realm: "area-52", spec: "holy",
-    source: "droptimizer", metric: "raw", baseline: 1000,
+    id: "t",
+    key: "futurekey",
+    reportId: "r",
+    player: "Foo",
+    realm: "area-52",
+    spec: "holy",
+    source: "droptimizer",
+    metric: "raw",
+    baseline: 1000,
     results: [
-      { item: 900001, inst: FUTURE_RAID, enc: FUTURE_BOSS, diff: "mythic", level: 700, score: 10 },
-      { item: 900002, inst: FUTURE_RAID, enc: FUTURE_BOSS, diff: "mythic", level: 700, score: 20 },
+      {
+        item: 900001,
+        inst: FUTURE_RAID,
+        enc: FUTURE_BOSS,
+        diff: "mythic",
+        level: 700,
+        score: 10,
+      },
+      {
+        item: 900002,
+        inst: FUTURE_RAID,
+        enc: FUTURE_BOSS,
+        diff: "mythic",
+        level: 700,
+        score: 20,
+      },
     ],
-    overlay: {}, tokenOverride: {}, vaultTake: null, raidDiff: null,
+    overlay: {},
+    tokenOverride: {},
+    vaultTake: null,
+    raidDiff: null,
   };
 }
 
@@ -36,8 +60,16 @@ test("an unknown raid resolves to a flagged placeholder instead of vanishing", (
   assert.ok(info, "a future raid must resolve to something rankable");
   assert.equal(info.type, "raid");
   assert.equal(info.unknown, true);
-  assert.equal(info.current, true, "unknown content is assumed current, not filtered away");
-  assert.match(info.name, /999801/, "the placeholder names the encounter id so it can be looked up");
+  assert.equal(
+    info.current,
+    true,
+    "unknown content is assumed current, not filtered away",
+  );
+  assert.match(
+    info.name,
+    /999801/,
+    "the placeholder names the encounter id so it can be looked up",
+  );
 });
 
 test("an unknown M+ dungeon resolves to a flagged placeholder", () => {
@@ -56,7 +88,10 @@ test("sources that can't be bonus-rolled stay filtered out, unflagged", () => {
   // Instances the data build saw in item sources but deliberately ignored (world bosses,
   // leveling drops, catch-up vendors). Dropping these must not look like staleness.
   const ignored = QE_DATA.ignoredInstances || [];
-  assert.ok(ignored.length, "the generated database should record its ignored instances");
+  assert.ok(
+    ignored.length,
+    "the generated database should record its ignored instances",
+  );
   assert.equal(resolve(Number(ignored[0]), 1), null);
 });
 
@@ -66,16 +101,37 @@ test("a raid's non-encounter drops are filtered out, not mistaken for staleness"
   // boss map only sometimes, so resolving it by name would make a ranked "Voidspire · Voidspire"
   // row appear and disappear with an upstream typo.
   const raidId = Number(QE_DATA.currentRaids[0]);
-  assert.equal(resolve(raidId, 999), null, "trash & catalyst loot is not a roll source");
-  assert.equal(resolve(raidId, -78), null, "world drops filed against a tier are not a roll source");
+  assert.equal(
+    resolve(raidId, 999),
+    null,
+    "trash & catalyst loot is not a roll source",
+  );
+  assert.equal(
+    resolve(raidId, -78),
+    null,
+    "world drops filed against a tier are not a roll source",
+  );
 
   state.showAll = false;
   state.simc = {};
   const b = futureBoard();
-  b.results = [{ item: 900001, inst: raidId, enc: 999, diff: "mythic", level: 700, score: 10 }];
+  b.results = [
+    {
+      item: 900001,
+      inst: raidId,
+      enc: 999,
+      diff: "mythic",
+      level: 700,
+      score: 10,
+    },
+  ];
   const built = buildGroups(b);
   assert.deepEqual(built.rows, [], "no phantom row");
-  assert.deepEqual(built.unknown, [], "and no warning — this was dropped knowingly");
+  assert.deepEqual(
+    built.unknown,
+    [],
+    "and no warning — this was dropped knowingly",
+  );
 });
 
 test("an unlisted encounter inside a known raid is dropped as trash, not flagged", () => {
@@ -90,15 +146,27 @@ test("a next-season report still ranks, and reports what it couldn't identify", 
   state.simc = {};
   const built = buildGroups(futureBoard());
 
-  assert.equal(built.rows.length, 1, "the unknown boss must still produce a ranked row");
+  assert.equal(
+    built.rows.length,
+    1,
+    "the unknown boss must still produce a ranked row",
+  );
   const row = built.rows[0];
   assert.equal(row.num, 30);
   assert.equal(row.remaining, 2);
   assert.equal(row.cost, SEASON.tokenRaid);
   assert.equal(row.ev, 30 / 2 / SEASON.tokenRaid);
 
-  assert.equal(built.unknown.length, 1, "the staleness banner needs something to report");
-  assert.match(built.unknown[0], /999901/, "the warning identifies the unknown raid");
+  assert.equal(
+    built.unknown.length,
+    1,
+    "the staleness banner needs something to report",
+  );
+  assert.match(
+    built.unknown[0],
+    /999901/,
+    "the warning identifies the unknown raid",
+  );
 });
 
 test("a current raid's trash drops raise no row and no warning", () => {
@@ -108,7 +176,16 @@ test("a current raid's trash drops raise no row and no warning", () => {
   state.simc = {};
   const raidId = Number(QE_DATA.currentRaids[0]);
   const b = futureBoard();
-  b.results = [{ item: 900001, inst: raidId, enc: FUTURE_BOSS, diff: "mythic", level: 700, score: 10 }];
+  b.results = [
+    {
+      item: 900001,
+      inst: raidId,
+      enc: FUTURE_BOSS,
+      diff: "mythic",
+      level: 700,
+      score: 10,
+    },
+  ];
   const built = buildGroups(b);
 
   assert.deepEqual(built.rows, []);
@@ -121,7 +198,16 @@ test("known current content produces no staleness warning", () => {
   const raidId = Number(QE_DATA.currentRaids[0]);
   const encId = Number(Object.keys(QE_DATA.raids[String(raidId)].bosses)[0]);
   const b = futureBoard();
-  b.results = [{ item: 900001, inst: raidId, enc: encId, diff: "mythic", level: 700, score: 10 }];
+  b.results = [
+    {
+      item: 900001,
+      inst: raidId,
+      enc: encId,
+      diff: "mythic",
+      level: 700,
+      score: 10,
+    },
+  ];
   const built = buildGroups(b);
   assert.equal(built.rows.length, 1);
   assert.deepEqual(built.unknown, []);
@@ -136,11 +222,29 @@ test("unknown sources hidden by a filter don't raise a warning", () => {
   const encId = Number(Object.keys(QE_DATA.raids[String(raidId)].bosses)[0]);
   const b = futureBoard();
   b.results = [
-    { item: 900001, inst: raidId, enc: encId, diff: "mythic", level: 700, score: 10 },
-    { item: 900002, inst: FUTURE_RAID, enc: FUTURE_BOSS, diff: "normal", level: 650, score: 20 },
+    {
+      item: 900001,
+      inst: raidId,
+      enc: encId,
+      diff: "mythic",
+      level: 700,
+      score: 10,
+    },
+    {
+      item: 900002,
+      inst: FUTURE_RAID,
+      enc: FUTURE_BOSS,
+      diff: "normal",
+      level: 650,
+      score: 20,
+    },
   ];
   b.raidDiff = "mythic";
   const built = buildGroups(b);
   assert.equal(built.rows.length, 1, "only the mythic row shows");
-  assert.deepEqual(built.unknown, [], "the filtered-out normal row raises nothing");
+  assert.deepEqual(
+    built.unknown,
+    [],
+    "the filtered-out normal row raises nothing",
+  );
 });

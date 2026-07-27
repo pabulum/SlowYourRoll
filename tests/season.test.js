@@ -54,7 +54,10 @@ test("every reward carries a label and an item level slot", () => {
     Object.keys(table).forEach((d) => {
       const r = table[d];
       assert.ok(r.label, "Season " + n + " " + d + " needs a display label");
-      assert.ok(r.ilvl === null || typeof r.ilvl === "number", "Season " + n + " " + d + " ilvl");
+      assert.ok(
+        r.ilvl === null || typeof r.ilvl === "number",
+        "Season " + n + " " + d + " ilvl",
+      );
     });
   });
 });

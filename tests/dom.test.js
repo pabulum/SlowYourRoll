@@ -8,26 +8,43 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { IDS, $, setHTML, setText, setShown, setDisplayed } from "../src/dom.js";
+import {
+  IDS,
+  $,
+  setHTML,
+  setText,
+  setShown,
+  setDisplayed,
+} from "../src/dom.js";
 import { html } from "../src/html.js";
 import { loadPage } from "./page.js";
 
 /** Every id actually present in index.html. */
 function idsInMarkup() {
   const doc = loadPage();
-  return [...doc.querySelectorAll("[id]")].map((el) => el.getAttribute("id")).sort();
+  return [...doc.querySelectorAll("[id]")]
+    .map((el) => el.getAttribute("id"))
+    .sort();
 }
 
 test("every id the app addresses exists in index.html", () => {
   const present = new Set(idsInMarkup());
   const missing = IDS.filter((id) => !present.has(id));
-  assert.deepEqual(missing, [], "src/dom.js names elements the page doesn't have");
+  assert.deepEqual(
+    missing,
+    [],
+    "src/dom.js names elements the page doesn't have",
+  );
 });
 
 test("every element in index.html is one the app addresses", () => {
   const declared = new Set(IDS);
   const unused = idsInMarkup().filter((id) => !declared.has(id));
-  assert.deepEqual(unused, [], "index.html carries elements nothing renders into");
+  assert.deepEqual(
+    unused,
+    [],
+    "index.html carries elements nothing renders into",
+  );
 });
 
 test("the registry has no duplicates", () => {
@@ -44,7 +61,10 @@ test("setHTML renders a fragment and escapes a bare string", () => {
   setHTML("sources", html`<b>${"a<b"}</b>`);
   assert.equal(doc.getElementById("sources").innerHTML, "<b>a&lt;b</b>");
   setHTML("sources", "<b>not markup</b>");
-  assert.equal(doc.getElementById("sources").innerHTML, "&lt;b&gt;not markup&lt;/b&gt;");
+  assert.equal(
+    doc.getElementById("sources").innerHTML,
+    "&lt;b&gt;not markup&lt;/b&gt;",
+  );
 });
 
 test("setText never renders markup", () => {
@@ -64,7 +84,13 @@ test("setShown toggles hidden and setDisplayed toggles display", () => {
   assert.equal(doc.getElementById("listHead").hasAttribute("hidden"), false);
 
   setDisplayed("diffSeg", false);
-  assert.match(doc.getElementById("diffSeg").getAttribute("style") || "", /display:\s*none/);
+  assert.match(
+    doc.getElementById("diffSeg").getAttribute("style") || "",
+    /display:\s*none/,
+  );
   setDisplayed("diffSeg", true);
-  assert.doesNotMatch(doc.getElementById("diffSeg").getAttribute("style") || "", /display:\s*none/);
+  assert.doesNotMatch(
+    doc.getElementById("diffSeg").getAttribute("style") || "",
+    /display:\s*none/,
+  );
 });
