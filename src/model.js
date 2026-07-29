@@ -618,16 +618,23 @@ export function vaultChoice(b) {
   const simc = state.simc[b.key];
   if (!simc || !simc.vault || !simc.vault.length) return null;
 
+  // Each item's best showing in the report, and the item level that showing was simmed at — which
+  // is the boss's drop, not the vault's copy of it. The two disagree routinely (a vault reward
+  // arrives at the top of its track), so the level is carried alongside the number rather than
+  // quietly folded into it; `vaultOptionHTML` says so where they differ.
   const scored = {};
   b.results.forEach((r) => {
     const sc = scoreOf(r);
-    if (scored[r.item] == null || sc > scored[r.item]) scored[r.item] = sc;
+    const ex = scored[r.item];
+    if (!ex || sc > ex.score)
+      scored[r.item] = { score: sc, ilvl: r.level || 0 };
   });
   const options = simc.vault.map((v) => ({
     id: v.id,
     name: (QE_DATA.items[v.id] || {}).n || v.name,
     ilvl: v.ilvl,
-    score: scored[v.id] || 0,
+    score: (scored[v.id] || {}).score || 0,
+    scoredIlvl: (scored[v.id] || {}).ilvl || 0,
     // Distinguished from a genuine zero: an item the report never evaluated has no value we can
     // quote, and saying "worth 0" about it would be a claim we haven't earned.
     scored: scored[v.id] != null,
@@ -742,8 +749,21 @@ export function baselineOf(b) {
   return base;
 }
 
-/** Format a number to at most 2 decimals with locale grouping. */
+/**
+ * Format a number to at most 2 decimals with locale grouping — except where 2 decimals is the whole
+ * number.
+ *
+ * An EV is a score divided by a pool of a dozen items and again by a token cost, so it is already
+ * two orders of magnitude below the scores it came from; in percentage mode, where the scores are
+ * themselves fractions of a percent, that lands under 0.01 and a flat 2-decimal rounding renders
+ * every dungeon on the page as "0". Observed on a real Midnight report: a 578 HPS upgrade is 0.24%
+ * of a 242,000 HPS baseline, and one roll's expectation on it 0.02% — with the row below it at
+ * "0". So anything under 0.1 keeps two significant figures instead, which is enough to rank by.
+ */
 export function fmt(n) {
+  const abs = Math.abs(n);
+  if (abs > 0 && abs < 0.1)
+    return n.toLocaleString(undefined, { maximumSignificantDigits: 2 });
   return (Math.round(n * 100) / 100).toLocaleString(undefined, {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,

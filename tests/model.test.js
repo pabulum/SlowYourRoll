@@ -12,6 +12,7 @@ import {
   vaultChoice,
   finalBosses,
   baselineOf,
+  fmt,
   hasPct,
   unitOf,
   dv,
@@ -267,6 +268,17 @@ test("a vault item that no live pool contains has nothing to drag", () => {
   assert.equal(vaultChoice(makeBoard()).drag, null);
 });
 
+// The score belongs to the boss's drop, the item belongs to the vault, and the two are routinely a
+// track step apart — so the level the number was earned at travels with it.
+test("a vault option carries the item level its score was simmed at", () => {
+  state.showAll = false;
+  withVault([900002]);
+  const opt = vaultChoice(makeBoard()).options[0];
+  assert.equal(opt.score, 20);
+  assert.equal(opt.scoredIlvl, 639, "the report's level, not the vault's");
+  assert.equal(opt.ilvl, 639);
+});
+
 test("the best vault option is the one the trade is measured against", () => {
   state.showAll = false;
   withVault([900001, 900002]);
@@ -365,6 +377,17 @@ test("percentages scale off that baseline: 250 of 10,000 HPS reads as 2.5", () =
   const b = makeQEBoard();
   assert.equal(dv(b, 250), "250");
   assert.equal(dv({ ...b, metric: "pct" }, 250), "2.5");
+});
+
+// An EV is a score over a dozen-item pool over a token cost, so in percentage mode it lands two
+// orders of magnitude below the item scores it came from. On a real Midnight report that put every
+// dungeon at "0.00" — a ranking rendered as a column of zeroes.
+test("an EV too small for two decimals keeps two significant figures instead", () => {
+  assert.equal(fmt(0.0014), "0.0014");
+  assert.equal(fmt(0.0199), "0.02");
+  assert.equal(fmt(0), "0", "a real zero still reads as zero");
+  assert.equal(fmt(578), "578", "and the numbers that were fine are untouched");
+  assert.equal(fmt(48.166666), "48.17");
 });
 
 test("a report with no usable pair offers no percentage rather than a wrong one", () => {

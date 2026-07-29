@@ -190,6 +190,48 @@ test("the vault panel prices the choice both ways and offers to take it", () => 
   );
 });
 
+// A vault reward and the boss's drop are rarely the same item level, and the score on screen is the
+// report's, which only ever simmed the drop. Real case: a QE report simmed at ilvl 289 beside a
+// vault offering 279 of the same item.
+test("the vault names the item level its score was simmed at when it isn't the one on offer", () => {
+  const doc = renderWith([makeBoard()], {
+    simc: {
+      testkey: {
+        owned: {},
+        vault: [{ id: 900002, ilvl: 652, name: "V900002" }],
+      },
+    },
+  });
+  const panel = doc.getElementById("vaultPanel").textContent;
+  assert.match(panel, /scored at ilvl 639/);
+  assert.match(panel, /your vault offers ilvl 652/);
+});
+
+test("a vault item scored at the level it's offered at is quoted without qualification", () => {
+  const doc = renderWith([makeBoard()], {
+    simc: {
+      testkey: {
+        owned: {},
+        vault: [{ id: 900002, ilvl: 639, name: "V900002" }],
+      },
+    },
+  });
+  const panel = doc.getElementById("vaultPanel").textContent;
+  assert.doesNotMatch(panel, /scored at ilvl/);
+  // And the suppressed branch leaves nothing behind: a bare 0 is a value the templating renders.
+  assert.match(panel, /ilvl 639(?!\d)/);
+});
+
+// QE sends dateCreated as "2026 - 7 - 29", which Date refuses; the masthead used to print it raw.
+test("a QE report's own date format reaches the masthead as a date", () => {
+  const doc = renderWith([
+    makeBoard({ source: "qe", fetchedAt: "2026 - 7 - 29" }),
+  ]);
+  const badge = doc.getElementById("specBadge").textContent;
+  assert.match(badge, /QE Live · simmed \S/);
+  assert.doesNotMatch(badge, /2026/);
+});
+
 test("with no vault imported the panel renders nothing at all", () => {
   const doc = renderWith([makeBoard()]);
   assert.equal(doc.getElementById("vaultPanel").innerHTML, "");

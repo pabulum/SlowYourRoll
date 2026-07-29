@@ -139,6 +139,19 @@ loots as a DPS spec to shed intellect trinkets it is not the report's spec. `act
 [`src/model.js`](src/model.js) prefers an explicit choice in the dropdown, then `/simc`, then the
 report's own spec, and ignores a loot spec belonging to another class.
 
+**A vault option's score is the report's score for the _boss's_ drop.** The vault hands you its own
+copy of the item, and the two item levels routinely differ — a vault reward arrives at the top of
+its track, while the report simmed whatever that boss drops (unless it was imported with **Upgrade
+ALL to Max Level**, which brings them back together). Nothing rescales the number, because the
+report is the only source of values there is and interpolating one would be inventing it. Instead
+the panel names the level the score was earned at whenever it isn't the level on offer, so a figure
+quoted against a different item is visibly quoted against a different item. It follows that the
+vault verdict is at its sharpest on a report imported with **Upgrade ALL** on.
+
+**QE's `dateCreated` is `"2026 - 7 - 29"`** — spaced separators and a one-digit month, which `Date`
+refuses outright. `shortDate` in [`src/render.js`](src/render.js) reads the three numbers out and
+constructs the date itself, rather than printing the raw string into the masthead.
+
 ## Seasons
 
 Two things are season-dependent, and they're kept apart because they change at different times.

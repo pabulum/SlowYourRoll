@@ -47,6 +47,26 @@ test("every element in index.html is one the app addresses", () => {
   );
 });
 
+// The controls bar wraps, and a label loose in that flex row wraps independently of the control it
+// names — "Loot spec" ending one line with its dropdown starting the next.
+test("each control's label shares a wrapper with the control it names", () => {
+  const doc = loadPage();
+  const labels = [...doc.querySelectorAll(".controls .seg-label")];
+  assert.ok(labels.length >= 3, "the bar still has labelled controls");
+  labels.forEach((l) => {
+    const box = l.parentElement;
+    assert.match(
+      box.getAttribute("class") || "",
+      /\bctl\b/,
+      "a label sits loose in the wrapping row",
+    );
+    assert.ok(
+      box.querySelector(".seg, select"),
+      "and its wrapper holds the control",
+    );
+  });
+});
+
 test("the registry has no duplicates", () => {
   assert.equal(new Set(IDS).size, IDS.length);
 });

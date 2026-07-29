@@ -779,6 +779,15 @@ a {
   gap: 8px;
   flex-wrap: wrap;
 }
+/* A label and the control it names, as one item in the wrapping row. Loose in the flex container
+   they wrap independently, and the row is narrow enough that they do: "Loot spec" ends a line and
+   its dropdown starts the next, reading as a heading over an unrelated control. The gap matches
+   .controls' own, so grouping them changes where the row breaks and nothing else. */
+.ctl {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
 select.board {
   border: 1px solid var(--rule-strong);
   background: var(--panel);

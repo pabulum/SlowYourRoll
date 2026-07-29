@@ -239,16 +239,22 @@
           </button>
         </div>
         <div class="spacer"></div>
-        <div class="seg-label" id="metricLabel">Units</div>
-        <div class="seg" id="metricSeg"></div>
-        <div class="seg-label" id="diffLabel">Raid diff</div>
-        <div class="seg" id="diffSeg"></div>
-        <div class="seg-label" id="lootSpecLabel">Loot spec</div>
-        <select
-          class="board slim"
-          id="lootSpecSel"
-          aria-label="Loot spec"
-        ></select>
+        <div class="ctl">
+          <div class="seg-label">Units</div>
+          <div class="seg" id="metricSeg"></div>
+        </div>
+        <div class="ctl" id="diffCtl">
+          <div class="seg-label">Raid diff</div>
+          <div class="seg" id="diffSeg"></div>
+        </div>
+        <div class="ctl" id="lootSpecCtl">
+          <div class="seg-label">Loot spec</div>
+          <select
+            class="board slim"
+            id="lootSpecSel"
+            aria-label="Loot spec"
+          ></select>
+        </div>
         <label class="toggle"
           ><input type="checkbox" id="showAll" />
           <span>Show older content</span></label

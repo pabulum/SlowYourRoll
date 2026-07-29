@@ -131,8 +131,7 @@ function renderLootSpec(b) {
   const own = specId(b.spec);
   const mine = own ? classSpecs(own) : [];
   const show = mine.length > 1;
-  setDisplayed("lootSpecLabel", show);
-  setDisplayed("lootSpecSel", show);
+  setDisplayed("lootSpecCtl", show);
   setShown("lootNote", false);
   if (!show) return;
 
@@ -193,10 +192,22 @@ function swatch(b) {
   ></span>`;
 }
 
-/** "Jul 22" from whatever date string the report carried; the raw text if it won't parse. */
+/**
+ * "Jul 22" from whatever date string the report carried; the raw text if it won't parse.
+ *
+ * QE writes `dateCreated` as `"2026 - 7 - 29"` — spaced separators and a one-digit month, which
+ * `Date` rejects outright, so every QE report was printing that string verbatim into the masthead.
+ * The parts are unambiguous once matched, so they're read out and handed to `Date` as numbers
+ * rather than left to a parser that has already refused them once.
+ */
 function shortDate(s) {
   if (!s) return "";
-  const d = new Date(s);
+  const ymd = String(s).match(
+    /^\s*(\d{4})\s*-\s*(\d{1,2})\s*-\s*(\d{1,2})\s*$/,
+  );
+  const d = ymd
+    ? new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]))
+    : new Date(s);
   return isNaN(d.getTime())
     ? String(s).replace(/\s+/g, " ").trim()
     : d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
@@ -361,8 +372,7 @@ export function render() {
 
   // Difficulty toggle (only when there's a choice to make)
   const hasDiffs = built.diffs.length > 1;
-  setDisplayed("diffLabel", hasDiffs);
-  setDisplayed("diffSeg", hasDiffs);
+  setDisplayed("diffCtl", hasDiffs);
   setHTML(
     "diffSeg",
     built.diffs.map(
@@ -430,6 +440,11 @@ function renderVault(b, built) {
       rowByItem[it.id] = r;
     }),
   );
+  const vc = vaultChoice(b),
+    optByItem = {};
+  (vc ? vc.options : []).forEach((o) => {
+    optByItem[o.id] = o;
+  });
 
   setHTML(
     "vaultPanel",
@@ -440,9 +455,11 @@ function renderVault(b, built) {
         diluting your odds, and a dupe if you roll that source too. Mark what
         you’ll take to fold it into the ranking.
       </div>
-      ${tradeHTML(b, vaultChoice(b))}
+      ${tradeHTML(b, vc)}
       <div class="vault-items">
-        ${simc.vault.map((v) => vaultOptionHTML(b, v, rowByItem[v.id]))}
+        ${simc.vault.map((v) =>
+          vaultOptionHTML(b, v, rowByItem[v.id], optByItem[v.id]),
+        )}
       </div>
       <div class="note">
         A taken pick becomes <b>Own</b> below. If a boss’s only upgrade is also
@@ -458,9 +475,16 @@ function renderVault(b, built) {
  * stands, independent of what the board currently has marked as taken — the point is to show the
  * consequence of the toggle before it's flipped, not after.
  */
-function vaultOptionHTML(b, v, row) {
+function vaultOptionHTML(b, v, row, opt) {
   const meta = QE_DATA.items[v.id];
   const taken = b.vaultTake === v.id;
+  // The report scored the boss's drop; the vault is handing you its own copy, often a track step or
+  // more apart. Said out loud only where it's load-bearing — the two levels differ and the number
+  // being qualified isn't zero.
+  const offBy =
+    opt && opt.score > 0 && opt.scoredIlvl && opt.scoredIlvl !== v.ilvl
+      ? opt.scoredIlvl
+      : 0;
   let encTxt,
     couple,
     warn = false;
@@ -482,7 +506,10 @@ function vaultOptionHTML(b, v, row) {
       <div class="vmeta">
         <span>${encTxt}</span><span>·</span
         ><span>ilvl ${v.ilvl}</span
-        >${warn && html`<span class="warn">· also in this roll pool, dupe risk</span>`}
+        >${offBy > 0 && html`<span>· scored at ilvl ${offBy}</span>`}${
+          warn &&
+          html`<span class="warn">· also in this roll pool, dupe risk</span>`
+        }
       </div>
       <div class="couple">${couple}</div>
     </div>
@@ -527,6 +554,13 @@ function tradeHTML(b, vc) {
       <b>${dv(b, vc.perRoll)}</b> ${unit} on average from one roll on
       ${roll.g.name}, against ${keepTxt}.
       ${keep.scored && html` A gap of ${dv(b, Math.abs(vc.perRoll - keep.score))} ${unit}.`}
+      ${
+        keep.score > 0 &&
+        keep.scoredIlvl > 0 &&
+        keep.scoredIlvl !== keep.ilvl &&
+        html` That score is the report’s, for the ilvl ${keep.scoredIlvl} drop —
+        your vault offers ilvl ${keep.ilvl}.`
+      }
       ${roll.cost !== 1 && html` That roll costs ${roll.cost} tokens.`}
       ${
         SEASON.tokenFromVault &&

@@ -31,11 +31,10 @@ export const IDS = /** @type {const} */ ([
   "specBadge",
   "shareBoard",
   "delBoard",
-  "metricLabel",
   "metricSeg",
-  "diffLabel",
+  "diffCtl",
   "diffSeg",
-  "lootSpecLabel",
+  "lootSpecCtl",
   "lootSpecSel",
   "showAll",
   // notices and the ranking itself
