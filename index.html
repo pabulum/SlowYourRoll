@@ -106,6 +106,13 @@
               />
             </svg>
           </button>
+          <!-- Label and title are filled from src/season.js, so the season is named in one place. -->
+          <button
+            class="btn"
+            id="rewardBtn"
+            aria-haspopup="dialog"
+            aria-expanded="false"
+          ></button>
           <button class="btn" id="importBtn" title="Load a backup">
             Import
           </button>
@@ -324,6 +331,7 @@
             row.
           </p>
           <p id="rewardNote" hidden></p>
+          <p id="rewardLink"></p>
           <p>
             <span class="vr" style="margin: 0 4px 0 0">Very rare</span> only
             describes the drop rate off a <em>boss kill</em>. A bonus roll draws
@@ -344,6 +352,41 @@
         QuestionablyEpic, or Raidbots. World of Warcraft and related marks are
         trademarks of Blizzard Entertainment, Inc.
       </footer>
+    </div>
+
+    <!-- The reward pane. Reference rather than a step in any flow, so it's a drawer over the page
+     instead of another panel in the column: it's read alongside the ranking, and closing it puts
+     you back exactly where you were. Contents are rendered from src/season.js. -->
+    <div class="drawer-wrap" id="rewardPane" hidden>
+      <div class="drawer-scrim" data-close></div>
+      <aside
+        class="drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="rewardTitle"
+      >
+        <div class="drawer-head">
+          <h2 id="rewardTitle"></h2>
+          <button
+            class="btn icon ghost"
+            id="rewardClose"
+            title="Close"
+            aria-label="Close"
+          >
+            <svg
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              aria-hidden="true"
+            >
+              <path d="M4 4l8 8M12 4l-8 8" />
+            </svg>
+          </button>
+        </div>
+        <div class="drawer-body" id="rewardBody"></div>
+      </aside>
     </div>
 
     <div class="toast" id="toast"></div>

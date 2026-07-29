@@ -13,6 +13,7 @@ export const IDS = /** @type {const} */ ([
   // masthead
   "seasonLabel",
   "themeBtn",
+  "rewardBtn",
   "importBtn",
   "exportBtn",
   "importFile",
@@ -48,6 +49,12 @@ export const IDS = /** @type {const} */ ([
   // legend + transient
   "tokenNote",
   "rewardNote",
+  "rewardLink",
+  // reward pane
+  "rewardPane",
+  "rewardTitle",
+  "rewardClose",
+  "rewardBody",
   "toast",
 ]);
 

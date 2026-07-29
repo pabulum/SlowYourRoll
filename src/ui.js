@@ -6,7 +6,7 @@
 // thrown away with the row it was attached to — see `on` below.
 
 import { state, save, active, replaceState } from "./store.js";
-import { $, toast } from "./dom.js";
+import { $, toast, setShown } from "./dom.js";
 import { render, closeBoardMenu } from "./render.js";
 import { loadReport } from "./reports.js";
 import { readSimc } from "./simc.js";
@@ -102,6 +102,53 @@ function initBoardPicker() {
   });
 }
 
+/**
+ * Open the reward pane. Assigned by `initRewardPane`; a no-op before then, and referenced from the
+ * encounter list, which is rendered long after the pane is wired.
+ * @type {(from?: any) => void}
+ */
+let openRewards = () => {};
+
+/**
+ * The reward pane — a dialog, not a menu. It's a page of reference read *against* the ranking
+ * rather than a step in any flow, so it opens over the page and closing it puts you back where you
+ * were: Escape and the scrim both close it, and focus returns to whatever opened it, which is not
+ * always the masthead button — the legend and every encounter card can open it too.
+ */
+function initRewardPane() {
+  const pane = $("rewardPane"),
+    btn = $("rewardBtn");
+  /** What to hand focus back to. Remembered on the way in, since there are several ways in. */
+  let opener = null;
+
+  openRewards = (from) => {
+    opener = from || btn;
+    setShown("rewardPane", true);
+    btn.setAttribute("aria-expanded", "true");
+    // The drawer scrolls; the page under it must not, or a scroll gesture at the edge of the panel
+    // moves the ranking instead and the pane's position is lost.
+    document.body.classList.add("drawer-open");
+    $("rewardClose").focus();
+  };
+  const close = () => {
+    if (pane.hidden) return;
+    setShown("rewardPane", false);
+    btn.setAttribute("aria-expanded", "false");
+    document.body.classList.remove("drawer-open");
+    if (opener) opener.focus();
+  };
+
+  btn.addEventListener("click", () =>
+    pane.hidden ? openRewards(btn) : close(),
+  );
+  $("rewardClose").addEventListener("click", close);
+  on("rewardPane", "click", "[data-close]", close);
+  on("rewardLink", "click", '[data-act="rewards"]', (el) => openRewards(el));
+  document.addEventListener("keydown", (/** @type {any} */ e) => {
+    if (e.key === "Escape") close();
+  });
+}
+
 /** Download the whole state as a JSON backup, and read one back. */
 function initBackup() {
   $("exportBtn").addEventListener("click", () => {
@@ -153,7 +200,11 @@ export function initUI() {
       key = card.dataset.key,
       act = el.dataset.act;
     if (act === "wowhead") return; // the icon is a plain link out; let the browser have it
-    if (act === "toggle") {
+    if (act === "rewards") {
+      // The "pays Myth 6/6" chip and the end-of-raid badge are the two claims on a card that come
+      // from the season's rules rather than from the report, so they're where the rules belong.
+      openRewards(el);
+    } else if (act === "toggle") {
       b._open = b._open === key ? null : key;
       commit();
     } else if (act === "showblocked") {
@@ -192,6 +243,7 @@ export function initUI() {
   });
 
   initBoardPicker();
+  initRewardPane();
 
   // Changing loot spec changes which drops you're eligible for, and so the whole ranking.
   $("lootSpecSel").addEventListener("change", (/** @type {any} */ e) => {

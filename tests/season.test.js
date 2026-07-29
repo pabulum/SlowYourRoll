@@ -69,6 +69,59 @@ test("only a season with an end-of-raid tier describes one", () => {
   assert.ok(SEASONS[2].special.badge && SEASONS[2].special.note);
 });
 
+// The tier the ranking can't see: three steps past the Mythic payout, and the reason a token gets
+// banked for kill week. Pinned like every other PTR figure.
+test("the end-of-raid tier out-levels the season's best ordinary payout", () => {
+  const s2 = SEASONS[2];
+  assert.equal(s2.special.ilvl, 344); // Venomcursed 9/6
+  assert.ok(s2.special.ilvl > rewardOf(s2, "raid", "mythic").ilvl);
+});
+
+// The app quotes the top of the M+ ladder everywhere, because no report says which key you run.
+// If the two ever part company the pane would be documenting a payout the ranking doesn't use.
+test("the M+ ladder tops out at exactly the payout the app quotes", () => {
+  const mp = rewardOf(SEASONS[2], "dungeon");
+  const top = mp.ladder[mp.ladder.length - 1];
+  assert.equal(top.ilvl, mp.ilvl);
+  assert.equal(top.label, mp.label);
+});
+
+test("the M+ ladder climbs, so the quoted figure is a ceiling and not a middle", () => {
+  const rungs = rewardOf(SEASONS[2], "dungeon").ladder;
+  assert.ok(rungs.length > 1, "a one-rung ladder isn't one");
+  rungs.forEach((k, i) => {
+    assert.ok(k.at, "every rung says which keys pay it");
+    if (i) assert.ok(k.ilvl > rungs[i - 1].ilvl, "rung " + i + " is no higher");
+  });
+});
+
+// A rung is only named where the season's own table pins that item level to a track step. Naming
+// the rest would be guessing which of two overlapping tracks a number belongs to.
+test("a named ladder rung agrees with the difficulty that pays the same item level", () => {
+  const s2 = SEASONS[2];
+  const named = rewardOf(s2, "dungeon").ladder.filter((k) => k.label);
+  assert.equal(named.length, 2, "only the two ends are named");
+  const byIlvl = {};
+  Object.keys(s2.rollReward).forEach((d) => {
+    const r = s2.rollReward[d];
+    byIlvl[r.ilvl] = r.label;
+  });
+  named.forEach((k) => {
+    assert.equal(k.label, byIlvl[k.ilvl], k.at + " is labelled off the table");
+  });
+});
+
+test("a season that buys the token with a vault slot says for how long", () => {
+  Object.keys(SEASONS).forEach((n) => {
+    const s = SEASONS[n];
+    if (!s.tokenFromVault) return;
+    assert.ok(
+      s.tokenVaultWeeks > 0,
+      "Season " + n + " needs the week the trade stops",
+    );
+  });
+});
+
 test("every reward carries a label and an item level slot", () => {
   Object.keys(SEASONS).forEach((n) => {
     const table = SEASONS[n].rollReward;

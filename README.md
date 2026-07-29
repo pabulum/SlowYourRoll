@@ -185,6 +185,17 @@ off the 12.1 PTR and pinned in [`tests/season.test.js`](tests/season.test.js), s
 fails a test rather than quietly changing everyone's numbers. The M+ figure is the payout for a +10
 key or higher; lower keys pay under it, and nothing in a QE report says which key you run.
 
+All of that is legible in the app from the **S2 rewards** button in the masthead, which opens a
+reward pane: what each source pays, at which track and item level, the full M+ ladder the ranking
+quotes the top of, the crests a roll banks, and what the rules change about the numbers on the page.
+The game shows none of this anywhere — in game a boss drops what it drops, and "your roll pays out
+on your _vault's_ track" is a rule you read a guide or install an addon for. The pane is rendered
+from [`src/season.js`](src/season.js), so the figures in it are the same ones the ranking prices
+with; it's reachable from the legend and from the `pays …` chip on any encounter card too. It's
+pinned to Season 2 rather than following `ACTIVE`: Season 1 has no reward scheme to document, and
+Season 2's rules are wanted _before_ the season starts. So it always names its season in the
+heading, and says whether the ranking behind it is playing by those rules yet.
+
 The app doesn't depend on either being up to date to stay useful. A Droptimizer carries its own
 instance, encounter, difficulty and item level inline, so a next-season raid is rankable from the
 report alone: unrecognised sources are ranked as normal, flagged in the UI, and named by id rather

@@ -1249,6 +1249,17 @@ select.board.slim {
   color: var(--cool);
   border-color: color-mix(in srgb, var(--cool) 45%, transparent);
 }
+/* Both chips open the reward pane, so both are buttons — stripped back to the tag they were, since
+   a control that looks like a control here would compete with the card's own tap target. The dotted
+   underline is the only affordance, the same one the promoted item level uses. */
+.pays,
+.special {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
 /* Upgrade track a roll on this encounter pays out at, when that isn't simply the drop. */
 .pays {
   font-size: 10px;
@@ -1256,6 +1267,7 @@ select.board.slim {
   letter-spacing: 0.04em;
   color: var(--cool);
   white-space: nowrap;
+  border-bottom: 1px dotted color-mix(in srgb, var(--cool) 50%, transparent);
 }
 /* End-of-raid encounter whose rewards are a tier apart — the one people bank a token for. */
 .special {
@@ -1267,6 +1279,13 @@ select.board.slim {
   border: 1px solid var(--accent-line);
   padding: 1px 5px;
   white-space: nowrap;
+}
+.pays:hover,
+.special:hover {
+  color: var(--ink);
+}
+.special:hover {
+  border-color: var(--accent);
 }
 .swap-note.special-note b {
   color: var(--ink);
@@ -1577,6 +1596,233 @@ img.icon,
   font-weight: 650;
 }
 
+/* ── reward pane ──────────────────────────────────────────────────────────────────────────────────
+   A drawer off the right edge: reference read against the ranking, not a step in any flow, so it
+   sits over the page and gives it back untouched on close.
+
+   Deliberately *not* frosted. Frost is spent on the masthead and the report menu — the two things
+   that overlap content — and a third blurred surface would turn a signature into a habit. This one
+   is opaque panel behind a plain ink scrim, which is also the honest treatment for a panel of
+   figures: nothing to read through it, and a table wants a flat ground.
+
+   The only accent inside is the row marking the difficulty you're ranked at, because that's the one
+   thing here that means "this is the one you came for". */
+.drawer-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  justify-content: flex-end;
+}
+/* `hidden` is an attribute, `display:flex` is a rule, and the rule wins — so it has to be said. */
+.drawer-wrap[hidden] {
+  display: none;
+}
+.drawer-scrim {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--paper-deep) 72%, transparent);
+}
+.drawer {
+  position: relative;
+  width: min(470px, 100%);
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--panel);
+  border-left: 1px solid var(--rule-strong);
+  box-shadow: var(--lift);
+  animation: drawer-in 0.22s ease-out;
+}
+@keyframes drawer-in {
+  from {
+    transform: translateX(14px);
+    opacity: 0;
+  }
+}
+/* Sticky, because the pane is long and the season it describes is the one thing you can't lose
+   sight of halfway down it. */
+.drawer-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 15px 17px 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--rule);
+}
+.drawer-head h2 {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+}
+.drawer-head .eyebrow {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 5px;
+}
+.drawer-body {
+  padding: 4px 17px 26px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+/* Whether the page behind is playing by these rules yet. A marginal note, like every other notice
+   on this page — the amber rule where it's live, a plain one where it's a preview. */
+.rwd-state {
+  border-left: 2px solid var(--rule-strong);
+  padding: 8px 12px;
+  margin: 14px 0 4px;
+  font-size: 12.5px;
+}
+.rwd-state.live {
+  border-left-color: var(--accent);
+}
+.rwd-state b {
+  color: var(--ink);
+  font-weight: 650;
+}
+.rwd-sec {
+  margin-top: 20px;
+}
+.rwd-sec h3 {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+  margin-bottom: 6px;
+}
+.rwd-sec p {
+  margin: 0 0 9px;
+}
+.rwd-sec b {
+  color: var(--ink);
+  font-weight: 650;
+}
+.rwd-list {
+  margin: 0;
+  padding-left: 17px;
+}
+.rwd-list li {
+  margin-bottom: 6px;
+}
+/* A spec sheet: rules between rows, nothing boxed, figures right-aligned and tabular. */
+.rwd {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 10px 0 9px;
+  font-size: 12.5px;
+}
+.rwd thead th {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--faint);
+  text-align: left;
+  padding: 0 8px 5px 0;
+  border-bottom: 1px solid var(--rule-strong);
+}
+.rwd tbody th {
+  font-weight: 600;
+  color: var(--ink);
+  text-align: left;
+}
+.rwd th,
+.rwd td {
+  padding: 7px 8px 7px 0;
+  border-top: 1px solid var(--rule);
+  vertical-align: baseline;
+}
+/* The last column is the one that follows a right-aligned figure, so it needs the gap the
+   right-aligned column can't give it. */
+.rwd thead th:last-child,
+.rwd tbody td:last-child {
+  padding: 7px 0 7px 12px;
+}
+.rwd thead th:last-child {
+  padding-bottom: 5px;
+}
+.rwd .tnum {
+  text-align: right;
+  color: var(--ink);
+}
+/* The exception folded under the row it's an exception to. */
+.rwd tr.sub th {
+  padding-left: 11px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.rwd tr.sub th,
+.rwd tr.sub td {
+  border-top-color: transparent;
+}
+/* Where the board you're looking at sits in the table. */
+.rwd tr.here th,
+.rwd tr.here td {
+  background: var(--panel-2);
+}
+.rwd tr.here th {
+  box-shadow: inset 2px 0 0 var(--accent);
+  padding-left: 9px;
+}
+.rwd .qual,
+.rwd .mine {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 400;
+  color: var(--faint);
+  margin-top: 1px;
+}
+.rwd .mine {
+  color: var(--muted);
+}
+.rwd-foot {
+  font-size: 12px;
+  color: var(--faint);
+  border-top: 1px solid var(--rule);
+  padding-top: 9px;
+  margin: 0;
+}
+.rwd-foot b {
+  color: var(--muted);
+}
+.rwd-src {
+  margin: 22px 0 0;
+  padding-top: 11px;
+  border-top: 1px solid var(--rule);
+  font-size: 11.5px;
+  color: var(--faint);
+}
+/* A button that reads as a link, for the two places prose has to open the pane. */
+.linky {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--ink);
+  cursor: pointer;
+  border-bottom: 1px solid var(--accent-line);
+}
+.linky:hover {
+  border-bottom-color: var(--accent);
+}
+/* The page underneath must not scroll while the drawer is open, or a gesture at the panel's edge
+   moves the ranking and the reader loses their place in both. */
+body.drawer-open {
+  overflow: hidden;
+}
+
 /* ── legend & footer ── */
 .legend {
   margin-top: 28px;
@@ -1758,6 +2004,7 @@ img.icon,
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;
+    animation: none !important;
   }
 }
 :focus-visible {

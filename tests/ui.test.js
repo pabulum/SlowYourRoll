@@ -158,3 +158,74 @@ test("switching report makes it the active one", () => {
   click(doc, '#boardMenu [data-board="t2"]');
   assert.equal(state.activeId, "t2");
 });
+
+/* ---------- the reward pane ---------- */
+
+/** Press a key on the document, the way the pane's Escape handler sees one. */
+function press(doc, key) {
+  const e = new doc.defaultView.Event("keydown", { bubbles: true });
+  /** @type {any} */ (e).key = key;
+  doc.dispatchEvent(e);
+}
+
+test("the masthead button opens the reward pane and closes it again", () => {
+  const { doc } = boot();
+  const pane = doc.getElementById("rewardPane"),
+    btn = doc.getElementById("rewardBtn");
+  assert.equal(pane.hasAttribute("hidden"), true);
+  click(doc, "#rewardBtn");
+  assert.equal(pane.hasAttribute("hidden"), false);
+  assert.equal(btn.getAttribute("aria-expanded"), "true");
+  click(doc, "#rewardBtn");
+  assert.equal(pane.hasAttribute("hidden"), true);
+  assert.equal(btn.getAttribute("aria-expanded"), "false");
+});
+
+test("Escape and the scrim both close the pane", () => {
+  const { doc } = boot();
+  const pane = doc.getElementById("rewardPane");
+  click(doc, "#rewardBtn");
+  press(doc, "Escape");
+  assert.equal(pane.hasAttribute("hidden"), true);
+
+  click(doc, "#rewardBtn");
+  click(doc, "#rewardPane .drawer-scrim");
+  assert.equal(pane.hasAttribute("hidden"), true);
+});
+
+test("a click inside the pane doesn't close it", () => {
+  const { doc } = boot();
+  click(doc, "#rewardBtn");
+  click(doc, "#rewardBody");
+  assert.equal(doc.getElementById("rewardPane").hasAttribute("hidden"), false);
+  click(doc, "#rewardClose");
+  assert.equal(doc.getElementById("rewardPane").hasAttribute("hidden"), true);
+});
+
+// The page under the drawer is locked while it's open, or a scroll at the panel's edge moves the
+// ranking underneath and the reader loses their place in both.
+test("the page behind the pane is locked while it's open", () => {
+  const { doc } = boot();
+  click(doc, "#rewardBtn");
+  assert.ok(doc.body.classList.contains("drawer-open"));
+  press(doc, "Escape");
+  assert.equal(doc.body.classList.contains("drawer-open"), false);
+});
+
+test("the legend's link opens the same pane", () => {
+  const { doc } = boot();
+  click(doc, '#rewardLink [data-act="rewards"]');
+  assert.equal(doc.getElementById("rewardPane").hasAttribute("hidden"), false);
+});
+
+// Only reachable in a season that promotes rewards, so it's asserted against whatever the build
+// actually renders rather than forced into existence.
+test("an encounter card's reward chip opens the pane rather than expanding the card", () => {
+  const { doc, board } = boot();
+  const chip = doc.querySelector('#sources [data-act="rewards"]');
+  if (!chip) return; // this season's rolls hand you the drop; no chip to click
+  const open = board._open;
+  chip.dispatchEvent(new doc.defaultView.Event("click", { bubbles: true }));
+  assert.equal(doc.getElementById("rewardPane").hasAttribute("hidden"), false);
+  assert.equal(board._open, open, "the card underneath didn't toggle");
+});

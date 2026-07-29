@@ -11,6 +11,12 @@ import assert from "node:assert/strict";
 import { QE_DATA } from "../src/data.js";
 import { state } from "../src/store.js";
 import { render, renderSeason } from "../src/render.js";
+import {
+  SEASON,
+  REWARD_SEASON,
+  REWARDS_LIVE,
+  seasonName,
+} from "../src/season.js";
 import { loadPage } from "./page.js";
 
 const RAID_ID = Number(QE_DATA.currentRaids[0]);
@@ -300,4 +306,73 @@ test("rendering closes the report picker", () => {
     doc.getElementById("boardBtn").getAttribute("aria-expanded"),
     "false",
   );
+});
+
+/* ---------- the reward pane ---------- */
+
+test("the reward pane documents its own season, whatever season the app is pricing", () => {
+  const doc = renderWith([]);
+  const head = doc.getElementById("rewardTitle").textContent;
+  assert.match(head, new RegExp(seasonName(REWARD_SEASON)));
+  assert.match(doc.getElementById("rewardBtn").textContent, /^S\d+ rewards$/);
+});
+
+// The pane is a preview for as long as ACTIVE lags the season it describes, and a reader taking a
+// number off it has to know which of the two they're looking at.
+test("the pane says whether the ranking behind it is playing by these rules", () => {
+  const doc = renderWith([]);
+  const state1 = doc.querySelector("#rewardBody .rwd-state");
+  assert.ok(state1, "the state line renders");
+  if (REWARDS_LIVE) {
+    assert.match(state1.getAttribute("class"), /\blive\b/);
+    assert.match(state1.textContent, /already using/);
+  } else {
+    assert.match(state1.textContent, /Not live yet/);
+    assert.match(state1.textContent, new RegExp(seasonName(SEASON)));
+  }
+});
+
+test("every payout in the season's table reaches the pane with its item level", () => {
+  const doc = renderWith([]);
+  const body = doc.getElementById("rewardBody").textContent;
+  const table = REWARD_SEASON.rollReward || {};
+  Object.keys(table).forEach((d) => {
+    const r = table[d];
+    if (r.ilvl != null) assert.match(body, new RegExp("\\b" + r.ilvl + "\\b"));
+    if (r.label) assert.match(body, new RegExp(r.label.replace("/", "/")));
+  });
+});
+
+test("the M+ ladder is on screen, since the ranking only ever quotes its top rung", () => {
+  const doc = renderWith([]);
+  const mp = (REWARD_SEASON.rollReward || {})["mythic-plus"];
+  const rungs = (mp && mp.ladder) || [];
+  assert.ok(rungs.length, "the season carries a ladder to render");
+  const rows = [...doc.querySelectorAll("#rewardBody .rwd")]
+    .map((t) => t.textContent)
+    .join(" ");
+  rungs.forEach((k) => {
+    assert.match(rows, new RegExp("\\b" + k.ilvl + "\\b"));
+  });
+});
+
+// The pane's one live connection to the page behind it: the row you're actually being ranked at.
+test("the pane marks the difficulty the board is ranked at, and only that one", () => {
+  const doc = renderWith([makeBoard()]);
+  const here = doc.querySelectorAll("#rewardBody .rwd tr.here");
+  assert.equal(here.length, 1);
+  assert.match(here[0].textContent, /Mythic raid boss/);
+  assert.match(here[0].textContent, /your raid diff/);
+});
+
+test("with no report loaded no row claims to be yours", () => {
+  const doc = renderWith([]);
+  assert.equal(doc.querySelectorAll("#rewardBody .rwd tr.here").length, 0);
+});
+
+test("the legend links into the pane in both seasons", () => {
+  const doc = renderWith([]);
+  const link = doc.querySelector('#rewardLink [data-act="rewards"]');
+  assert.ok(link, "the legend carries a way in");
+  assert.ok(link.textContent.trim().length > 0);
 });

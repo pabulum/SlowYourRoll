@@ -18,6 +18,21 @@
 // PTR numbers move. If they shift before launch, every figure that needs changing is in SEASONS[2].
 
 /**
+ * One rung of a payout that varies with how hard the content was — M+ key level, so far.
+ *
+ * Reference only: the app has no key-level input, so `Reward.ilvl` quotes the top rung and this is
+ * what the reward pane shows to say what the quoted figure is the *ceiling* of. A `label` is only
+ * carried where the season's own table pins that item level to a track step; Midnight's tracks
+ * overlap by two, so an item level in the middle of the ladder can be read as two different steps
+ * and guessing one would be inventing data.
+ *
+ * @typedef {Object} LadderStep
+ * @property {string} at    Which keys pay this rung ("+4–5").
+ * @property {number} ilvl  Item level it pays.
+ * @property {string} [label]  Track and step, where it's known rather than inferred.
+ */
+
+/**
  * What a bonus roll actually hands you, when that isn't the item as the boss drops it.
  *
  * @typedef {Object} Reward
@@ -27,6 +42,8 @@
  * @property {number} [crests]  Upgrade crests the payout saves you, per roll. Zero where the roll
  *   lands on a track's first step, which is where a drop would have started anyway.
  * @property {string} [crestKind]  Which crest currency that is ("Myth").
+ * @property {LadderStep[]} [ladder]  The full run of payouts this one is the top of, where the
+ *   payout depends on something the app can't see. Display only — nothing prices off it.
  */
 
 /**
@@ -40,6 +57,7 @@
  * @typedef {Object} Special
  * @property {number} lastBosses  How many bosses at the end of a raid carry these rewards.
  * @property {string} badge  Short tag for the encounter card.
+ * @property {number|null} ilvl  Item level those rewards drop and pay out at.
  * @property {string} note   One line on why the encounter is worth saving a token for.
  */
 
@@ -54,11 +72,16 @@
  * @property {boolean} tokenFromVault  True when the bonus-roll token is itself a Great Vault
  *   reward, so taking it costs you the item you'd otherwise have picked. Only changes the wording
  *   of the vault comparison, never its arithmetic — a wrong guess here misleads nobody's maths.
+ * @property {number} [tokenVaultWeeks]  Last week of the season in which that's true; from the week
+ *   after, the token is a free weekly reward and the trade disappears. Wording only, as above.
  * @property {Record<string, Reward>|null} rollReward  Where a roll pays out, keyed by difficulty
  *   ("mythic"/"heroic"/"normal"/"lfr", plus "mythic-plus" for dungeons). Null when a roll simply
  *   hands you the drop, at the drop's own item level — the Season 1 behaviour.
  * @property {Special|null} special  End-of-raid encounters worth holding a token for; null when the
  *   season has no such tier.
+ * @property {{name: string, url: string}} [source]  Where the figures above were read off, for the
+ *   reward pane to cite. A pre-launch table is somebody's datamining until it isn't, and a reader
+ *   deciding whether to trust a number needs to know whose.
  */
 
 /** @type {Record<number, Season>} */
@@ -67,6 +90,8 @@ export const SEASONS = {
     number: 1,
     expansion: "Midnight",
     qeSeasonId: 34,
+    // A Season 1 roll is the drop, so there is no reward scheme to document: no promotion, no
+    // crests banked, no end-of-raid tier. This is why the reward pane is pinned to Season 2.
     tokenRaid: 2,
     tokenDungeon: 1,
     tokenNote:
@@ -86,6 +111,7 @@ export const SEASONS = {
     // Weeks 1–7 the token comes out of a Great Vault slot, so a roll is bought with the item you'd
     // otherwise have taken. From week 8 it's a free weekly reward again and the trade disappears.
     tokenFromVault: true,
+    tokenVaultWeeks: 7,
     // Season 2 pays a bonus roll out as if the item had come from your Great Vault, not from the
     // boss. Vault rewards from LFR/Normal/Heroic jump to the first step of the next track, and a
     // Mythic vault arrives fully upgraded — so a Mythic boss and a M+ dungeon cost the same single
@@ -121,14 +147,30 @@ export const SEASONS = {
         ilvl: 318,
         crests: 0,
         crestKind: "Myth",
+        // The rungs below the quoted one. Only the two ends carry a track step, and only because
+        // the table above pins them: 305 is where Hero starts (a Normal boss pays it) and 318 is
+        // where Myth starts (a Heroic boss pays it). The three in between sit inside the overlap
+        // between two tracks — 308 is both Champion 6/6 and a Hero step — so they stay item levels.
+        ladder: [
+          { at: "+2–3", ilvl: 305, label: "Hero 1/6" },
+          { at: "+4–5", ilvl: 308 },
+          { at: "+6", ilvl: 311 },
+          { at: "+7–9", ilvl: 315 },
+          { at: "+10 or higher", ilvl: 318, label: "Myth 1/6" },
+        ],
       },
     },
     // The last two Mythic bosses are the one place a roll promotes nothing: they drop at 344 and
     // their vault and bonus roll pay the same 344, three steps past Myth 6/6. The token is still
     // worth banking for them — it just buys a second shot at the drop rather than an upgrade of it.
+    source: {
+      name: "norumu’s 12.1 PTR reward sheet",
+      url: "https://docs.google.com/spreadsheets/d/1BCDWQvv_HFRO97s8UCQr_7vwz0pFXQw6gbTBgM1VeOg/htmlview",
+    },
     special: {
       lastBosses: 2,
       badge: "Venomcursed 9/6",
+      ilvl: 344,
       note:
         "Its Mythic items are 9/6 (ilvl 344) with cantrip effects, a tier above anything else in " +
         "the game, and the reason most raiders bank a token for kill week instead of spending it here.",
@@ -144,6 +186,27 @@ export const SEASON = SEASONS[ACTIVE];
 
 /** Masthead / documentation label, e.g. "WoW S1 Midnight". */
 export const SEASON_LABEL = "WoW S" + SEASON.number + " " + SEASON.expansion;
+
+/** Full name of a season, spelled out — what a panel about it has to be headed with. */
+export function seasonName(s) {
+  return s.expansion + " Season " + s.number;
+}
+
+/**
+ * The season the reward pane documents.
+ *
+ * Pinned to 2 rather than following ACTIVE, on purpose. Season 1 has no reward scheme worth a panel
+ * — a roll hands you the drop — so the pane would be an empty box for as long as the app targets it.
+ * Season 2's rules, meanwhile, are what a raider needs *before* the season starts, which is exactly
+ * when ACTIVE still says 1. The pane therefore always names its season in the heading, and says
+ * whether it's the one the rest of the page is ranking (`REWARDS_LIVE`).
+ *
+ * When a Season 3 reward scheme is known, point this at it and the pane follows.
+ */
+export const REWARD_SEASON = SEASONS[2];
+
+/** Is the season the pane describes the one the rest of the app is pricing? */
+export const REWARDS_LIVE = REWARD_SEASON === SEASON;
 
 /**
  * What a bonus roll on this kind of source, at this difficulty, would actually hand you.

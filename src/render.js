@@ -9,7 +9,14 @@
 // type error rather than a null.
 
 import { QE_DATA, loadQEData } from "./data.js";
-import { SEASON, SEASON_LABEL, seasonDrift } from "./season.js";
+import {
+  SEASON,
+  SEASON_LABEL,
+  seasonDrift,
+  seasonName,
+  REWARD_SEASON,
+  REWARDS_LIVE,
+} from "./season.js";
 import { state, active } from "./store.js";
 import { $, setHTML, setText, setShown, setDisplayed } from "./dom.js";
 import { html, join } from "./html.js";
@@ -17,6 +24,7 @@ import {
   buildGroups,
   resolve,
   diffLabel,
+  diffKey,
   unitOf,
   rawUnitOf,
   hasPct,
@@ -65,6 +73,272 @@ export function renderSeason() {
       lower keys pay a little under the M+ figure. The scores are still your
       report's, simmed at the ilvl each boss <em>drops</em> at, so they run low
       wherever a roll promotes.`,
+  );
+}
+
+/* ---------- the reward pane ----------
+   What a bonus roll actually hands you, per source. The game shows this nowhere: in game a boss
+   drops what it drops, and the fact that a roll pays out on your *vault's* track instead is a rule
+   you either read a guide for or install an addon to see. Every figure in it is already load-bearing
+   somewhere in this app — the payout drives the dupe check, the item level on every row and the
+   crest line — so the pane is the one place they're all legible at once rather than inferred from a
+   chip on a card.
+
+   It documents REWARD_SEASON, which is pinned rather than following the season the app is pricing;
+   see src/season.js for why. So the heading always names its season, and the state line at the top
+   says whether the page below is playing by these rules yet. */
+
+/** The pane's rows, hardest first. Names are the pane's, not the report's difficulty vocabulary. */
+const REWARD_ROWS = [
+  { key: "mythic", name: "Mythic raid boss" },
+  { key: "heroic", name: "Heroic raid boss" },
+  { key: "normal", name: "Normal raid boss" },
+  { key: "lfr", name: "Raid Finder boss" },
+  { key: "mythic-plus", name: "M+ dungeon" },
+];
+
+/** "≈80 Myth" — a crest yield, or an em dash where the payout banks none. */
+function crestCell(r) {
+  return r.crests ? html`≈${r.crests} ${r.crestKind || ""}` : "—";
+}
+
+/**
+ * One source's row. `here` marks the difficulty the board is currently being ranked at, which is
+ * the pane's one live connection to the page behind it: the table is otherwise the same table all
+ * week, and the row that answers "so what am I looking at" is the one you came for.
+ */
+function rewardRowHTML(table, row, here) {
+  const r = table[row.key];
+  if (!r) return "";
+  const top = r.ladder && r.ladder[r.ladder.length - 1];
+  const mine = row.key === here;
+  return html`<tr class="${mine ? "here" : ""}">
+    <th scope="row">
+      ${row.name}${top && html`<span class="qual">${top.at}</span>`}${
+        mine && html`<span class="mine">your raid diff</span>`
+      }
+    </th>
+    <td>${r.label || "—"}</td>
+    <td class="tnum">${r.ilvl == null ? "—" : r.ilvl}</td>
+    <td>${crestCell(r)}</td>
+  </tr>`;
+}
+
+/** The end-of-raid tier, as a sub-row of the Mythic one it's an exception to. */
+function specialRowHTML(sp) {
+  return html`<tr class="sub">
+    <th scope="row">…its last ${sp.lastBosses} bosses</th>
+    <td>${sp.badge}</td>
+    <td class="tnum">${sp.ilvl == null ? "—" : sp.ilvl}</td>
+    <td>—</td>
+  </tr>`;
+}
+
+/**
+ * The M+ ladder. The app quotes its top rung everywhere, because nothing in a report says which key
+ * you run — so the honest place to put the rest of it is here, next to the amount that quote can be
+ * out by.
+ */
+function ladderHTML(r) {
+  const rungs = r.ladder || [];
+  if (rungs.length < 2) return "";
+  const over = rungs[rungs.length - 1].ilvl - rungs[0].ilvl;
+  return html`<section class="rwd-sec">
+    <h3>M+, by key level</h3>
+    <table class="rwd">
+      <thead>
+        <tr>
+          <th scope="col">Key</th>
+          <th scope="col">Track</th>
+          <th scope="col">ilvl</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rungs.map(
+          (k) =>
+            html`<tr>
+              <th scope="row">${k.at}</th>
+              <td>${k.label || ""}</td>
+              <td class="tnum">${k.ilvl}</td>
+            </tr>`,
+        )}
+      </tbody>
+    </table>
+    <p class="rwd-foot">
+      Every dungeon row on this page is priced at the top rung, since no report
+      records the keys you run — so a lower key is overstated by up to ${over}
+      item levels. Only the two ends are named tracks: Midnight's tracks overlap
+      by two steps, so the rungs between can be read as a step of either track
+      and this table won't guess which.
+    </p>
+  </section>`;
+}
+
+/**
+ * Draw the pane. Called once at boot and again on every render, so the "you are here" marker
+ * follows the difficulty toggle.
+ *
+ * @param {string|null} here  Canonical difficulty key the board is ranked at, or null when there's
+ *   no report loaded to have one.
+ */
+export function renderRewards(here) {
+  const s = REWARD_SEASON,
+    table = s.rollReward;
+  // Season first, in its own line: which season's rules these are is the first thing a reader has
+  // to know, and it's the one thing the page around the pane can't be trusted to imply. Both the
+  // ways in are labelled from the same place, so the season is never named twice by hand.
+  setHTML(
+    "rewardTitle",
+    html`<span class="eyebrow">${seasonName(s)}</span>What a bonus roll pays`,
+  );
+  setText("rewardBtn", "S" + s.number + " rewards");
+  $("rewardBtn").title = "What a bonus roll pays in " + seasonName(s);
+  setHTML(
+    "rewardLink",
+    REWARDS_LIVE
+      ? html`A roll pays out on your Great Vault's track rather than the drop's,
+          which is where the item levels above come from.
+          <button class="linky" data-act="rewards">
+            See the reward table
+          </button>`
+      : html`In ${seasonName(s)} the drop's item level stops being the one you
+          get: a roll pays out on your Great Vault's track instead.
+          <button class="linky" data-act="rewards">
+            See what it will pay
+          </button>`,
+  );
+  if (!table) {
+    setHTML(
+      "rewardBody",
+      html`<p class="rwd-lead">
+        A ${seasonName(s)} bonus roll hands you the item exactly as the boss
+        drops it — no promotion, no crests, nothing this pane can add to it.
+      </p>`,
+    );
+    return;
+  }
+  const weeks = s.tokenVaultWeeks;
+  const mythCrest = (table.mythic && table.mythic.crests) || 0;
+
+  setHTML(
+    "rewardBody",
+    html`<div class="rwd-state ${REWARDS_LIVE ? "live" : ""}">
+        ${
+          REWARDS_LIVE
+            ? html`These are the rules the ranking below is already using.`
+            : html`<b>Not live yet.</b> The page behind this is ranking
+                ${seasonName(SEASON)}, where a roll simply hands you the drop.
+                Nothing here is applied to those numbers.`
+        }
+      </div>
+
+      <section class="rwd-sec">
+        <h3>One token, either way</h3>
+        <p>${s.tokenNote}</p>
+        ${
+          s.tokenFromVault &&
+          html`<p>
+            ${weeks ? html`Weeks 1–${weeks}` : "Early in the season"} the token
+            <em>is</em> a Great Vault slot: you take the token or you take the
+            item, not both.
+            ${weeks && html`From week ${weeks + 1} it's a free weekly reward and you get both.`}
+          </p>`
+        }
+      </section>
+
+      <section class="rwd-sec">
+        <h3>Where a roll pays out</h3>
+        <p>
+          Not at the item level the boss drops. A roll is paid as if the item
+          had come out of your Great Vault, so LFR, Normal and Heroic each jump
+          to the first step of the next track up, and a Mythic boss hands the
+          thing over fully upgraded.
+        </p>
+        <table class="rwd">
+          <thead>
+            <tr>
+              <th scope="col">Source</th>
+              <th scope="col">Pays</th>
+              <th scope="col">ilvl</th>
+              <th scope="col">Crests</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${REWARD_ROWS.map(
+              (row) =>
+                html`${rewardRowHTML(table, row, here)}${
+                  row.key === "mythic" && s.special && specialRowHTML(s.special)
+                }`,
+            )}
+          </tbody>
+        </table>
+        ${
+          s.special &&
+          html`<p class="rwd-foot">
+            <b>${s.special.badge}.</b> ${s.special.note} It's the one place a
+            roll promotes nothing — the drop is already there — so the token
+            buys a second shot at it rather than an upgrade of it.
+          </p>`
+        }
+      </section>
+
+      ${ladderHTML(table["mythic-plus"] || {})}
+
+      <section class="rwd-sec">
+        <h3>Crests</h3>
+        <p>
+          A Mythic roll banks
+          <b>≈${mythCrest} ${table.mythic.crestKind || ""} crests</b>
+          — the crests you'd otherwise have spent taking that item to
+          ${table.mythic.label}. Every other payout lands on a track's first
+          step, which is where a drop starts anyway, so it saves none.
+        </p>
+        <p>
+          The yield is the same for every item in a pool. One you want arrives
+          already upgraded; one you'd never wear still unlocks that slot, so the
+          piece you actually equip upgrades free. So crests can't change
+          <em>which</em> item you're rolling for — only whether a Mythic boss
+          beats a dungeon for the same single token.
+        </p>
+      </section>
+
+      <section class="rwd-sec">
+        <h3>
+          ${REWARDS_LIVE ? "What it changes on this page" : "What it will change here"}
+        </h3>
+        ${!REWARDS_LIVE && html`<p>Once the app moves to ${seasonName(s)}:</p>`}
+        <ul class="rwd-list">
+          <li>
+            Item levels on every row are what a <em>roll</em> would hand you,
+            not what the boss drops — that's what the Wowhead card is built from
+            too.
+          </li>
+          <li>
+            Anything you already hold at or above the payout auto-marks
+            <b>Own</b>: the roll would only dupe it. A lower copy stays
+            <b>Want</b>, because the roll still upgrades it.
+          </li>
+          <li>
+            Scores are your report's, simmed at the level each boss
+            <em>drops</em> at, so wherever a roll promotes they're a floor — and
+            they understate that encounter against one paying a lower track.
+          </li>
+          <li>
+            Crests are quoted on each encounter card and stay out of the EV.
+          </li>
+        </ul>
+      </section>
+
+      ${
+        s.source &&
+        html`<p class="rwd-src">
+          Item levels read off
+          <a href="${s.source.url}" target="_blank" rel="noopener"
+            >${s.source.name}</a
+          >. Pre-launch figures move; if they do, everything on this page moves
+          with them.
+        </p>`
+      }`,
   );
 }
 
@@ -302,6 +576,7 @@ export function render() {
   setShown("controls", has);
   setShown("listHead", has);
   if (!has) {
+    renderRewards(null);
     setShown("dataNote", false);
     setHTML("verdict", "");
     setHTML(
@@ -324,6 +599,7 @@ export function render() {
   // render() is reached from a paste, an import, a share link and the boot path, and one of those
   // will eventually run before the fetch resolves.
   if (!QE_DATA) {
+    renderRewards(null);
     setShown("dataNote", false);
     setHTML("verdict", "");
     setHTML(
@@ -388,6 +664,7 @@ export function render() {
     ),
   );
 
+  renderRewards(diffKey(b, built.selDiff));
   renderLootSpec(b);
   renderSimcNote(b);
   renderDataNote(built);
@@ -658,20 +935,29 @@ function cardHTML(b, r, i) {
     (g.type === "raid" ? g.instName : "M+ dungeon") + upgradeCount(r.nWant);
   // Where a roll pays out. Worth saying per encounter rather than once: this is the season where a
   // Mythic boss and a dungeon cost the same single token and pay five upgrade steps apart.
+  // Both chips open the reward pane: they're the two claims on a card that come from the season's
+  // rules rather than from the report, and "pays Myth 6/6" is only meaningful to someone who
+  // already knows the tracks. Buttons, so they're reachable without a pointer.
   const pays =
     r.reward &&
     r.reward.label &&
-    html`<span
+    html`<button
       class="pays"
-      title="Paid out as if the item came from your Great Vault"
-      >pays ${r.reward.label}</span
-    >`;
+      data-act="rewards"
+      title="Paid out as if the item came from your Great Vault — see the reward table"
+    >
+      pays ${r.reward.label}
+    </button>`;
   const special =
     g.special &&
     SEASON.special &&
-    html`<span class="special" title="${SEASON.special.note}"
-      >${SEASON.special.badge}</span
-    >`;
+    html`<button
+      class="special"
+      data-act="rewards"
+      title="${SEASON.special.note}"
+    >
+      ${SEASON.special.badge}
+    </button>`;
 
   return html`<div class="${cls}" data-key="${g.key}">
     <div class="card-head" data-act="toggle">
