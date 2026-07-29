@@ -19,6 +19,28 @@ test("a Season 2 dungeon pays the first Myth step, whatever difficulty is select
   assert.equal(rewardOf(SEASONS[2], "dungeon").label, "Myth 1/6");
 });
 
+// The 12.1 PTR item levels, kept here so a change to the sheet has to be a change to the tests too.
+// Midnight's tracks are six steps and overlap by two, so a track's first step is four steps above
+// the one below it — the arithmetic every figure in the table has to satisfy.
+test("Season 2 pays out at the item levels the 12.1 PTR publishes", () => {
+  const s2 = SEASONS[2];
+  assert.equal(rewardOf(s2, "raid", "mythic").ilvl, 334); // Myth 6/6
+  assert.equal(rewardOf(s2, "raid", "heroic").ilvl, 318); // Myth 1/6
+  assert.equal(rewardOf(s2, "raid", "normal").ilvl, 305); // Hero 1/6
+  assert.equal(rewardOf(s2, "raid", "lfr").ilvl, 292); // Champion 1/6
+  assert.equal(rewardOf(s2, "dungeon").ilvl, 318); // Myth 1/6, at +10 or higher
+});
+
+// A Mythic boss and a dungeon cost the same single token, which is only worth saying because the
+// two payouts are five upgrade steps apart. That gap is the season's whole argument.
+test("the Mythic payout stands five upgrade steps above the dungeon one", () => {
+  const s2 = SEASONS[2];
+  assert.ok(
+    rewardOf(s2, "raid", "mythic").ilvl > rewardOf(s2, "dungeon").ilvl,
+    "a Mythic boss must out-pay a dungeon for the same token",
+  );
+});
+
 // The distinction the whole dupe check rests on: in a promoting season, a difficulty we can't place
 // still means "promoted", and must not fall back to the season-1 answer of "you get the drop".
 test("an unrecognised difficulty in a promoting season is unknown, not unpromoted", () => {

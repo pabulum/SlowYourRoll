@@ -12,6 +12,10 @@
 // The app warns on its own when step 1 has happened but step 2 hasn't (see seasonDrift). Step 3 is
 // safe to leave undone: a null item level degrades to "promoted, amount unknown", which suppresses
 // the dupe guess rather than getting it wrong.
+//
+// Season 2's item levels below are read off the 12.1 PTR, via norumu's reward sheet:
+// https://docs.google.com/spreadsheets/d/1BCDWQvv_HFRO97s8UCQr_7vwz0pFXQw6gbTBgM1VeOg/htmlview
+// PTR numbers move. If they shift before launch, every figure that needs changing is in SEASONS[2].
 
 /**
  * What a bonus roll actually hands you, when that isn't the item as the boss drops it.
@@ -85,8 +89,17 @@ export const SEASONS = {
     // Season 2 pays a bonus roll out as if the item had come from your Great Vault, not from the
     // boss. Vault rewards from LFR/Normal/Heroic jump to the first step of the next track, and a
     // Mythic vault arrives fully upgraded — so a Mythic boss and a M+ dungeon cost the same single
-    // token and hand back items five upgrade steps apart. Item levels are null because Blizzard
-    // hasn't published Midnight's track values; the tracks themselves are the part that's known.
+    // token and hand back items five upgrade steps apart (334 against 318).
+    //
+    // Midnight's tracks are six steps each, and each track starts four steps above the one below it,
+    // so they overlap by two: Champion 1/6 = 292 … 6/6 = 308, Hero 1/6 = 305, Myth 1/6 = 318.
+    //
+    // The M+ figure is the payout for a +10 key or higher, which is where the track tops out. Lower
+    // keys pay less (+2-3 → 305, +4-5 → 308, +6 → 311, +7-9 → 315), and there is nowhere in a QE
+    // report to learn which key someone runs. Quoting the ceiling overstates a low-key roll by up to
+    // 13 item levels, which is the safe direction: it can only leave an item on screen as Want that
+    // a lower payout would have called a dupe, and an extra line argues with itself where a silently
+    // dropped one doesn't. If key level ever becomes an input, this is the entry to split.
     //
     // The crest figures are what the payout saves you, and they follow from Larias' arithmetic:
     // 1,280 Myth crests to cap 16 slots is 80 per slot, so an item handed over at Myth 6/6 is 80
@@ -94,28 +107,31 @@ export const SEASONS = {
     // Every other payout lands on the first step of a track, which is where a drop starts anyway,
     // so it saves no crests even though it is still a better item than the boss would have given.
     rollReward: {
-      mythic: { label: "Myth 6/6", ilvl: null, crests: 80, crestKind: "Myth" },
-      heroic: { label: "Myth 1/6", ilvl: null, crests: 0, crestKind: "Myth" },
-      normal: { label: "Hero 1/6", ilvl: null, crests: 0, crestKind: "Hero" },
+      mythic: { label: "Myth 6/6", ilvl: 334, crests: 80, crestKind: "Myth" },
+      heroic: { label: "Myth 1/6", ilvl: 318, crests: 0, crestKind: "Myth" },
+      normal: { label: "Hero 1/6", ilvl: 305, crests: 0, crestKind: "Hero" },
       lfr: {
-        label: "Champion 1/8",
-        ilvl: null,
+        label: "Champion 1/6",
+        ilvl: 292,
         crests: 0,
         crestKind: "Champion",
       },
       "mythic-plus": {
         label: "Myth 1/6",
-        ilvl: null,
+        ilvl: 318,
         crests: 0,
         crestKind: "Myth",
       },
     },
+    // The last two Mythic bosses are the one place a roll promotes nothing: they drop at 344 and
+    // their vault and bonus roll pay the same 344, three steps past Myth 6/6. The token is still
+    // worth banking for them — it just buys a second shot at the drop rather than an upgrade of it.
     special: {
       lastBosses: 2,
       badge: "Venomcursed 9/6",
       note:
-        "Its Mythic items are 9/6 with cantrip effects, a tier above anything else in the game, " +
-        "and the reason most raiders bank a token for kill week instead of spending it here.",
+        "Its Mythic items are 9/6 (ilvl 344) with cantrip effects, a tier above anything else in " +
+        "the game, and the reason most raiders bank a token for kill week instead of spending it here.",
     },
   },
 };

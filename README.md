@@ -179,6 +179,12 @@ QE Live doesn't publish those. Season 1 charges 2 tokens for a raid boss and 1 f
 Season 2 charges 1 for everything, which materially reorders the rankings. Moving to Season 2 is
 `npm run data`, then setting `ACTIVE = 2` in that file.
 
+Season 2 also promotes what a roll pays out — a Mythic boss hands back a fully upgraded Myth item
+rather than the drop — so that season's table carries item levels as well as tracks. They're read
+off the 12.1 PTR and pinned in [`tests/season.test.js`](tests/season.test.js), so a PTR revision
+fails a test rather than quietly changing everyone's numbers. The M+ figure is the payout for a +10
+key or higher; lower keys pay under it, and nothing in a QE report says which key you run.
+
 The app doesn't depend on either being up to date to stay useful. A Droptimizer carries its own
 instance, encounter, difficulty and item level inline, so a next-season raid is rankable from the
 report alone: unrecognised sources are ranked as normal, flagged in the UI, and named by id rather

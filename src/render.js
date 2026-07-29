@@ -59,10 +59,12 @@ export function renderSeason() {
     "rewardNote",
     html`A Season ${SEASON.number} bonus roll pays out
       <strong>as if the item came from your Great Vault</strong>, not off the
-      boss: a Mythic boss hands back a fully upgraded item, Heroic and M+ the
-      first step of Myth. The item levels below are what a roll would actually
-      give you. The scores are still your report's, simmed at the ilvl each boss
-      <em>drops</em> at, so they run low wherever a roll promotes.`,
+      boss: a Mythic boss hands back a fully upgraded item, Heroic and a +10 or
+      higher key the first step of Myth. The item levels below are what a roll
+      would actually give you — from the 12.1 PTR, so they may still move, and
+      lower keys pay a little under the M+ figure. The scores are still your
+      report's, simmed at the ilvl each boss <em>drops</em> at, so they run low
+      wherever a roll promotes.`,
   );
 }
 
