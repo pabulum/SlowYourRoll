@@ -16,6 +16,7 @@ import {
   seasonName,
   REWARD_SEASON,
   REWARDS_LIVE,
+  tokenVaultWindow,
 } from "./season.js";
 import { state, active } from "./store.js";
 import { $, setHTML, setText, setShown, setDisplayed } from "./dom.js";
@@ -217,7 +218,7 @@ export function renderRewards(here) {
     );
     return;
   }
-  const weeks = s.tokenVaultWeeks;
+  const win = tokenVaultWindow(s);
   const mythCrest = (table.mythic && table.mythic.crests) || 0;
 
   setHTML(
@@ -236,12 +237,13 @@ export function renderRewards(here) {
         <h3>One token, either way</h3>
         <p>${s.tokenNote}</p>
         ${
-          s.tokenFromVault &&
+          win &&
           html`<p>
-            ${weeks ? html`Weeks 1–${weeks}` : "Early in the season"} the token
-            <em>is</em> a Great Vault slot: you take the token or you take the
-            item, not both.
-            ${weeks && html`From week ${weeks + 1} it's a free weekly reward and you get both.`}
+            ${win.to ? html`Weeks ${win.from}–${win.to}` : html`From week ${win.from}`}
+            the token <em>is</em> a Great Vault slot: you take the token or you
+            take the item, not both.
+            ${win.from > 1 && html`There is no token in the opening vault of the season at all.`}
+            ${win.to && html`From week ${win.to + 1} it's a free weekly reward and you get both.`}
           </p>`
         }
       </section>
@@ -841,14 +843,19 @@ function tradeHTML(b, vc) {
         your vault offers ilvl ${keep.ilvl}.`
       }
       ${roll.cost !== 1 && html` That roll costs ${roll.cost} tokens.`}
-      ${
-        SEASON.tokenFromVault &&
-        html` Weeks 1–7 the token <em>is</em> a vault slot, so it’s one choice,
-          not two. From week 8 the token is free and you get both.`
-      }
+      ${tokenWeeksHTML()}
     </div>
     ${vc.drag && dragHTML(b, vc.drag, keep, unit)}
   </div>`;
+}
+
+/** The one-line version of the token window, for the trade banner. "" when there is no trade. */
+function tokenWeeksHTML() {
+  const win = tokenVaultWindow(SEASON);
+  if (!win) return "";
+  return html` ${win.to ? html`Weeks ${win.from}–${win.to}` : html`From week ${win.from}`}
+    the token <em>is</em> a vault slot, so it’s one choice, not two.
+    ${win.to && html`From week ${win.to + 1} the token is free and you get both.`}`;
 }
 
 function dragHTML(b, d, keep, unit) {

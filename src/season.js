@@ -72,6 +72,8 @@
  * @property {boolean} tokenFromVault  True when the bonus-roll token is itself a Great Vault
  *   reward, so taking it costs you the item you'd otherwise have picked. Only changes the wording
  *   of the vault comparison, never its arithmetic — a wrong guess here misleads nobody's maths.
+ * @property {number} [tokenVaultFrom]  First week of the season in which the token can be taken at
+ *   all. Defaults to week 1; Season 2 withholds it from the opening vault. Wording only, as above.
  * @property {number} [tokenVaultWeeks]  Last week of the season in which that's true; from the week
  *   after, the token is a free weekly reward and the trade disappears. Wording only, as above.
  * @property {Record<string, Reward>|null} rollReward  Where a roll pays out, keyed by difficulty
@@ -108,9 +110,15 @@ export const SEASONS = {
     tokenDungeon: 1,
     tokenNote:
       "1 token for everything in Season 2, raid bosses and M+ dungeons alike. (Season 1 charged 2 per raid boss, which is why older notes halve raid EV.)",
-    // Weeks 1–7 the token comes out of a Great Vault slot, so a roll is bought with the item you'd
+    // Weeks 2–7 the token comes out of a Great Vault slot, so a roll is bought with the item you'd
     // otherwise have taken. From week 8 it's a free weekly reward again and the trade disappears.
+    //
+    // The window opens in week 2, not week 1: Blizzard's 2026-07-31 season post says a Voidcore is
+    // not offered in the opening vault of Season 2 and first appears on August 25. Guides written
+    // before that date — Larias' 7/30 draft among them — plan a week 1 roll that isn't there.
+    // https://us.forums.blizzard.com/en/wow/t/midnight-season-1-ending-and-season-2-information/2331696
     tokenFromVault: true,
+    tokenVaultFrom: 2,
     tokenVaultWeeks: 7,
     // Season 2 pays a bonus roll out as if the item had come from your Great Vault, not from the
     // boss. Vault rewards from LFR/Normal/Heroic jump to the first step of the next track, and a
@@ -207,6 +215,28 @@ export const REWARD_SEASON = SEASONS[2];
 
 /** Is the season the pane describes the one the rest of the app is pricing? */
 export const REWARDS_LIVE = REWARD_SEASON === SEASON;
+
+/**
+ * The run of weeks in which taking a bonus-roll token costs you your Great Vault item.
+ *
+ * Returns null when the season never charges a vault slot for the token, so callers can drop the
+ * sentence entirely rather than print a range with nothing behind it. `to` is null when the season
+ * knows the trade starts but not when it stops — "from week N" is still worth saying, and inventing
+ * an end week to make the phrasing tidy would be inventing data.
+ *
+ * Two places on the page describe this window in prose and they must not disagree, which is the
+ * whole reason it's derived here rather than written out twice.
+ *
+ * @param {Season} season
+ * @returns {{from: number, to: number|null}|null}
+ */
+export function tokenVaultWindow(season) {
+  if (!season.tokenFromVault) return null;
+  return {
+    from: season.tokenVaultFrom || 1,
+    to: season.tokenVaultWeeks || null,
+  };
+}
 
 /**
  * What a bonus roll on this kind of source, at this difficulty, would actually hand you.

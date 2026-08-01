@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { SEASONS, rewardOf } from "../src/season.js";
+import { SEASONS, rewardOf, tokenVaultWindow } from "../src/season.js";
 
 test("a Season 1 roll hands you the drop, so there is no reward to look up", () => {
   assert.equal(rewardOf(SEASONS[1], "raid", "mythic"), null);
@@ -114,12 +114,24 @@ test("a named ladder rung agrees with the difficulty that pays the same item lev
 test("a season that buys the token with a vault slot says for how long", () => {
   Object.keys(SEASONS).forEach((n) => {
     const s = SEASONS[n];
-    if (!s.tokenFromVault) return;
+    const win = tokenVaultWindow(s);
+    if (!s.tokenFromVault) {
+      assert.equal(win, null, "Season " + n + " has no trade to describe");
+      return;
+    }
     assert.ok(
       s.tokenVaultWeeks > 0,
       "Season " + n + " needs the week the trade stops",
     );
+    assert.ok(win.from >= 1 && win.from <= win.to, "Season " + n + " window");
   });
+});
+
+// Blizzard's 2026-07-31 season post withholds the Voidcore from the opening vault: it first appears
+// on August 25, the second week. Guides written before that date plan a week 1 roll. If this ever
+// reverts, the two sentences render.js builds off the window revert with it.
+test("Season 2's token window opens in week 2, not week 1", () => {
+  assert.deepEqual(tokenVaultWindow(SEASONS[2]), { from: 2, to: 7 });
 });
 
 test("every reward carries a label and an item level slot", () => {
