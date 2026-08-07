@@ -1,6 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { SEASONS, rewardOf, tokenVaultWindow } from "../src/season.js";
+import {
+  SEASONS,
+  rewardOf,
+  tokenVaultWindow,
+  seasonWeek,
+  tokenWeekNow,
+} from "../src/season.js";
 
 test("a Season 1 roll hands you the drop, so there is no reward to look up", () => {
   assert.equal(rewardOf(SEASONS[1], "raid", "mythic"), null);
@@ -132,6 +138,60 @@ test("a season that buys the token with a vault slot says for how long", () => {
 // reverts, the two sentences render.js builds off the window revert with it.
 test("Season 2's token window opens in week 2, not week 1", () => {
   assert.deepEqual(tokenVaultWindow(SEASONS[2]), { from: 2, to: 7 });
+});
+
+/* ---------- the season calendar ---------- */
+
+// Larias' 8/5 week-by-week dates every week of the season. If the anchor ever moves, these are the
+// dates that have to move with it — the whole point of the field is that the app and that guide
+// agree on which week it is.
+test("the season's weeks land on the dates the week-by-week guide gives them", () => {
+  const s2 = SEASONS[2];
+  const on = (d) => seasonWeek(s2, new Date(d)).week;
+  assert.equal(on("2026-08-11T16:00:00Z"), 0, "pre-season week");
+  assert.equal(on("2026-08-18T16:00:00Z"), 1, "week 1, August 18");
+  assert.equal(on("2026-08-25T16:00:00Z"), 2, "week 2, August 25");
+  assert.equal(on("2026-09-01T16:00:00Z"), 3, "week 3, September 1");
+  assert.equal(on("2026-09-08T16:00:00Z"), 4, "week 4, September 8");
+  assert.equal(on("2026-09-15T16:00:00Z"), 5, "week 5, September 15");
+});
+
+// Week 0 is a state, not a clamp: before the season opens, the honest sentence is the date it opens
+// on. Rounding it up to week 1 would have the pane claim the season had started.
+test("a moment before the season opens is week 0, not week 1", () => {
+  const s2 = SEASONS[2];
+  assert.equal(seasonWeek(s2, new Date("2026-08-18T14:59:00Z")).week, 0);
+  assert.equal(seasonWeek(s2, new Date("2026-08-18T15:00:00Z")).week, 1);
+});
+
+test("a season with no published calendar has no week rather than a guessed one", () => {
+  assert.equal(seasonWeek(SEASONS[1], new Date("2026-08-25T16:00:00Z")), null);
+  assert.equal(
+    tokenWeekNow(SEASONS[1], new Date("2026-08-25T16:00:00Z")),
+    null,
+  );
+});
+
+// The two sentences on the page that place today against the window read off this one state, so a
+// wrong boundary here is a page that contradicts itself rather than a page that's merely wrong.
+test("the token window's state follows the week it's asked about", () => {
+  const s2 = SEASONS[2];
+  const at = (d) => tokenWeekNow(s2, new Date(d)).state;
+  assert.equal(at("2026-08-11T16:00:00Z"), "before"); // season hasn't opened
+  assert.equal(at("2026-08-18T16:00:00Z"), "early"); // week 1, no token in the vault
+  assert.equal(at("2026-08-25T16:00:00Z"), "trade"); // week 2, the window opens
+  assert.equal(at("2026-09-29T16:00:00Z"), "trade"); // week 7, its last week
+  assert.equal(at("2026-10-06T16:00:00Z"), "free"); // week 8, a free weekly reward
+});
+
+// The date the window opens is quoted in the pane while it's still ahead of the reader, so it has to
+// be the reset of `tokenVaultFrom` and not week 1's.
+test("the window opens on the reset of the week the season says it does", () => {
+  const s2 = SEASONS[2];
+  const w = tokenWeekNow(s2, new Date("2026-08-12T16:00:00Z"));
+  assert.equal(w.opens.toISOString(), "2026-08-18T15:00:00.000Z");
+  assert.equal(w.trades.toISOString(), "2026-08-25T15:00:00.000Z");
+  assert.equal(seasonWeek(s2, w.trades).week, tokenVaultWindow(s2).from);
 });
 
 test("every reward carries a label and an item level slot", () => {

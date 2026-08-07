@@ -185,6 +185,15 @@ off the 12.1 PTR and pinned in [`tests/season.test.js`](tests/season.test.js), s
 fails a test rather than quietly changing everyone's numbers. The M+ figure is the payout for a +10
 key or higher; lower keys pay under it, and nothing in a QE report says which key you run.
 
+In Season 2 the roll token is itself a Great Vault reward for weeks 2–7, so taking it costs you the
+item you'd otherwise have picked; from week 8 it's free again and you get both. That window is a
+rule stated in week numbers, which is only useful next to which week it is now — so the season also
+carries `week1`, the reset that opens week 1 (August 18, off Larias' week-by-week dates), and both
+places that describe the window answer it for today: the reward pane and the vault trade banner.
+Before the season opens it names the date instead. The count is anchored to the US reset, which is
+the reset those dates are written in; other regions reset later the same day, so at the boundary it
+can name a week the reader hasn't reached yet.
+
 All of that is legible in the app from the **S2 rewards** button in the masthead, which opens a
 reward pane: what each source pays, at which track and item level, the full M+ ladder the ranking
 quotes the top of, the crests a roll banks, and what the rules change about the numbers on the page.

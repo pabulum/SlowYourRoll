@@ -17,6 +17,7 @@ import {
   REWARD_SEASON,
   REWARDS_LIVE,
   tokenVaultWindow,
+  tokenWeekNow,
 } from "./season.js";
 import { state, active } from "./store.js";
 import { $, setHTML, setText, setShown, setDisplayed } from "./dom.js";
@@ -97,6 +98,60 @@ const REWARD_ROWS = [
   { key: "lfr", name: "Raid Finder boss" },
   { key: "mythic-plus", name: "M+ dungeon" },
 ];
+
+/**
+ * "Tuesday, August 18" — a reset, written the way the guides that date the season write it.
+ *
+ * Formatted in UTC rather than the reader's zone on purpose: these are the dates every week-by-week
+ * guide is keyed to, and shifting one to "Wednesday, August 19" for a reader east of London would
+ * quietly disagree with the guide they're holding.
+ */
+const RESET_FMT = new Intl.DateTimeFormat("en-US", {
+  weekday: "long",
+  month: "long",
+  day: "numeric",
+  timeZone: "UTC",
+});
+
+/**
+ * Which week it is, against the window in which the token costs a vault slot.
+ *
+ * The season's rules are written in week numbers, and until this line existed every one of them had
+ * to be resolved against a calendar by hand. `long` is the drawer's version, a paragraph of its own;
+ * the short one is a clause inside the vault banner's prose. Both come off one state so they can't
+ * drift, and both render nothing where the season has no published dates.
+ *
+ * @param {import("./season.js").Season} s
+ * @param {boolean} [long]
+ */
+function weekNowHTML(s, long) {
+  const w = tokenWeekNow(s);
+  if (!w) return "";
+  const opens = RESET_FMT.format(w.opens),
+    trades = RESET_FMT.format(w.trades);
+  if (w.state === "before")
+    return long
+      ? html`<b>${seasonName(s)} opens ${opens}</b> — that's week 1. The first
+          vault with a token in it is week ${tokenVaultWindow(s).from},
+          ${trades}.`
+      : html` The season opens ${opens}; the trade starts ${trades}.`;
+  if (w.state === "early")
+    return long
+      ? html`<b>It's week ${w.week}.</b> There's no token in this vault — the
+          first one is week ${tokenVaultWindow(s).from}, ${trades}.`
+      : html` It's week ${w.week}: no token in this vault yet, so nothing is
+        being given up for one.`;
+  if (w.state === "free")
+    return long
+      ? html`<b>It's week ${w.week}.</b> The token is a free weekly reward now,
+          so you take it and your vault item both.`
+      : html` It's week ${w.week}, so the token is free and you get both.`;
+  return long
+    ? html`<b>It's week ${w.week}.</b> The token is a Great Vault slot this
+        week: take it or take the item, not both.`
+    : html` It's week ${w.week}, so the token <em>is</em> a vault slot — one
+        choice, not two.`;
+}
 
 /** "≈80 Myth" — a crest yield, or an em dash where the payout banks none. */
 function crestCell(r) {
@@ -220,6 +275,7 @@ export function renderRewards(here) {
   }
   const win = tokenVaultWindow(s);
   const mythCrest = (table.mythic && table.mythic.crests) || 0;
+  const weekNow = weekNowHTML(s, true);
 
   setHTML(
     "rewardBody",
@@ -246,6 +302,7 @@ export function renderRewards(here) {
             ${win.to && html`From week ${win.to + 1} it's a free weekly reward and you get both.`}
           </p>`
         }
+        ${weekNow && html`<p class="rwd-now">${weekNow}</p>`}
       </section>
 
       <section class="rwd-sec">
@@ -849,10 +906,18 @@ function tradeHTML(b, vc) {
   </div>`;
 }
 
-/** The one-line version of the token window, for the trade banner. "" when there is no trade. */
+/**
+ * The one-line version of the token window, for the trade banner. "" when there is no trade.
+ *
+ * Where the season is dated, this says which week it is instead of the range — the banner is a
+ * decision being made right now, and "weeks 2–7" leaves the reader to work out whether that's them.
+ * The range stays as the fallback for a season whose calendar isn't out yet.
+ */
 function tokenWeeksHTML() {
   const win = tokenVaultWindow(SEASON);
   if (!win) return "";
+  const now = weekNowHTML(SEASON);
+  if (now) return now;
   return html` ${win.to ? html`Weeks ${win.from}–${win.to}` : html`From week ${win.from}`}
     the token <em>is</em> a vault slot, so it’s one choice, not two.
     ${win.to && html`From week ${win.to + 1} the token is free and you get both.`}`;

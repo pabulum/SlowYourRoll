@@ -76,6 +76,9 @@
  *   all. Defaults to week 1; Season 2 withholds it from the opening vault. Wording only, as above.
  * @property {number} [tokenVaultWeeks]  Last week of the season in which that's true; from the week
  *   after, the token is a free weekly reward and the trade disappears. Wording only, as above.
+ * @property {string} [week1]  ISO instant of the weekly reset that opens week 1 — the anchor every
+ *   week number on the page is counted from. Absent where a season's calendar isn't published,
+ *   which leaves those week numbers abstract rather than wrong.
  * @property {Record<string, Reward>|null} rollReward  Where a roll pays out, keyed by difficulty
  *   ("mythic"/"heroic"/"normal"/"lfr", plus "mythic-plus" for dungeons). Null when a roll simply
  *   hands you the drop, at the drop's own item level — the Season 1 behaviour.
@@ -120,6 +123,12 @@ export const SEASONS = {
     tokenFromVault: true,
     tokenVaultFrom: 2,
     tokenVaultWeeks: 7,
+    // Larias' 8/5 week-by-week dates the season: pre-season August 11, week 1 August 18, then every
+    // week by sevens (week 2 August 25, week 3 September 1 …), which is what turns the window above
+    // from a rule into an answer. Quoted at the US reset — 8am Pacific, 15:00 UTC in August. Other
+    // regions reset later in the same day, so for those hours the count runs a week ahead of the
+    // reader; see `seasonWeek` for why that's worn rather than fixed.
+    week1: "2026-08-18T15:00:00Z",
     // Season 2 pays a bonus roll out as if the item had come from your Great Vault, not from the
     // boss. Vault rewards from LFR/Normal/Heroic jump to the first step of the next track, and a
     // Mythic vault arrives fully upgraded — so a Mythic boss and a M+ dungeon cost the same single
@@ -235,6 +244,75 @@ export function tokenVaultWindow(season) {
   return {
     from: season.tokenVaultFrom || 1,
     to: season.tokenVaultWeeks || null,
+  };
+}
+
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Which week of the season a moment falls in.
+ *
+ * The season describes itself in week numbers — the token comes out of a vault slot in weeks 2–7 —
+ * and a week number is only worth printing next to which week it is now. That's a calendar question
+ * nothing else in the app has a reason to hold, so it lives here, beside the window it answers.
+ *
+ * Week 0 is a state, not a floor: before the season opens, "it starts on the 18th" is the honest
+ * thing to say, and clamping it to 1 would claim the season had begun. Null where the season has no
+ * published calendar, so callers drop the sentence rather than invent a week for it.
+ *
+ * Counted from the US reset, which is the reset Larias' dates are written in. Other regions reset
+ * later the same day, so for those hours this names a week the reader hasn't reached — an error of
+ * one week for under a day, at the boundary, against a control the app has nowhere to source an
+ * answer for. The report says which realm a character is on but not which schedule it resets on.
+ *
+ * @param {Season} season
+ * @param {Date} [now]  Defaults to now; a parameter so this is testable and the caller isn't.
+ * @returns {{week: number, opens: Date}|null}
+ */
+export function seasonWeek(season, now) {
+  if (!season.week1) return null;
+  const open = Date.parse(season.week1);
+  if (!Number.isFinite(open)) return null;
+  const at = (now || new Date()).getTime();
+  return {
+    week: at < open ? 0 : Math.floor((at - open) / WEEK_MS) + 1,
+    opens: new Date(open),
+  };
+}
+
+/**
+ * Where today sits against the token window — the one thing the two week sentences on the page are
+ * really being asked.
+ *
+ * Split from its wording on purpose: the drawer and the vault banner both answer this and must not
+ * answer it differently, exactly as they already share `tokenVaultWindow`. Null when either half is
+ * missing (no trade to place, or no calendar to place it on), which is the same shape the rest of
+ * the week copy degrades to.
+ *
+ * @param {Season} season
+ * @param {Date} [now]
+ * @returns {{week: number, opens: Date, trades: Date, state: "before"|"early"|"trade"|"free"}|null}
+ *   `before` — the season hasn't opened. `early` — in season, but the token isn't in the vault yet.
+ *   `trade` — inside the window, so the token costs you the item. `free` — past it, you get both.
+ *   `trades` is the reset the window opens on, which is the date worth naming in the first two.
+ */
+export function tokenWeekNow(season, now) {
+  const win = tokenVaultWindow(season),
+    w = seasonWeek(season, now);
+  if (!win || !w) return null;
+  const state =
+    !w.week || w.week < win.from
+      ? w.week
+        ? "early"
+        : "before"
+      : win.to && w.week > win.to
+        ? "free"
+        : "trade";
+  return {
+    week: w.week,
+    opens: w.opens,
+    trades: new Date(w.opens.getTime() + (win.from - 1) * WEEK_MS),
+    state,
   };
 }
 

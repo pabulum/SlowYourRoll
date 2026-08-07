@@ -16,6 +16,7 @@ import {
   REWARD_SEASON,
   REWARDS_LIVE,
   seasonName,
+  tokenWeekNow,
 } from "../src/season.js";
 import { loadPage } from "./page.js";
 
@@ -368,6 +369,39 @@ test("the pane marks the difficulty the board is ranked at, and only that one", 
 test("with no report loaded no row claims to be yours", () => {
   const doc = renderWith([]);
   assert.equal(doc.querySelectorAll("#rewardBody .rwd tr.here").length, 0);
+});
+
+// The pane's other live line: which week it is, against the window it has just described in the
+// abstract. Asserted against the state rather than a sentence, so this doesn't start failing on the
+// day the season moves on a week.
+test("the pane places today against the window it just described", () => {
+  const doc = renderWith([]);
+  const now = tokenWeekNow(REWARD_SEASON);
+  const line = doc.querySelector("#rewardBody .rwd-now");
+  if (!now) {
+    assert.equal(line, null, "with no calendar, the pane claims nothing");
+    return;
+  }
+  assert.ok(line, "the week line renders");
+  if (now.state === "before")
+    assert.match(line.textContent, new RegExp(seasonName(REWARD_SEASON)));
+  else assert.match(line.textContent, new RegExp("week " + now.week + "\\b"));
+});
+
+// Every week-by-week guide is keyed to the US reset dates, so a reset has to read the same on the
+// page wherever it's opened. Formatted here in UTC independently: if render ever falls back to the
+// reader's zone, a machine east of London renders the next day and this catches it.
+test("a reset date is written the way the guides that date the season write it", () => {
+  const now = tokenWeekNow(REWARD_SEASON);
+  if (!now || (now.state !== "before" && now.state !== "early")) return;
+  const txt = renderWith([]).querySelector("#rewardBody .rwd-now").textContent;
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+  assert.match(txt, new RegExp(fmt.format(now.trades)));
 });
 
 test("the legend links into the pane in both seasons", () => {

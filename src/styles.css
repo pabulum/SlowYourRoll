@@ -1709,6 +1709,17 @@ img.icon,
   color: var(--ink);
   font-weight: 650;
 }
+/* Which week it is, against the rule stated above it. The one line in the pane that changes on its
+   own, so it's marked the way the page marks anything live — the accent rule, nothing louder. */
+.rwd-now {
+  border-left: 2px solid var(--accent);
+  padding: 2px 0 2px 10px;
+  margin: 0 0 9px;
+}
+.rwd-now b {
+  color: var(--ink);
+  font-weight: 650;
+}
 .rwd-list {
   margin: 0;
   padding-left: 17px;
