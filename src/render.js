@@ -339,6 +339,11 @@ export function renderRewards(here) {
             buys a second shot at it rather than an upgrade of it.
           </p>`
         }
+        ${
+          s.special &&
+          s.special.heroicNote &&
+          html`<p class="rwd-foot">${s.special.heroicNote}</p>`
+        }
       </section>
 
       ${ladderHTML(table["mythic-plus"] || {})}
@@ -434,7 +439,7 @@ function renderDataNote(built) {
         ". Maintainer fix: rerun `npm run data` against a current QuestionablyEpic checkout and commit data/qe-data.json.",
     );
   }
-  if (seasonDrift(QE_DATA.seasonId)) {
+  if (seasonDrift(QE_DATA)) {
     parts.push(
       html`<b
           >The site's item data is from a newer season than the rest of the
@@ -445,10 +450,10 @@ function renderDataNote(built) {
         encounter's own loot table is still right.`,
     );
     console.warn(
-      "[SlowYourRoll] Season drift: data/qe-data.json reports QE season id " +
-        QE_DATA.seasonId +
+      "[SlowYourRoll] Season drift: data/qe-data.json lists current raids " +
+        (QE_DATA.currentRaids || []).join(", ") +
         ", but src/season.js is configured for " +
-        SEASON.qeSeasonId +
+        (SEASON.qeRaids || []).join(", ") +
         ". Maintainer fix: bump ACTIVE in src/season.js.",
     );
   }
@@ -1134,6 +1139,8 @@ function specialNote(r) {
     <b>${SEASON.special.badge}.</b> ${SEASON.special.note} The EV above prices
     <em>this week</em> only. It can’t weigh a token banked for kill week against
     one spent now.
+    ${SEASON.special.heroicNote &&
+    html`<span class="special-alt">${SEASON.special.heroicNote}</span>`}
   </div>`;
 }
 

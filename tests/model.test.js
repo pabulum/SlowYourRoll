@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { QE_DATA } from "../src/data.js";
-import { SEASON } from "../src/season.js";
+import { SEASON, rollReward } from "../src/season.js";
 import { state } from "../src/store.js";
 import { specId } from "../src/loot.js";
 import {
@@ -35,6 +35,13 @@ const TABLE = Object.keys(QE_DATA.items).filter((id) =>
   QE_DATA.items[id].s.some((s) => s[0] === RAID_ID && s[1] === ENC_ID),
 ).length;
 const POOL = TABLE + 2;
+
+// The board below sims its two items off a Mythic raid boss at DROP_ILVL. What a roll there hands
+// back is the season's business, not this file's: Season 1 pays the drop itself, Season 2 promotes
+// it to Myth 6/6. Tests about owning a copy are about the comparison, not about either number, so
+// they measure against this rather than restating whichever season is active.
+const DROP_ILVL = 639;
+const PAYOUT = rollIlvlFor(rollReward("raid", "mythic"), DROP_ILVL);
 
 /** A minimal Droptimizer board with two upgrades on the same boss. */
 function makeBoard() {
@@ -141,13 +148,13 @@ test("a copy you hold only dupes a roll it matches or beats", () => {
 test("holding a copy at the roll's item level marks it Own and drops it from the numerator", () => {
   state.showAll = false;
   const b = makeBoard();
-  state.simc = { testkey: { owned: { 900002: 639 } } };
+  state.simc = { testkey: { owned: { 900002: PAYOUT } } };
   const row = buildGroups(b).rows[0];
   const it = row.items.filter((x) => x.id === 900002)[0];
   assert.equal(
     it.rollIlvl,
-    639,
-    "Season 1 pays the drop, so that's what a dupe is measured against",
+    PAYOUT,
+    "a dupe is measured against what the roll pays, which the season decides",
   );
   assert.equal(it.dupe, true);
   assert.equal(it.state, "own");
@@ -158,9 +165,9 @@ test("holding a copy at the roll's item level marks it Own and drops it from the
 test("holding a weaker copy leaves the item Want, tagged with what you hold", () => {
   state.showAll = false;
   const b = makeBoard();
-  state.simc = { testkey: { owned: { 900002: 630 } } };
+  state.simc = { testkey: { owned: { 900002: PAYOUT - 9 } } };
   const it = buildGroups(b).rows[0].items.filter((x) => x.id === 900002)[0];
-  assert.equal(it.ownedIlvl, 630);
+  assert.equal(it.ownedIlvl, PAYOUT - 9);
   assert.equal(it.dupe, false);
   assert.equal(it.state, "want");
   assert.equal(buildGroups(b).rows[0].num, 30);
@@ -168,15 +175,53 @@ test("holding a weaker copy leaves the item Want, tagged with what you hold", ()
 
 /* ---------- end-of-raid encounters worth banking a token for ---------- */
 
-test("the final bosses of a raid are the tail of its encounter ids", () => {
-  const ids = Object.keys(RAID.bosses).sort((a, c) => Number(a) - Number(c));
-  assert.deepEqual(finalBosses(RAID_ID, 2), ids.slice(-2));
-  assert.deepEqual(finalBosses(RAID_ID, 1), ids.slice(-1));
+test("the final bosses of a raid are the tail of its pull order", () => {
+  assert.ok(RAID.order, "the current raid records a pull order to read");
+  assert.deepEqual(finalBosses(RAID_ID, 2), RAID.order.slice(-2));
+  assert.deepEqual(finalBosses(RAID_ID, 1), RAID.order.slice(-1));
+});
+
+// The reason `order` is carried through the data build at all. Journal encounter ids were assumed
+// to ascend with pull order until Venomous Abyss, where they don't: the raid ends on Coiled Altar
+// (2883), which sorts sixth of eight, so sorting by id badges Lost Explorers (2894) as the boss to
+// bank a token for. That is the one piece of advice every guide leads with, so it is worth a test
+// naming the raid rather than only the general rule above.
+test("pull order and encounter-id order disagree, and pull order wins", () => {
+  const abyss = QE_DATA.raids["1320"];
+  if (!abyss || !abyss.order) return; // a later season may not ship this raid
+  const byId = Object.keys(abyss.bosses).sort((a, c) => Number(a) - Number(c));
+  assert.notDeepEqual(abyss.order.slice(-2), byId.slice(-2));
+  assert.deepEqual(
+    finalBosses(1320, 2).map((e) => abyss.bosses[e]),
+    ["Coiled Altar", "Ula'tek"],
+  );
 });
 
 test("asking for no final bosses, or for an unknown raid, names none", () => {
   assert.deepEqual(finalBosses(RAID_ID, 0), []);
   assert.deepEqual(finalBosses(-999, 2), []);
+});
+
+// `finalBosses` answers for any raid; only the season's named tier raid gets the badge. Season 2
+// ranks a one-boss flex world boss alongside the tier raid, and "the last two bosses" of a one-boss
+// raid is that boss — so without the gate the world boss wore the Venomcursed badge.
+test("only the season's tier raid carries the end-of-raid badge", () => {
+  const sp = SEASON.special;
+  if (!sp || !sp.raid) return; // a season with one raid needs no gate
+  const others = QE_DATA.currentRaids.filter((id) => id !== String(sp.raid));
+  assert.ok(others.length, "Season 2 ranks more than one raid");
+  for (const id of others) {
+    const bosses = Object.keys(QE_DATA.raids[id].bosses);
+    for (const enc of bosses) {
+      assert.equal(
+        buildGroups(makeBoard()).rows.some(
+          (r) => r.g.key === id + ":" + enc && r.g.special,
+        ),
+        false,
+        QE_DATA.raids[id].name + " is not the tier raid",
+      );
+    }
+  }
 });
 
 // A raid shorter than the window is all endgame rather than an error.
@@ -287,9 +332,12 @@ test("the best vault option is the one the trade is measured against", () => {
   assert.equal(vc.keep.id, 900002, "20 beats 10");
 });
 
-// Filler comes out of the loot table, not the report, so it has no drop level to compare against.
-// Owning one must not be read as owning the roll's reward.
-test("an item the report never scored is not auto-owned on item level alone", () => {
+// Filler comes out of the loot table, not the report, so it carries no simmed drop level. What that
+// means for owning one is the season's answer, not a fixed rule: where a roll hands you the drop,
+// there is nothing to compare against and owning a copy must not be read as owning the reward;
+// where the season promotes, the payout is known without a drop level and a better copy really is
+// a dupe. Both are covered so a rollover can't quietly flip one into the other unnoticed.
+test("a filler item's payout follows the season, not a drop level it hasn't got", () => {
   state.showAll = false;
   const b = makeBoard();
   const filler = Object.keys(QE_DATA.items).filter((id) =>
@@ -299,9 +347,11 @@ test("an item the report never scored is not auto-owned on item level alone", ()
   const it = buildGroups(b).rows[0].items.filter(
     (x) => String(x.id) === filler,
   )[0];
-  assert.equal(it.lvl, 0);
-  assert.equal(it.rollIlvl, null);
-  assert.equal(it.dupe, false);
+  assert.equal(it.lvl, 0, "the loot table carries no drop level");
+
+  const reward = rollReward("raid", "mythic");
+  assert.equal(it.rollIlvl, reward ? reward.ilvl : null);
+  assert.equal(it.dupe, Boolean(reward && reward.ilvl));
 });
 
 /* ---------- QE reports: which field the value actually lives in ----------

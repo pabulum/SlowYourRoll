@@ -318,12 +318,15 @@ export function isDupe(ownedIlvl, rollIlvl) {
 /**
  * The last `n` encounters of a raid, as the encounter ids that end its boss list.
  *
- * Ordered by encounter id, because that's the only order there is: the data build sorts each raid's
- * boss map by key, and JS orders integer-like keys numerically anyway, so no pull order ever
- * survived upstream to be preserved. Blizzard hands out journal encounter ids in roughly pull
- * order, which is why this works — but it is an assumption about their numbering, not a fact from
- * the data. If a raid ever lands whose ids don't ascend with its bosses, this is the one place to
- * fix, and the season's `special.lastBosses` is what it serves.
+ * Uses the raid's recorded pull order (`order`, upstream's `bossOrder`). It used to sort by
+ * encounter id on the theory that Blizzard hands out journal ids in roughly pull order — true of
+ * The Voidspire, and false of the raid this season is about: Venomous Abyss ends on Coiled Altar
+ * (2883) and Ula'tek (2895), but by id the last two are Lost Explorers (2894) and Ula'tek. That
+ * badged the wrong boss as the one worth banking a token for, which is the single piece of advice
+ * every guide leads with, so the order is now carried through from upstream rather than guessed.
+ *
+ * Falls back to ascending id when a raid records no order — the old behaviour, kept because it is
+ * right more often than not and the alternative is showing nothing.
  *
  * @param {number|string} instId
  * @param {number} n
@@ -332,16 +335,28 @@ export function isDupe(ownedIlvl, rollIlvl) {
 export function finalBosses(instId, n) {
   const r = QE_DATA.raids[String(instId)];
   if (!r || !n) return [];
-  return Object.keys(r.bosses)
-    .sort((a, c) => Number(a) - Number(c))
-    .slice(-n);
+  const order =
+    r.order && r.order.length
+      ? r.order
+      : Object.keys(r.bosses).sort((a, c) => Number(a) - Number(c));
+  return order.slice(-n);
 }
 
-/** Does this encounter carry the season's end-of-raid rewards? Memoised per raid. */
+/**
+ * Does this encounter carry the season's end-of-raid rewards? Memoised per raid.
+ *
+ * Gated on the season naming its tier raid, because "the last two bosses of a raid" is not a rule
+ * that survives being applied to every raid on the page. Season 2 lists two: Venomous Abyss, whose
+ * last two bosses are the Venomcursed tier, and Tidebound Grotto, a one-boss flex world boss that
+ * has nothing to do with it — and asking for the last two bosses of a one-boss raid returns that
+ * boss, so the badge landed on it. A season with no `raid` named falls back to the old behaviour of
+ * treating every raid's tail as special, which is right for a season whose only raid is the tier.
+ */
 let specialByRaid = null;
 function isSpecial(instId, encId) {
   const sp = SEASON.special;
   if (!sp) return false;
+  if (sp.raid && String(instId) !== String(sp.raid)) return false;
   if (!specialByRaid) specialByRaid = {};
   const k = String(instId);
   if (!specialByRaid[k]) specialByRaid[k] = finalBosses(instId, sp.lastBosses);

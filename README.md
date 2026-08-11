@@ -38,8 +38,8 @@ agility weapon for a Mistweaver — are left out of the math entirely and folded
 reason attached.
 
 That makes loot spec a lever, not just a filter, and it cuts both ways: switching can _add_ items
-you want, but more often the win is **dropping** ones you don't. A Mistweaver at Pit of Saron is
-the standard case — looting as Windwalker sheds Nevermelting Ice Crystal, which no agility spec
+you want, but more often the win is **dropping** ones you don't. A Mistweaver at Twin Fangs is
+the standard case — looting as Windwalker sheds Preternatural Antivenom, which no agility spec
 can be given, and keeps every piece of leather. Same wanted value, one fewer item in the pool,
 better odds on each. So each encounter is costed as every spec of your class, and any that beats
 your current one is offered under the item list, named by what it dodges and what it gives up.
@@ -166,6 +166,15 @@ npm run data -- --qe=/path/to/QELive  # explicit checkout
 npm run data:check                    # report drift without writing
 ```
 
+QE writes those databases in TypeScript and renames them between patches (`InstanceDB.js` became
+`InstanceDB.ts` on the 12.1 branch), so the build tries both spellings and erases types with Node's
+own stripper before evaluating them. A new season usually lands on a patch branch weeks before it
+merges, which is the one case where the files have to be read out of a branch rather than a working
+tree — `git show`n into a temp directory, so nobody's checkout gets moved off what they were doing.
+Provenance is recorded either way: the build stamps `_meta.source` from the checkout's git history,
+and `--source=` (or `$QE_SOURCE`) supplies it when there is no history to read, so an extracted
+build says which branch it came from instead of `unknown`.
+
 The build also downloads Blizzard's item and talent data from [Raidbots](https://www.raidbots.com)
 (`equippable-items.json`, `talents.json`) for the one thing QE Live's database can't supply: who is
 allowed to loot what. QE's ItemDB is a healer database — every item in it is intellect and none of
@@ -176,14 +185,37 @@ stats settle it; see [`src/loot.js`](src/loot.js). Pass `--items=` / `--talents=
 
 **What a roll costs and what the season is called** live in [`src/season.js`](src/season.js) —
 QE Live doesn't publish those. Season 1 charges 2 tokens for a raid boss and 1 for a M+ dungeon;
-Season 2 charges 1 for everything, which materially reorders the rankings. Moving to Season 2 is
-`npm run data`, then setting `ACTIVE = 2` in that file.
+Season 2 charges 1 for everything, which materially reorders the rankings. Moving seasons is
+`npm run data`, then setting `ACTIVE` in that file. The app is on Season 2 as of 2026-08-11, the
+day patch 12.1 went live; the raid itself opens on the 18th, so through pre-season week it ranks
+content that is listed but not yet lootable, and the week copy says so by reporting week 0.
+
+The build warns when the database has moved to a season the build doesn't know about, and it
+watches the **current raid list** to do it, not QE's `seasonID`. Upstream carried the same season id
+(34) across Midnight's Season 1 → 2 boundary while swapping every raid underneath it, so an id check
+would have sat silent through the one rollover it existed to catch. Each season therefore records
+the raid ids it expects in `qeRaids`.
 
 Season 2 also promotes what a roll pays out — a Mythic boss hands back a fully upgraded Myth item
 rather than the drop — so that season's table carries item levels as well as tracks. They're read
 off the 12.1 PTR and pinned in [`tests/season.test.js`](tests/season.test.js), so a PTR revision
 fails a test rather than quietly changing everyone's numbers. The M+ figure is the payout for a +10
 key or higher; lower keys pay under it, and nothing in a QE report says which key you run.
+
+**The last two bosses of the tier raid are a class apart** — Venomcursed 9/6 items with cantrip
+effects — so those encounter cards carry a badge and a note the EV can't express: it prices this
+week only, and can't weigh a token banked for kill week against one spent now. Two things about
+that are easy to get wrong and are worth stating.
+
+Which bosses are "last" comes from the raid's recorded **pull order**, carried through the data
+build as `order`. It used to be derived by sorting encounter ids, on the theory that Blizzard hands
+them out in roughly pull order. That held for The Voidspire and fails for Venomous Abyss, which
+ends on Coiled Altar (2883) — sixth of eight by id. Sorting badged Lost Explorers instead, which is
+the wrong boss to tell someone to bank a token for.
+
+And the badge is gated on the season naming its tier raid (`special.raid`), because Season 2 ranks
+two raids: the tier raid and Tidebound Grotto, a one-boss flex world boss. "The last two bosses" of
+a one-boss raid is that boss, so without the gate the world boss wore the badge too.
 
 In Season 2 the roll token is itself a Great Vault reward for weeks 2–7, so taking it costs you the
 item you'd otherwise have picked; from week 8 it's free again and you get both. That window is a

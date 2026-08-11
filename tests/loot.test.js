@@ -16,7 +16,16 @@ import { buildGroups } from "../src/model.js";
 const MISTWEAVER = "270";
 const CASTER_TRINKET = 249810; // Shadow of the Empyrean Requiem
 const HEALER_TRINKET = 249811; // Light of the Cosmic Crescendo
-const MIDNIGHT_FALLS = [1308, 2740];
+
+// The two trinkets above are the Season 1 pair the header describes, and the rule tests below still
+// use them: they are the case that prompted the file, and the item database keeps old items forever.
+// Anything that has to *rank* an encounter needs current content instead, because a pool the season
+// no longer offers doesn't rank at all — which is how a season rollover breaks these tests rather
+// than the loot rules they cover. Twin Fangs is Season 2's copy of the same shape: an intellect
+// trinket no Monk spec can be awarded, beside the healer one, in a table with cloth, mail and plate.
+const TWIN_FANGS = [1320, 2887];
+const BLOCKED_TRINKET = 270170; // Vexhul's Everflowing Gland — no Monk spec can loot it
+const MW_TRINKET = 270171; // Preternatural Antivenom — healer specs only, so Mistweaver but not WW
 
 test("spec names resolve however the report spells them", () => {
   assert.equal(specId("Mistweaver Monk"), MISTWEAVER, "QE sends the full name");
@@ -74,12 +83,10 @@ test("armor a class can't wear is blocked, and named", () => {
         it.u === 1 &&
         it.iv !== 16 &&
         !it.p &&
-        it.s.some(
-          (s) => s[0] === MIDNIGHT_FALLS[0] && s[1] === MIDNIGHT_FALLS[1],
-        )
+        it.s.some((s) => s[0] === TWIN_FANGS[0] && s[1] === TWIN_FANGS[1])
       );
     })[0];
-  assert.ok(cloth, "Midnight Falls drops a cloth piece");
+  assert.ok(cloth, "Twin Fangs drops a cloth piece");
   const v = canLoot(QE_DATA.items[cloth], MISTWEAVER);
   assert.equal(v.ok, false);
   assert.match(v.why, /Cloth — Monk wears Leather/);
@@ -118,13 +125,13 @@ test("blocked items stay visible but leave the EV pool", () => {
     source: "qe",
     results: [
       {
-        item: CASTER_TRINKET,
+        item: BLOCKED_TRINKET,
         score: 400,
         level: 700,
         dropDifficulty: "Mythic",
       },
       {
-        item: HEALER_TRINKET,
+        item: MW_TRINKET,
         score: 300,
         level: 700,
         dropDifficulty: "Mythic",
@@ -136,13 +143,13 @@ test("blocked items stay visible but leave the EV pool", () => {
     raidDiff: null,
   };
   const row = buildGroups(b).rows.filter(
-    (r) => r.g.key === MIDNIGHT_FALLS.join(":"),
+    (r) => r.g.key === TWIN_FANGS.join(":"),
   )[0];
 
   // The pool is the boss's whole loot table, split by what this loot spec can be handed.
   const table = Object.keys(QE_DATA.items).filter((id) =>
     QE_DATA.items[id].s.some(
-      (s) => s[0] === MIDNIGHT_FALLS[0] && s[1] === MIDNIGHT_FALLS[1],
+      (s) => s[0] === TWIN_FANGS[0] && s[1] === TWIN_FANGS[1],
     ),
   );
   const blocked = table.filter(
@@ -171,18 +178,18 @@ test("blocked items stay visible but leave the EV pool", () => {
     "the caster trinket's 400 doesn't count toward what you'd win",
   );
   assert.ok(
-    row.items.some((i) => i.id === CASTER_TRINKET && i.elig === false),
+    row.items.some((i) => i.id === BLOCKED_TRINKET && i.elig === false),
     "it stays visible, flagged",
   );
 });
 
 test("a spec that dodges dead weight is offered as the better roll", () => {
-  // Pit of Saron, as a Mistweaver: Nevermelting Ice Crystal is an intellect trinket no agility spec
+  // Twin Fangs, as a Mistweaver: Preternatural Antivenom is a healer-only trinket no agility spec
   // can be given. Looting as Windwalker sheds it and keeps every piece of leather, so the same
   // wanted value is drawn from a smaller pool — the whole reason to switch spec before rolling.
-  const CRYSTAL = 50259,
-    BELT = 49806,
-    WRISTS = 50264;
+  const ANTIVENOM = MW_TRINKET,
+    BOOTS = 268261, // Bespittled Slitherslippers
+    HELM = 271519; // Monkey King's Unyielding Visage
   state.showAll = false;
   state.simc = {};
   const b = {
@@ -194,25 +201,27 @@ test("a spec that dodges dead weight is offered as the better roll", () => {
     spec: "Mistweaver Monk",
     source: "qe",
     results: [
-      { item: BELT, score: 200, level: 707, dropDifficulty: "Mythic" },
-      { item: WRISTS, score: 150, level: 707, dropDifficulty: "Mythic" },
+      { item: BOOTS, score: 200, level: 707, dropDifficulty: "Mythic" },
+      { item: HELM, score: 150, level: 707, dropDifficulty: "Mythic" },
     ],
     overlay: {},
     tokenOverride: {},
     vaultTake: null,
     raidDiff: null,
   };
-  const row = buildGroups(b).rows.filter((r) => r.g.key === "-1:278")[0];
+  const row = buildGroups(b).rows.filter(
+    (r) => r.g.key === TWIN_FANGS.join(":"),
+  )[0];
 
-  const crystal = row.items.filter((i) => i.id === CRYSTAL)[0];
-  assert.ok(crystal, "the crystal is in a Mistweaver's pool");
-  assert.deepEqual(crystal.specs, ["270"], "and in no other Monk spec's");
+  const antivenom = row.items.filter((i) => i.id === ANTIVENOM)[0];
+  assert.ok(antivenom, "the antivenom is in a Mistweaver's pool");
+  assert.deepEqual(antivenom.specs, ["270"], "and in no other Monk spec's");
 
   const ww = row.alts.filter((a) => a.spec === "269")[0];
   assert.ok(ww, "Windwalker is offered as a better roll");
   assert.equal(ww.remaining, row.remaining - 1);
   assert.ok(ww.ev > row.ev);
-  assert.deepEqual(ww.dodges, ["Nevermelting Ice Crystal"]);
+  assert.deepEqual(ww.dodges, ["Preternatural Antivenom"]);
   assert.deepEqual(ww.loses, [], "nothing worth anything is given up");
 });
 
@@ -229,7 +238,7 @@ test("changing loot spec changes the pool", () => {
     source: "qe",
     results: [
       {
-        item: HEALER_TRINKET,
+        item: MW_TRINKET,
         score: 300,
         level: 700,
         dropDifficulty: "Mythic",
@@ -241,12 +250,12 @@ test("changing loot spec changes the pool", () => {
     raidDiff: null,
   };
   const asHealer = buildGroups(b).rows.filter(
-    (r) => r.g.key === MIDNIGHT_FALLS.join(":"),
+    (r) => r.g.key === TWIN_FANGS.join(":"),
   )[0];
 
   b.lootSpec = "269"; // Windwalker: agility, so a different half of the same table
   const asWindwalker = buildGroups(b).rows.filter(
-    (r) => r.g.key === MIDNIGHT_FALLS.join(":"),
+    (r) => r.g.key === TWIN_FANGS.join(":"),
   )[0];
 
   assert.notEqual(

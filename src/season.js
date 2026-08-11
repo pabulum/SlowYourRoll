@@ -5,10 +5,10 @@
 // holds what QE Live doesn't tell us: what to call the season, what a bonus roll costs, and what a
 // roll actually pays out.
 //
-// To move to Season 2:
+// To move to a new season:
 //   1. `npm run data`   — pulls the new current raids/dungeons from a QE Live checkout.
-//   2. Set ACTIVE below to 2, and fill in that season's `qeSeasonId` from the build output.
-//   3. Fill in the `rollReward` item levels once Midnight's upgrade tracks are published.
+//   2. Set ACTIVE below to that season, and copy the build's "Current raids" ids into `qeRaids`.
+//   3. Fill in the `rollReward` item levels once the expansion's upgrade tracks are published.
 // The app warns on its own when step 1 has happened but step 2 hasn't (see seasonDrift). Step 3 is
 // safe to leave undone: a null item level degrades to "promoted, amount unknown", which suppresses
 // the dupe guess rather than getting it wrong.
@@ -49,16 +49,24 @@
 /**
  * Encounters at the end of a raid whose rewards are a class apart, and worth holding a token for.
  *
- * `lastBosses` counts back from the end of the raid rather than naming encounter ids, because the
- * raid this describes isn't in the database yet. Which encounters those are is worked out in
- * model.js, by encounter id — see `finalBosses` there for why that ordering is the only one
- * available and what it assumes.
+ * `lastBosses` counts back from the end of the raid rather than naming encounter ids, which keeps
+ * this readable as a rule and survives the raid being replaced. Which encounters those are is worked
+ * out in model.js — see `finalBosses`, and note that it reads the raid's recorded pull order,
+ * because Venomous Abyss is the raid where encounter id and pull order stopped agreeing.
  *
  * @typedef {Object} Special
- * @property {number} lastBosses  How many bosses at the end of a raid carry these rewards.
+ * @property {string} [raid]  Instance id of the raid these rewards belong to. Worth naming once the
+ *   season has more than one raid on the page: the Season 2 list pairs the tier raid with a one-boss
+ *   flex world boss, and "the last two bosses" is a true sentence about the first and a meaningless
+ *   one about the second. Omit where the season's only raid is the tier raid.
+ * @property {number} lastBosses  How many bosses at the end of that raid carry these rewards.
  * @property {string} badge  Short tag for the encounter card.
  * @property {number|null} ilvl  Item level those rewards drop and pay out at.
  * @property {string} note   One line on why the encounter is worth saving a token for.
+ * @property {string} [heroicNote]  Why the same encounters are worth rolling at a *lower* difficulty
+ *   than the one `ilvl` describes. Separate from `note` because it argues the opposite way — spend
+ *   the token now rather than bank it — and a reader deciding between the two needs both, not a
+ *   sentence that has quietly averaged them.
  */
 
 /**
@@ -66,6 +74,13 @@
  * @property {number} number       Season number within the expansion.
  * @property {string} expansion    Expansion name.
  * @property {number|null} qeSeasonId  QE Live's own CONSTANTS.seasonID for this season, once known.
+ *   Midnight Seasons 1 and 2 both carry 34 — upstream moved the raid list and left this alone — so
+ *   it identifies the expansion's database more than the season, and `qeRaids` is what actually
+ *   detects a rollover. Kept because it is still the field upstream means as a season id.
+ * @property {string[]} [qeRaids]  The raid ids QE Live lists as current while this season is on,
+ *   in upstream's own order. This is the fingerprint `seasonDrift` compares against, and the only
+ *   one that moves at a season boundary. Absent means "don't check", which is what a season whose
+ *   raid list nobody has recorded should do rather than warn about every build.
  * @property {number} tokenRaid    Bonus-roll token cost for a raid boss.
  * @property {number} tokenDungeon Bonus-roll token cost for a M+ dungeon.
  * @property {string} tokenNote    Plain-English summary of the token economy, shown in the legend.
@@ -95,6 +110,7 @@ export const SEASONS = {
     number: 1,
     expansion: "Midnight",
     qeSeasonId: 34,
+    qeRaids: ["1307", "1314", "1308", "1305"], // Voidspire, Dreamrift, Quel'Danas, Sporefall
     // A Season 1 roll is the drop, so there is no reward scheme to document: no promotion, no
     // crests banked, no end-of-raid tier. This is why the reward pane is pinned to Season 2.
     tokenRaid: 2,
@@ -108,7 +124,8 @@ export const SEASONS = {
   2: {
     number: 2,
     expansion: "Midnight",
-    qeSeasonId: null, // unknown until Season 2 is live on QE Live; `npm run data` prints it
+    qeSeasonId: 34, // unchanged from Season 1 upstream — see the typedef; qeRaids is the real tell
+    qeRaids: ["1320", "1317"], // Venomous Abyss, and Tidebound Grotto as the flex world boss
     tokenRaid: 1,
     tokenDungeon: 1,
     tokenNote:
@@ -123,11 +140,14 @@ export const SEASONS = {
     tokenFromVault: true,
     tokenVaultFrom: 2,
     tokenVaultWeeks: 7,
-    // Larias' 8/5 week-by-week dates the season: pre-season August 11, week 1 August 18, then every
+    // Larias' week-by-week dates the season: pre-season August 11, week 1 August 18, then every
     // week by sevens (week 2 August 25, week 3 September 1 …), which is what turns the window above
-    // from a rule into an answer. Quoted at the US reset — 8am Pacific, 15:00 UTC in August. Other
-    // regions reset later in the same day, so for those hours the count runs a week ahead of the
-    // reader; see `seasonWeek` for why that's worn rather than fixed.
+    // from a rule into an answer. Unchanged through the 8/10 revision. Quoted at the US reset — 8am
+    // Pacific, 15:00 UTC in August. Other regions reset later in the same day, so for those hours
+    // the count runs a week ahead of the reader; see `seasonWeek` for why that's worn not fixed.
+    //
+    // The guide has a stable home now, which is worth recording because every date and most of the
+    // advice below is read off it and it is revised most days: https://lariasguide.com
     week1: "2026-08-18T15:00:00Z",
     // Season 2 pays a bonus roll out as if the item had come from your Great Vault, not from the
     // boss. Vault rewards from LFR/Normal/Heroic jump to the first step of the next track, and a
@@ -185,19 +205,33 @@ export const SEASONS = {
       url: "https://docs.google.com/spreadsheets/d/1BCDWQvv_HFRO97s8UCQr_7vwz0pFXQw6gbTBgM1VeOg/htmlview",
     },
     special: {
+      raid: "1320", // Venomous Abyss — not 1317, the Tidebound Grotto world boss
       lastBosses: 2,
       badge: "Venomcursed 9/6",
       ilvl: 344,
       note:
         "Its Mythic items are 9/6 (ilvl 344) with cantrip effects, a tier above anything else in " +
         "the game, and the reason most raiders bank a token for kill week instead of spending it here.",
+      // Larias' 8/10 revision, and a reversal of the advice above rather than a footnote to it: at
+      // current tuning a cantrip item is worth more to almost every spec than the 80 Myth crests a
+      // Mythic roll banks somewhere else, and the cantrips are on these items at every difficulty.
+      // So the recommended weekly roll became these same bosses on Heroic — a small pool where every
+      // item carries a cantrip, paying Myth 1/6 like any other Heroic boss. Both sentences are true
+      // at once: roll them on Heroic most weeks, and hold a token for the Mythic kill.
+      heroicNote:
+        "The cantrip effects are on these items at every difficulty, so rolling here on Heroic is " +
+        "the week-to-week play for most specs — a small pool where everything carries a cantrip, " +
+        "still paying Myth 1/6. Guides rate that above the ≈80 crests a Mythic roll banks elsewhere.",
     },
   },
 };
 
-// The season this build targets. Season 2 isn't out yet, and the shipped database is still
-// Season 1 content, so the app describes itself as Season 1 rather than claiming otherwise.
-const ACTIVE = 1;
+// The season this build targets. Moved to 2 on 2026-08-11, the day 12.1 went live: the shipped
+// database is Venomous Abyss and the new dungeon rotation, and the token economy the page prices
+// with is Season 2's. Note that the raid itself opens on the 18th, so for pre-season week the page
+// ranks content that is listed but not yet lootable — `seasonWeek` reports week 0 through that,
+// which is what the week copy leans on to say so.
+const ACTIVE = 2;
 
 export const SEASON = SEASONS[ACTIVE];
 
@@ -348,11 +382,22 @@ export function rollReward(type, diffKey) {
 
 /**
  * Has the encounter database moved to a season this build doesn't know about? True once
- * `npm run data` picks up a new QE season id but ACTIVE above hasn't been bumped to match —
+ * `npm run data` picks up a new season's content but ACTIVE above hasn't been bumped to match —
  * which is exactly when the token costs and the season label are about to be wrong.
- * @param {number|undefined} dataSeasonId  QE_DATA.seasonId from the generated database.
+ *
+ * Compares the current raid list, not the season id. QE Live carried the same `seasonID` (34)
+ * across Midnight's Season 1 and Season 2 boundary while swapping every raid underneath it, so an
+ * id check would have sat silent through the one rollover it existed to catch. The raid list is
+ * what upstream actually edits at a season boundary, so it is what this watches; the id is kept on
+ * the season as a fallback for a season nobody recorded a raid list for.
+ *
+ * @param {import("./types.js").QEData|undefined} data  The generated database.
  */
-export function seasonDrift(dataSeasonId) {
-  if (dataSeasonId == null || SEASON.qeSeasonId == null) return false;
-  return dataSeasonId !== SEASON.qeSeasonId;
+export function seasonDrift(data) {
+  if (!data) return false;
+  if (SEASON.qeRaids && Array.isArray(data.currentRaids)) {
+    return data.currentRaids.join() !== SEASON.qeRaids.join();
+  }
+  if (data.seasonId == null || SEASON.qeSeasonId == null) return false;
+  return data.seasonId !== SEASON.qeSeasonId;
 }

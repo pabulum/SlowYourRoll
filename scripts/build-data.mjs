@@ -7,14 +7,16 @@
 //
 // Upstream sources, all inside the QE checkout:
 //   src/General/Engine/CONSTANTS.ts  currentRaidIDs, currentDungeonIDs, seasonID
-//   src/Databases/InstanceDB.js      encounterDB (raids + bosses), the "-1" dungeon map,
-//                                    instanceDB (display names for instances with no boss list)
+//   src/Databases/InstanceDB.ts      encounterDB (raids + bosses + bossOrder), the "-1" dungeon map,
+//                                    instanceDB (display names for instances with no boss list).
+//                                    Was InstanceDB.js until QE's 12.1 branch; both names are tried.
 //   src/Databases/ItemDB.json        items: id, name, quality, sources[{instanceId, encounterId, veryRare}]
 //
 // Season rollover is entirely a CONSTANTS.ts change upstream: when QE flips currentRaidIDs /
 // currentDungeonIDs to Season 2, rerun this and commit the result. Nothing here is hand-maintained.
 
 import { readFileSync, writeFileSync } from "node:fs";
+import { stripTypeScriptTypes } from "node:module";
 import { execFileSync } from "node:child_process";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -40,22 +42,46 @@ const flag = (name, env) => {
 const ITEMS_FILE = flag("items", "RAIDBOTS_ITEMS");
 const TALENTS_FILE = flag("talents", "RAIDBOTS_TALENTS");
 
-/** Import a source string as an ES module (used to evaluate QE's database files). */
+// What to record as the upstream this was built from. Read from the checkout's own git history by
+// default; --source= is for the case that history can't answer, which is building from files
+// extracted out of a branch rather than from a working tree — the only way to read a pre-release
+// branch without checking it out over somebody's work. Provenance is the whole point of `_meta`, so
+// an extracted build has to be able to say which branch it came from instead of "unknown".
+const SOURCE = flag("source", "QE_SOURCE");
+
+/**
+ * Import a source string as an ES module (used to evaluate QE's database files).
+ *
+ * Types are erased first, because QE writes these as TypeScript and a data: URL has no loader that
+ * would strip them. Erasure only — no enums, namespaces or parameter properties survive it, and QE's
+ * databases are plain annotated object literals, so anything that trips this is a shape change
+ * upstream worth failing loudly on rather than working around.
+ */
 function importSource(src) {
+  const js = stripTypeScriptTypes(src, { mode: "strip" });
   return import(
-    "data:text/javascript;base64," + Buffer.from(src, "utf8").toString("base64")
+    "data:text/javascript;base64," + Buffer.from(js, "utf8").toString("base64")
   );
 }
 
-function read(rel) {
-  try {
-    return readFileSync(join(QE, rel), "utf8");
-  } catch {
-    console.error(
-      `Can't read ${rel} under ${QE}\nPoint at a QuestionablyEpic checkout with --qe=<path> or $QE_PATH.`,
-    );
-    process.exit(1);
+/**
+ * Read the first of these paths that exists under the checkout. Upstream renames files between
+ * patches — InstanceDB.js became InstanceDB.ts on the 12.1 branch — and a build that only knows the
+ * new name can't read an older checkout, which is exactly what someone verifying a season rollover
+ * has on disk.
+ */
+function read(...rels) {
+  for (const rel of rels) {
+    try {
+      return readFileSync(join(QE, rel), "utf8");
+    } catch {
+      /* try the next spelling */
+    }
   }
+  console.error(
+    `Can't read ${rels.join(" or ")} under ${QE}\nPoint at a QuestionablyEpic checkout with --qe=<path> or $QE_PATH.`,
+  );
+  process.exit(1);
 }
 
 /** Read a Raidbots JSON dump from disk if given a path, else download it. */
@@ -92,12 +118,14 @@ function numericAware(a, b) {
 
 /* ---------------------------------------------------------------- read upstream */
 
-// CONSTANTS.ts carries no type annotations, so it evaluates as plain JS.
 const constants = (await importSource(read("src/General/Engine/CONSTANTS.ts")))
   .CONSTANTS;
 
-// InstanceDB.js imports CONSTANTS for a helper we don't use; stub it out so the module stands alone.
-const instanceSrc = read("src/Databases/InstanceDB.js").replace(
+// InstanceDB imports CONSTANTS for a helper we don't use; stub it out so the module stands alone.
+const instanceSrc = read(
+  "src/Databases/InstanceDB.ts",
+  "src/Databases/InstanceDB.js",
+).replace(
   /^import\s+\{[^}]*\}\s+from\s+["'][^"']*CONSTANTS["'].*$/m,
   "const CONSTANTS = { currentDungeonIDs: [] };",
 );
@@ -117,12 +145,23 @@ const rbTalents = await raidbots("talents", TALENTS_FILE);
 /* ------------------------------------------------------------------- transform */
 
 // Raids: every instance in encounterDB that has a boss list. "-1" is the dungeon bucket, not a raid.
+//
+// `order` is upstream's `bossOrder` — the order you actually pull the raid in, which nothing else in
+// the payload records. The boss map is keyed by journal encounter id and gets sorted by key on the
+// way out, and those ids do not reliably ascend with pull order: Venomous Abyss ends on Coiled Altar
+// (2883), an id that sorts sixth of eight. Anything asking "which are the last bosses" needs this
+// list, so it is carried rather than re-derived. Filtered to ids the boss map names, which drops the
+// sentinels bossOrder shares with the loot tables (999 catalyst, negative world drops).
 const raids = {};
 for (const [id, inst] of Object.entries(encounterDB)) {
   if (id === "-1" || !inst || !inst.bosses) continue;
+  const order = (inst.bossOrder || [])
+    .map(String)
+    .filter((e) => e in inst.bosses);
   raids[id] = {
     name: inst.name || instanceDB[id] || "Instance " + id,
     bosses: { ...inst.bosses },
+    ...(order.length ? { order } : {}),
   };
 }
 
@@ -292,13 +331,15 @@ const data = canonical({
 
 /* ---------------------------------------------------------------------- emit */
 
-let qeCommit = "unknown";
-try {
-  qeCommit = execFileSync("git", ["-C", QE, "rev-parse", "--short", "HEAD"], {
-    encoding: "utf8",
-  }).trim();
-} catch {
-  /* not a git checkout — record it as unknown */
+let qeCommit = SOURCE || "unknown";
+if (!SOURCE) {
+  try {
+    qeCommit = execFileSync("git", ["-C", QE, "rev-parse", "--short", "HEAD"], {
+      encoding: "utf8",
+    }).trim();
+  } catch {
+    /* not a git checkout — record it as unknown */
+  }
 }
 
 // Emitted as plain JSON, fetched at runtime (src/data.js). JSON isn't just the honest shape for
@@ -311,15 +352,25 @@ try {
 // JSON has no comments, so the provenance that used to sit in the header moves into `_meta`. It is
 // excluded from the drift comparison below: qeCommit advances on every upstream commit, and a
 // provenance-only change is not data drift.
+//
+// Indented, which is what the committed blob has always been — the emit was unindented and drifted
+// from it, so every run rewrote all million characters onto one line and buried the season's actual
+// changes in an unreadable diff. This file is regenerated at a season boundary and reviewed by
+// eyeballing that diff, so a reviewable diff is worth the bytes. It costs ~280KB uncompressed and
+// close to nothing over the wire: it is whitespace, and it is served gzipped.
 const out =
-  JSON.stringify({
-    _meta: {
-      note: "Generated — do not hand-edit. Regenerate with `npm run data` (scripts/build-data.mjs). Shape: src/types.js QEData.",
-      source: `QuestionablyEpic @ ${qeCommit}`,
-      qeSeasonId: constants.seasonID,
+  JSON.stringify(
+    {
+      _meta: {
+        note: "Generated — do not hand-edit. Regenerate with `npm run data` (scripts/build-data.mjs). Shape: src/types.js QEData.",
+        source: `QuestionablyEpic @ ${qeCommit}`,
+        qeSeasonId: constants.seasonID,
+      },
+      ...data,
     },
-    ...data,
-  }) + "\n";
+    null,
+    2,
+  ) + "\n";
 
 const counts =
   `${Object.keys(raids).length} instances · ${Object.keys(dungeons).length} dungeons · ` +

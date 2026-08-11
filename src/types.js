@@ -29,7 +29,10 @@
 /**
  * The full encounter + item database (data/qe-data.json).
  * @typedef {Object} QEData
- * @property {Record<string, { name: string, bosses: Record<string, string> }>} raids
+ * @property {Record<string, { name: string, bosses: Record<string, string>, order?: string[] }>} raids
+ *   `bosses` is keyed by journal encounter id and sorted by it; `order` is the order the raid is
+ *   actually pulled in, which those ids do not reliably follow. Absent for raids upstream records no
+ *   boss order for. See `finalBosses` in src/model.js for what depends on the difference.
  * @property {Record<string, string>} dungeons
  * @property {string[]} currentRaids
  * @property {string[]} currentDungeons

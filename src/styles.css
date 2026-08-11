@@ -1595,6 +1595,12 @@ img.icon,
   color: var(--ink);
   font-weight: 650;
 }
+/* The counter-argument to the note it sits under — roll these bosses now, at a lower difficulty,
+   rather than banking the token. Its own paragraph so the two readings stay separable. */
+.special-alt {
+  display: block;
+  margin-top: 7px;
+}
 
 /* ── reward pane ──────────────────────────────────────────────────────────────────────────────────
    A drawer off the right edge: reference read against the ranking, not a step in any flow, so it
