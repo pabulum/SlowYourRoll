@@ -8,7 +8,9 @@
  * @property {string} n  Item name.
  * @property {number} q  Quality (2 uncommon … 5 legendary).
  * @property {Array<number[]>} s  Sources: each [instId, encId] with an optional 3rd "very rare" flag.
- * @property {number} [c]   Item class (2 weapon, 4 armor).
+ * @property {number} [c]   Item class (2 weapon, 4 armor, 5 reagent/currency, 15 tier token).
+ * @property {number[]} [ct]  For a tier token: the pieces it can be traded for, one per class. The
+ *   token is what drops; every report scores the piece. See `applyToken` in src/model.js.
  * @property {number} [u]   Item subclass — armor type: 1 cloth, 2 leather, 3 mail, 4 plate, 6 shield.
  * @property {number} [iv]  Inventory slot (16 = Back; cloaks are filed as cloth but worn by all).
  * @property {string} [st]  Primary stats it can roll, as a code set: "i" intellect, "ai" the
@@ -128,6 +130,10 @@
  * @property {number} [lvl]  Item level this source drops it at.
  * @property {number} [scoreLvl]  Item level `score` was simmed at, which is not `lvl` once the
  *   report sims the bonus roll's payout rather than the drop. See `mergeRow` in src/model.js.
+ * @property {number[]|null} [gives]  For a tier token: the pieces it can be traded for that this
+ *   loot spec could be awarded. See `applyToken` in src/model.js.
+ * @property {number} [givesId]    The one of those the value was taken from.
+ * @property {string} [givesName]  Its name, for the row that says what the token becomes.
  * @property {number|null} [rollIlvl]  Item level a bonus roll would actually hand you. Equal to
  *   `lvl` in a season that pays out at the drop; null when the season promotes the reward to a
  *   vault track whose item level isn't known yet. See src/season.js.

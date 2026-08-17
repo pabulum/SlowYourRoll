@@ -1402,6 +1402,15 @@ function itemRow(b, it) {
     </button>
     <div class="iname">
       ${iconHTML(it.id, lvl)}${nameHTML(it.id, it.name, it.q, lvl)}${
+        /* A tier token is not the thing you wear, and its own name says nothing about what it is
+           worth. The score on this row is the piece's, so the row has to name the piece. */
+        it.givesName &&
+        html`<span
+          class="gives"
+          title="Trade the token for this — the score is its value"
+          >→ ${it.givesName}</span
+        >`
+      }${
         it.vr && html`<span class="vr">very rare</span>`
       }${exclusive(it)}${haveBadge(it)}
     </div>

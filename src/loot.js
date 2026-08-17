@@ -40,7 +40,7 @@ export function statLabel(set) {
 const BACK = 16; // inventoryType: cloaks are filed as cloth but everyone wears them
 
 // Item classes that are catalogued against a boss but are not gear a bonus roll hands over.
-const CLS_REAGENT = 5; // whole item class: crafting reagents, with no equip slot at all
+const CLS_CURRENCY = 5; // whole item class: reagents and vendor tokens, never a random drop
 const CLS_ARMOR = 4;
 const ARMOR_COSMETIC = 5; // armor subclass: appearance-only pieces, no stats and no item level
 
@@ -48,9 +48,19 @@ const ARMOR_COSMETIC = 5; // armor subclass: appearance-only pieces, no stats an
  * Is this something a bonus roll could actually award?
  *
  * The item database catalogues everything filed against an encounter, and a little of that is not
- * loot in the sense this app means. Season 2's raid lists three cosmetic head pieces and one
- * reagent; QE Live's Upgrade Finder doesn't evaluate any of them, and its own roll expected value
- * leaves them out of both halves of the fraction.
+ * loot in the sense this app means. Season 2's raid lists three cosmetic head pieces and the
+ * Slumbering Coil Curio; QE Live's Upgrade Finder evaluates none of them, and its own roll expected
+ * value leaves them out of both halves of the fraction.
+ *
+ * The Curio is worth being precise about, because "not loot" is the wrong reason to exclude it. It
+ * is a tier token — a currency you take to a vendor and trade for any tier piece — and the in-game
+ * Encounter Journal does list it under Ula'tek, so being on the boss's table is not the question.
+ * The question is whether a *roll* draws from it, and the Monk Discord confirmed on 2026-08-17 that
+ * it cannot be bonus rolled into by any class. Item class 5 is the family that behaves that way,
+ * which is why the test is by class rather than by item id.
+ *
+ * The three cosmetics are the same shape of fact: the journal lists them, and a roll can't award a
+ * transmog appearance. QE Live's Upgrade Finder excludes all four.
  *
  * They are rare — four items across all current content — and that is exactly why they mattered.
  * A pool is only what one loot spec can be given, so it is small, and the four land on three
@@ -68,14 +78,14 @@ const ARMOR_COSMETIC = 5; // armor subclass: appearance-only pieces, no stats an
  */
 export function isRollable(item) {
   if (!item) return true;
-  if (item.c === CLS_REAGENT) return false;
+  if (item.c === CLS_CURRENCY) return false;
   return !(item.c === CLS_ARMOR && item.u === ARMOR_COSMETIC);
 }
 
 /** Why an item isn't loot at all, as opposed to not loot *for you*. */
 function notLootWhy(item) {
-  return item.c === CLS_REAGENT
-    ? "Reagent — not gear a roll hands you"
+  return item.c === CLS_CURRENCY
+    ? "Vendor token — not on the drop table"
     : "Cosmetic — appearance only";
 }
 

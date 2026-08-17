@@ -143,27 +143,49 @@ still sims the drop.
 The 12.1 Upgrade Finder shows a "Roll Expected Value" per boss. It is the same formula this app uses
 — `getRollExpectedValue` in QE's `ItemUtilities.ts` filters a boss's `bonus` rows and returns
 `sum(percDiff) / count`, the mean percentage upgrade over the pool. Two tools, arrived at
-independently, same fraction. Where the pools agree the numbers agree to three decimals, which makes
-QE a useful check on this app's arithmetic.
+independently, same fraction. That makes QE a standing check on this app's arithmetic: where the
+pools agree, the numbers agree to three decimals, and a divergence is a claim one of them has to
+justify.
 
-The pools disagree in three places, and all three are worth knowing:
+Every divergence has been run down against the **in-game Encounter Journal**, which is the only
+source that settles them — read on 2026-08-17 across nine encounters, with the loot-spec filter both
+on and off. [`tests/journal.test.js`](tests/journal.test.js) holds those readings as fixtures, and
+the pools now match them item for item. Three real bugs came out of it that no amount of reading
+upstream would have found:
 
-- **Things that aren't loot.** Season 2's raid catalogues three cosmetic head pieces and one reagent
-  against bosses. QE omits them; this app used to count them, which understated Ula'tek by a third
-  and Coiled Altar by two sevenths — both Venomcursed bosses. `isRollable` in
-  [`src/loot.js`](src/loot.js) now drops them, and the two tools agree exactly on those encounters.
-- **Tier tokens, which QE misses.** The 20 Venomcured / Venomwoven / Venomcast / Venomforged tokens
-  are item class 15 and never reach QE's Upgrade Finder, so its EV omits them from both halves of
-  the fraction. They are real roll outcomes and they carry a spec list, so `allows` awards the right
-  one of the four per boss. This app keeps them, and its numbers on those five bosses are the lower,
-  more honest ones.
-- **Items QE has no source data for.** Knot of Writhing Serpents, Mindpiercer's Sigil and Sapling of
-  the Dawnroot carry `sources: null` in QE's `ItemDB.json`, so QE cannot file them against a boss at
-  all. This app has them because the data build backfills sources from Raidbots
-  ([`scripts/build-data.mjs`](scripts/build-data.mjs)), which is Blizzard's own item data.
+- **Tier set pieces were pooled alongside the tier token for the same slot.** Vashnikt drops the
+  Venomcured Icon; you trade that for the Battle Gi of the Monkey King. QE's `ItemDB.json`
+  attributes the piece to the boss anyway, Raidbots files it under the catalyst sentinel `-100`, and
+  the data build read QE first — so every tier boss was one item too big, for every class. The build
+  now takes Raidbots' word where the two disagree.
+- **Spec restrictions were missing on all 54 tier-set items.** `annotate` took eligibility only from
+  Raidbots' `specs`, which is empty for tier pieces, so the armor-and-stat fallback let a
+  Mistweaver's pool contain the Restoration Druid set. QE's own `classRestriction` is now read as a
+  fallback, **widened to the whole class** — QE is a healing tool and writes the Monk set as
+  "Mistweaver Monk", which taken literally would take a Windwalker's own tier set away from them.
+- **Four items the journal lists but a roll cannot award.** The Slumbering Coil Curio is a currency
+  traded at a vendor for a tier piece — the Monk Discord confirmed it cannot be bonus rolled into by
+  any class — and three cosmetic head pieces are transmog appearances. `isRollable` in
+  [`src/loot.js`](src/loot.js) drops item class 5 and armor subclass 5. Small, but they were a third
+  of Ula'tek's pool and two sevenths of Coiled Altar's, both Venomcursed bosses.
 
-So: agree with QE wherever QE has an opinion, and differ only where it has a blind spot. If a future
-divergence appears that doesn't fit one of those three, it is worth treating as a bug here first.
+- **The token had to carry the piece's value.** De-duping the pool was only half the job: no tool
+  scores a tier token, because a token has no stats, so the right item sat in the pool worth zero
+  while the report's 4,904 for the Monk chest went nowhere. Raidbots' `contains` names the four class
+  pieces a token can be traded for; `applyToken` in [`src/model.js`](src/model.js) resolves the one
+  this loot spec would be handed and takes its value. The pool still holds one item — the token — and
+  the row names the piece it becomes.
+
+With all of that in place the two tools agree on **15 of 17** encounters, to three decimals. Both
+survivors are items QE's database can't see, and the journal lists them:
+
+- **Mindpiercer's Sigil** (Voidscar Arena) and **Sapling of the Dawnroot** (The Blinding Vale) carry
+  `sources: null` in QE's `ItemDB.json`, so QE cannot file them against a boss at all. This app has
+  them because the data build backfills sources from Raidbots, and the journal confirms both.
+
+One correction ran the other way: **Knot of Writhing Serpents** was in this app's healer pools, and
+Blizzard's spec list for it is caster DPS with no healer in it. The journal agrees — it is absent
+from a Mistweaver's Altar of Fangs list. That is exactly the distinction `p` exists to carry.
 
 **A dungeon row's `dropDifficulty` is the M+ key level**, an index into `MPLUS_KEY_REWARDS` in QE's
 `Databases/MPlusKeyRewards.ts` (mirrored as `QE_MPLUS_KEYS`). That is new in 12.1 and it is the

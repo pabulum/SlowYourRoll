@@ -459,6 +459,15 @@ function itemsAt(key) {
  */
 function poolItem(id, meta, sp, read) {
   const lt = canLoot(meta, sp);
+  // A tier token is a voucher for one slot's tier piece, in four class versions. Which of them this
+  // spec would be handed is settled here; what it is *worth* needs the report, so `priceGroup` does
+  // that part. Usually one candidate survives — the four are one per class — but the database
+  // carries no spec list for a class with no healing spec, so a second can slip through and the
+  // report's own score is what breaks the tie.
+  const gives =
+    lt.ok && meta.ct
+      ? meta.ct.filter((c) => canLoot(QE_DATA.items[c] || {}, sp).ok)
+      : null;
   return {
     id: Number(id),
     name: meta.n || "Item " + id,
@@ -470,6 +479,7 @@ function poolItem(id, meta, sp, read) {
     elig: lt.ok,
     why: lt.why || "",
     swap: lt.swap || null,
+    gives: gives && gives.length ? gives : null,
     specs: eligibleSpecs(meta, sp),
   };
 }
@@ -522,6 +532,32 @@ function mergeRow(acc, r, vr) {
   // all an older report gives us.
   if (r.dropType === "drop" || !acc.lvl) acc.lvl = lvl;
   return acc;
+}
+
+/**
+ * Everything the report valued, keyed by item id alone.
+ *
+ * The pools are built by source, which is the right shape for almost everything and the wrong one
+ * for a tier token: the token drops from a boss and the report scores the *piece* it is a voucher
+ * for, and that piece is filed under the catalyst rather than under any encounter. So the value has
+ * to be findable without a source to look it up by.
+ *
+ * Folded with the same `mergeRow` the pools use, so a token carries the bonus row like everything
+ * else and the two can be compared. Cached against the results array, as `baselineOf` is.
+ *
+ * @param {import("./types.js").Board} b
+ */
+const reportIndexes = new WeakMap();
+export function reportIndex(b) {
+  if (!Array.isArray(b.results)) return {};
+  const hit = reportIndexes.get(b.results);
+  if (hit) return hit;
+  const idx = {};
+  b.results.forEach((r) => {
+    idx[r.item] = mergeRow(idx[r.item], r, false);
+  });
+  reportIndexes.set(b.results, idx);
+  return idx;
 }
 
 /**
@@ -604,6 +640,34 @@ function fillTable(groups, sp) {
 }
 
 /**
+ * Give a tier token the value of the tier piece it is a voucher for.
+ *
+ * The report never scores the token — no tool does, because a token has no stats — and it scores at
+ * most one of the pieces the token contains, since it only ever sims the character's own class. So
+ * the best-scoring candidate is both the right answer and the tie-break: where two candidates
+ * survive eligibility, only one of them is in the report at all.
+ *
+ * The item level is carried across too. A token's own is meaningless, and the piece's is what the
+ * score was simmed at.
+ *
+ * @param {import("./types.js").PoolItem} it  A pool item with `gives` set.
+ * @param {Record<number, any>} idx  From `reportIndex`.
+ */
+function applyToken(it, idx) {
+  let best = null;
+  it.gives.forEach((id) => {
+    const r = idx[id];
+    if (r && (!best || r.score > best.r.score)) best = { id, r };
+  });
+  it.givesId = best && best.r.score > 0 ? best.id : it.gives[0];
+  it.givesName = (QE_DATA.items[it.givesId] || {}).n || "";
+  if (best && best.r.score > 0) {
+    it.score = best.r.score;
+    it.scoreLvl = best.r.scoreLvl;
+  }
+}
+
+/**
  * Price one grouped encounter: settle what a roll here pays out, decide each item's state against
  * it, then hand the pool to `priceOf`.
  */
@@ -612,8 +676,13 @@ function priceGroup(b, g, selDiff, ownedMap, sp, takeId) {
   // the row: an upgrade track step is one item level, whichever item lands on it. For a dungeon the
   // key level is the difficulty, and `collectScored` picked it off the report's own rows.
   const reward = rollReward(g.type, diffKey(b, selDiff), g.keyLevel);
+  const idx = reportIndex(b);
   const items = Object.values(g.items)
     .map((it) => {
+      // The token carries the piece's value, because rolling the token *is* getting the piece.
+      // Left at zero it would sit in the pool as filler — and on a tier boss it is routinely the
+      // best thing on the table, so the encounter would be understated by its single largest item.
+      if (it.gives) applyToken(it, idx);
       const ov = b.overlay[g.key + ":" + it.id];
       it.ownedIlvl = ownedMap[it.id] != null ? ownedMap[it.id] : null;
       // A copy you already hold only makes the roll redundant if it's at least as good as what the

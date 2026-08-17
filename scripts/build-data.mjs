@@ -2,6 +2,9 @@
 // Regenerates data/qe-data.json from a local QuestionablyEpic checkout.
 //
 //   npm run data                          # uses $QE_PATH, else ~/Projects/QuestionablyEpic
+//   npx prettier --write data/qe-data.json # then this — the committed file is prettier-formatted,
+//                                          # and skipping it reformats every line into a diff that
+//                                          # buries whatever actually changed
 //   npm run data -- --qe=/path/to/QELive  # explicit checkout
 //   npm run data:check                    # rebuild in memory and report drift, writing nothing
 //
@@ -134,11 +137,15 @@ const { encounterDB, retailInstanceDB, instanceDB } = instMod;
 
 const itemDB = JSON.parse(read("src/Databases/ItemDB.json"));
 
-// QE's ItemDB is a healer database: every item in it is intellect, and it records no spec
-// eligibility at all, so it can't tell a healer trinket from a caster-DPS one in the same slot with
-// the same stat. Blizzard can — items carry the list of specs they're allowed to drop for — and
-// Raidbots republishes it. We take nothing else from Raidbots; QE still supplies names, quality,
-// sources and the "very rare" flag.
+// QE's ItemDB is a healer database: every item in it is intellect, so it can't tell a healer
+// trinket from a caster-DPS one in the same slot with the same stat. Blizzard can — items carry the
+// list of specs they're allowed to drop for — and Raidbots republishes it as `specs`.
+//
+// Raidbots is not the whole story, though. It carries no `specs` for a tier set piece, and QE's own
+// `classRestriction` does — so the two are merged below. Reading only Raidbots left every tier set
+// in the raid unrestricted, and a Mistweaver's pools quietly included the Restoration Druid set,
+// which shares leather and an agility-or-intellect stat line and is therefore invisible to the
+// armor-and-stat fallback. 54 items in Season 2's content, one per boss that a spec can reach.
 const rbItems = await raidbots("equippable-items", ITEMS_FILE);
 const rbTalents = await raidbots("talents", TALENTS_FILE);
 
@@ -235,17 +242,77 @@ const unstatted = Object.keys(specs).filter((id) => !specs[id].st);
 // this my stat". See src/loot.js for the runtime rules.
 const rbById = new Map(rbItems.map((x) => [x.id, x]));
 
+// "Restoration Druid" -> spec id, for reading QE's `classRestriction`. Built off the same derived
+// spec table the app keys everything else on, so a name upstream spells differently resolves to
+// nothing rather than to the wrong spec — and `unnamedRestrictions` below reports it.
+const specByName = new Map(
+  Object.keys(specs).map((id) => [specs[id].n + " " + specs[id].c, Number(id)]),
+);
+const unnamedRestrictions = new Set();
+
+// QE writes a few restrictions as prose rather than as a spec. "DPS or Tank Spec" is its shorthand
+// for "not a healer", on ~1900 legacy items and nothing current — a real statement, but not one in
+// spec ids, and inventing the list it implies would be worse than falling back to armor and stat.
+// Listed so the warning below stays about names that are genuinely new.
+const NON_SPEC_RESTRICTIONS = new Set(["DPS or Tank Spec"]);
+
+/**
+ * Spec ids for QE's `classRestriction`, widened to the whole class, or null where it names nothing
+ * we can resolve.
+ *
+ * Widened because QE is a healing tool and its restrictions are written from a healer's side: the
+ * Monk tier set is recorded as "Mistweaver Monk" and the Druid set as "Restoration Druid", naming
+ * the one spec QE has an opinion about rather than the set's real audience. Taken literally that
+ * would hand a Windwalker a database in which the Monk tier set is somebody else's — precisely the
+ * error this lookup exists to fix, pointed the other way.
+ *
+ * A tier set belongs to a class, so the class is the honest unit and it is enough for the job: it
+ * keeps the Restoration Druid set out of a Mistweaver's pool, which is what leaked. Where the truth
+ * really is one spec, this is too permissive — and that is the direction this file errs in on
+ * purpose (see the header): a wrongly hidden item costs a roll, a wrongly shown one dilutes a number
+ * the reader can see.
+ */
+function specsFromQE(qe) {
+  const cr = qe && qe.classRestriction;
+  if (!Array.isArray(cr) || !cr.length) return null;
+  const ids = new Set();
+  for (const name of cr) {
+    const id = specByName.get(String(name).trim());
+    if (!id) {
+      if (!NON_SPEC_RESTRICTIONS.has(String(name).trim()))
+        unnamedRestrictions.add(String(name));
+      continue;
+    }
+    const cls = specs[id].c;
+    for (const other of Object.keys(specs))
+      if (specs[other].c === cls) ids.add(Number(other));
+  }
+  return ids.size ? [...ids].sort((a, b) => a - b) : null;
+}
+
 /**
  * Merge Blizzard's loot facts onto an entry. QE's own `stats` are deliberately not consulted: it
  * evaluates every item for a healer, so it reports intellect for gear that in fact rolls agility
  * *or* intellect, and believing it would hide a Windwalker's own bracers from them.
  */
-function annotate(e, rb) {
-  if (!rb) return e;
+function annotate(e, rb, qe) {
+  // QE's own restriction stands in where Raidbots has none. Raidbots wins where both speak: it is
+  // Blizzard's own list, and it is spec ids rather than names that have to be matched back.
+  const fromQE = specsFromQE(qe);
+  if (!rb) {
+    if (fromQE) e.p = fromQE;
+    return e;
+  }
   e.c = rb.itemClass;
   e.u = rb.itemSubClass;
   e.iv = rb.inventoryType;
   if (rb.specs && rb.specs.length) e.p = rb.specs.slice().sort((a, b) => a - b);
+  else if (fromQE) e.p = fromQE;
+  // What a tier token is a voucher for: the four class versions of one slot's tier piece. The token
+  // is what the boss drops and what a roll can hand you, but every report scores the *piece*, so
+  // without this link the pool holds the right item carrying none of its value. See `poolItem`.
+  if (rb.contains && rb.contains.length)
+    e.ct = rb.contains.slice().sort((a, b) => a - b);
   const st = statSet(rb);
   if (st) e.st = st;
   if (rb.icon) e.ic = rb.icon;
@@ -263,10 +330,39 @@ function annotate(e, rb) {
 // dungeon". Other negatives are QE sentinels for sources that can't be bonus-rolled at all (crafted,
 // reputation, timewalking, PvP) — kept in the blob so the item is still named, but src/model.js
 // drops them when ranking.
+/**
+ * Blizzard's sentinel for "made at the catalyst", which is how a tier set piece is really obtained.
+ *
+ * QE's ItemDB attributes tier pieces to the boss that drops the *token* for that slot, and the two
+ * are not the same item: the Encounter Journal at Vashnikt lists the Venomcured Icon, and you trade
+ * that for the Battle Gi of the Monkey King. Reading QE put both in the pool, so every tier boss was
+ * one item too big for every class at once — 54 pieces across the raid's six sets.
+ *
+ * Raidbots has this right, so where the two disagree Raidbots wins. The item keeps its entry (names
+ * are still wanted for a vault or a `/simc`), it just carries a source `resolve` already drops.
+ */
+const CATALYST = -100;
+const catalystOnly = (rb) =>
+  rb && rb.sources && rb.sources.length
+    ? rb.sources.every((x) => x.instanceId === CATALYST)
+    : false;
+
 const items = {};
 let annotated = 0;
+let decatalysed = 0;
 for (const it of itemDB) {
   if (!it.sources || !it.sources.length) continue;
+  const rbSrc = rbById.get(it.id);
+  if (catalystOnly(rbSrc)) {
+    if (it.sources.some((x) => x.encounterId > 0)) decatalysed++;
+    items[it.id] = annotate(
+      { n: it.name, q: it.quality, s: [[CATALYST, CATALYST]] },
+      rbSrc,
+      it,
+    );
+    annotated++;
+    continue;
+  }
   const s = it.sources.map((x) =>
     x.veryRare
       ? [x.instanceId, x.encounterId, 1]
@@ -274,7 +370,7 @@ for (const it of itemDB) {
   );
   const rb = rbById.get(it.id);
   if (rb) annotated++;
-  items[it.id] = annotate({ n: it.name, q: it.quality, s }, rb);
+  items[it.id] = annotate({ n: it.name, q: it.quality, s }, rb, it);
 }
 
 // QE's database stops at what a healer might equip, so on its own it can only ever describe part of
@@ -383,6 +479,21 @@ if (unstatted.length) {
   // that spec can loot. Never seen; worth knowing about if Blizzard's data changes shape.
   console.log(
     `WARNING: no primary stat inferable for spec ids: ${unstatted.join(", ")}`,
+  );
+}
+
+if (decatalysed) {
+  console.log(
+    `Tier pieces re-filed from a boss to the catalyst (Raidbots over QE): ${decatalysed}`,
+  );
+}
+
+if (unnamedRestrictions.size) {
+  // QE spells a spec differently from Blizzard's talent data, so its restriction resolved to
+  // nothing and those items fall back to armor-and-stat. Loud, because that is silently too
+  // permissive rather than too strict — exactly the failure this lookup exists to stop.
+  console.log(
+    `WARNING: unresolvable classRestriction names: ${[...unnamedRestrictions].join(", ")}`,
   );
 }
 

@@ -854,3 +854,120 @@ test("a /simc loot spec naming a different spec of the same class is honoured", 
   assert.equal(activeLootSpec(b), specId("Retribution Paladin"));
   state.simc = {};
 });
+
+/* ---------- a tier token is worth the piece it buys ----------
+   The boss drops the token; you trade it for one slot's tier piece. No tool scores the token, since
+   a token has no stats — every report scores the piece, which is filed under the catalyst and so
+   belongs to no encounter. Pooling the token without carrying that value across left the right item
+   in the pool holding none of its worth, and on a tier boss the piece is routinely the best thing on
+   the table: Vashnikt's Monk chest is a 4,904 HPS upgrade sitting in a pool of four. */
+
+/**
+ * Vashnikt, its chest token, the Monk chest that token is a voucher for, and one ordinary drop off
+ * the same boss.
+ *
+ * The ordinary drop is load-bearing: an encounter only gets a row when the report scored something
+ * that actually drops there, and the tier piece no longer does — it belongs to the catalyst. Without
+ * it there is no Vashnikt row to look for a token in, which is a true fact about the model rather
+ * than a quirk of the fixture.
+ */
+const TOKEN = { enc: 2882, id: 270927, piece: 271522, alsoDrops: 268205 };
+
+/** A QE board that scored the tier piece, as a real report does. */
+function makeTokenBoard(score) {
+  return {
+    id: "tk",
+    key: "tkkey",
+    reportId: "r",
+    player: "Heals",
+    realm: "area-52",
+    spec: "Mistweaver Monk",
+    source: "qe",
+    metric: "raw",
+    results: [
+      {
+        item: TOKEN.piece,
+        dropType: "bonus",
+        dropDifficulty: 3,
+        level: 334,
+        score,
+        rawDiff: score,
+        percDiff: 1,
+      },
+      {
+        item: TOKEN.alsoDrops,
+        dropType: "bonus",
+        dropDifficulty: 3,
+        level: 334,
+        score: 100,
+        rawDiff: 100,
+        percDiff: 0.02,
+      },
+    ],
+    overlay: {},
+    tokenOverride: {},
+    vaultTake: null,
+    raidDiff: null,
+  };
+}
+
+/** The pooled token for Vashnikt, or null when this season doesn't ship it. */
+function pooledToken(b) {
+  const row = buildGroups(b).rows.find((r) => r.g.key === "1320:" + TOKEN.enc);
+  return row ? row.items.find((i) => i.id === TOKEN.id) || null : null;
+}
+
+test("a tier token takes the value of the piece it is traded for", (t) => {
+  state.showAll = false;
+  state.simc = {};
+  if (!QE_DATA.items[TOKEN.id] || !QE_DATA.items[TOKEN.piece])
+    return t.skip("a later season doesn't ship this token");
+  const it = pooledToken(makeTokenBoard(4904));
+  assert.ok(it, "the token is in the pool");
+  assert.equal(it.score, 4904, "valued at the piece the report scored");
+  assert.equal(it.givesId, TOKEN.piece);
+  assert.equal(it.givesName, QE_DATA.items[TOKEN.piece].n);
+});
+
+// The whole point of the substitution: without it the token is filler, and filler in a pool of four
+// is a third of the encounter's expected value thrown away.
+test("the token's value reaches the encounter's EV", (t) => {
+  state.showAll = false;
+  state.simc = {};
+  if (!QE_DATA.items[TOKEN.id])
+    return t.skip("a later season doesn't ship this token");
+  const rowOf = (b) =>
+    buildGroups(b).rows.find((r) => r.g.key === "1320:" + TOKEN.enc);
+  const scored = rowOf(makeTokenBoard(4904));
+  const zero = rowOf(makeTokenBoard(0));
+  assert.equal(
+    zero.num,
+    100,
+    "unscored, the token adds nothing beyond the boss's ordinary drop",
+  );
+  assert.equal(
+    scored.num,
+    5004,
+    "scored, the piece's 4,904 arrives through the token",
+  );
+  assert.equal(
+    scored.remaining,
+    zero.remaining,
+    "the substitution is a value, not an extra item in the pool",
+  );
+});
+
+test("the piece itself stays out of the pool — only the token drops", (t) => {
+  state.showAll = false;
+  state.simc = {};
+  if (!QE_DATA.items[TOKEN.piece])
+    return t.skip("a later season doesn't ship this set");
+  const row = buildGroups(makeTokenBoard(4904)).rows.find(
+    (r) => r.g.key === "1320:" + TOKEN.enc,
+  );
+  assert.equal(
+    row.items.filter((i) => i.id === TOKEN.piece).length,
+    0,
+    "counting both would price the same reward twice",
+  );
+});

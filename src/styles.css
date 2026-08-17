@@ -657,7 +657,16 @@ a {
 /* The clear affordance sits in the heading rather than under the options, because it acts on the
    whole block and not on any one of them. Quiet: it undoes a paste, so it should be findable
    without ever being the thing your eye lands on first. */
-.vault h3 .linky {
+.vault h3 /* What a tier token becomes. Quiet and inline: it qualifies the name rather than competing with it,
+   and it sits where the "very rare" badge does so a row never grows a second line. */
+.item .gives {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-left: 7px;
+  white-space: nowrap;
+}
+
+.linky {
   font-size: 12px;
   font-weight: 400;
   color: var(--muted);
@@ -1841,6 +1850,15 @@ img.icon,
   color: var(--faint);
 }
 /* A button that reads as a link, for the two places prose has to open the pane. */
+/* What a tier token becomes. Quiet and inline: it qualifies the name rather than competing with it,
+   and it sits where the "very rare" badge does so a row never grows a second line. */
+.item .gives {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-left: 7px;
+  white-space: nowrap;
+}
+
 .linky {
   background: none;
   border: 0;
