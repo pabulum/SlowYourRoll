@@ -296,6 +296,28 @@ off the 12.1 PTR and pinned in [`tests/season.test.js`](tests/season.test.js), s
 fails a test rather than quietly changing everyone's numbers. The M+ figure is the payout for a +10
 key or higher; lower keys pay under it, and nothing in a QE report says which key you run.
 
+**A Mythic roll saves you ≈80 Myth crests, and the app says so as a saving.** That promotion is not
+just a better item: capping 16 slots costs 1,280 Myth crests, so 80 a slot, and an item handed over
+at Myth 6/6 is 80 crests you never have to spend. It's the one reward in the game you can't farm for
+by any other route, which makes it a real reason to roll a Mythic boss over a dungeon for the same
+single token — the comparison the EV, priced in score per token, cannot make.
+
+The wording is load-bearing rather than stylistic. No roll pays crests _out_; described as a yield,
+a reader goes looking for a currency drop that never arrives, or counts it a second time against the
+crests they're already farming that week. So every surface says _saves_: the collapsed encounter card
+(`crestMeta`, set off by an accent rule because it's the one thing beside the EV column the EV can't
+account for), the expanded card's note (`crestNote`), the vault trade banner (`crestEdgeHTML` — the
+only term of that trade sitting wholly on one side of it, since a vault item saves nothing), and the
+reward pane, which leads its section with the figure. Two of those are pinned by tests in
+[`tests/render.test.js`](tests/render.test.js), which is otherwise deliberately shallow on wording.
+
+The figure stays quoted in crests everywhere, and out of the EV. Folding it in would need a
+crests-to-score rate, and that rate depends on which item you'd have spent them on — precisely the
+opportunity cost no report computes. It also can't reorder items _within_ a pool: an item you want
+arrives already upgraded, and one you'd never wear still unlocks the slot so the piece you do wear
+upgrades free. Filler and upgrade save the same crests. Only a payout above a track's first step
+saves anything, which is why every non-Mythic row is zero rather than small.
+
 **The last two bosses of the tier raid are a class apart** — Venomcursed 9/6 items with cantrip
 effects — so those encounter cards carry a badge and a note the EV can't express: it prices this
 week only, and can't weigh a token banked for kill week against one spent now. Two things about
@@ -322,7 +344,8 @@ can name a week the reader hasn't reached yet.
 
 All of that is legible in the app from the **S2 rewards** button in the masthead, which opens a
 reward pane: what each source pays, at which track and item level, the full M+ ladder the ranking
-quotes the top of, the crests a roll banks, and what the rules change about the numbers on the page.
+quotes the top of, the crests a roll saves you, and what the rules change about the numbers on the
+page.
 The game shows none of this anywhere — in game a boss drops what it drops, and "your roll pays out
 on your _vault's_ track" is a rule you read a guide or install an addon for. The pane is rendered
 from [`src/season.js`](src/season.js), so the figures in it are the same ones the ranking prices

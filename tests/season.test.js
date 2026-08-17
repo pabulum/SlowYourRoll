@@ -56,16 +56,16 @@ test("an unrecognised difficulty in a promoting season is unknown, not unpromote
   assert.equal(r.label, "");
 });
 
-// The crest yield only exists where the payout is above a track's first step. Anywhere else the
+// The crest saving only exists where the payout is above a track's first step. Anywhere else the
 // roll still hands you a better item than the boss would, but not one you'd have paid crests for.
-test("only the fully-upgraded payout banks crests", () => {
+test("only the fully-upgraded payout saves crests", () => {
   const s2 = SEASONS[2];
   assert.equal(rewardOf(s2, "raid", "mythic").crests, 80);
   assert.equal(rewardOf(s2, "raid", "heroic").crests, 0);
   assert.equal(rewardOf(s2, "dungeon").crests, 0);
 });
 
-test("an unrecognised difficulty banks no crests rather than guessing a figure", () => {
+test("an unrecognised difficulty saves no crests rather than guessing a figure", () => {
   assert.equal(rewardOf(SEASONS[2], "raid", "diff 7").crests, undefined);
 });
 

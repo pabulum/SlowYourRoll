@@ -155,7 +155,7 @@ function weekNowHTML(s, long) {
         choice, not two.`;
 }
 
-/** "≈80 Myth" — a crest yield, or an em dash where the payout banks none. */
+/** "≈80 Myth" — crests the payout saves you, or an em dash where it saves none. */
 function crestCell(r) {
   return r.crests ? html`≈${r.crests} ${r.crestKind || ""}` : "—";
 }
@@ -349,7 +349,7 @@ export function renderRewards(here, keyLevel) {
               <th scope="col">Source</th>
               <th scope="col">Pays</th>
               <th scope="col">ilvl</th>
-              <th scope="col">Crests</th>
+              <th scope="col">Crests saved</th>
             </tr>
           </thead>
           <tbody>
@@ -379,20 +379,28 @@ export function renderRewards(here, keyLevel) {
       ${table["mythic-plus"] && ladderHTML(table["mythic-plus"], keyLevel)}
 
       <section class="rwd-sec">
-        <h3>Crests</h3>
-        <p>
-          A Mythic roll banks
+        <h3>The crests you don't spend</h3>
+        <p class="rwd-figure">
           <b>≈${mythCrest} ${table.mythic.crestKind || ""} crests</b>
-          — the crests you'd otherwise have spent taking that item to
-          ${table.mythic.label}. Every other payout lands on a track's first
+          <span
+            >saved every week by rolling a Mythic boss — and there is no other
+            way to get them</span
+          >
+        </p>
+        <p>
+          A roll doesn't pay crests out. It hands the item over already at
+          ${table.mythic.label}, so the crests that would have taken it there
+          are crests you never spend — the same crests you'd otherwise be
+          farming for the slot. Every other payout lands on a track's first
           step, which is where a drop starts anyway, so it saves none.
         </p>
         <p>
-          The yield is the same for every item in a pool. One you want arrives
+          You save it whatever the roll hands you. An item you want arrives
           already upgraded; one you'd never wear still unlocks that slot, so the
-          piece you actually equip upgrades free. So crests can't change
+          piece you actually equip upgrades free. So the saving can't change
           <em>which</em> item you're rolling for — only whether a Mythic boss
-          beats a dungeon for the same single token.
+          beats a dungeon for the same single token, which is exactly the
+          comparison the EV can't make.
         </p>
       </section>
 
@@ -418,7 +426,8 @@ export function renderRewards(here, keyLevel) {
             they understate that encounter against one paying a lower track.
           </li>
           <li>
-            Crests are quoted on each encounter card and stay out of the EV.
+            The crests a roll saves you are quoted on each encounter card and
+            stay out of the EV.
           </li>
         </ul>
       </section>
@@ -944,8 +953,14 @@ function vaultOptionHTML(b, v, row, opt) {
  * says so — otherwise this is a sanity check on whether spending a token is worth it at all.
  *
  * The recommendation is deliberately narrow: it compares this week's expected score and nothing
- * else. A roll also banks crests and can unlock free upgrades in its slot, and a guaranteed item
+ * else. A roll also saves crests and can unlock free upgrades in its slot, and a guaranteed item
  * can't miss — neither is priced here, so the margin is stated rather than rounded to a verdict.
+ *
+ * The crest saving is the one unpriced term named out loud, because it's the only one that lands
+ * entirely on one side of this trade. Taking the vault item saves nothing: it arrives at the level
+ * it arrives at. So where the top roll saves crests, a verdict of "take the item" is being reached
+ * *despite* a real cost the numbers above it don't carry, and a reader deciding on the margin should
+ * be told so on the banner rather than after expanding the card the figure sits on.
  *
  * The one lasting effect that *is* named is the drag: taking the item leaves it in its pool for
  * good, where a roll would have removed one. That asymmetry outlives the week the trade is made in.
@@ -981,7 +996,28 @@ function tradeHTML(b, vc) {
       ${roll.cost !== 1 && html` That roll costs ${roll.cost} tokens.`}
       ${tokenWeeksHTML()}
     </div>
-    ${vc.drag && dragHTML(b, vc.drag, keep, unit)}
+    ${crestEdgeHTML(roll)} ${vc.drag && dragHTML(b, vc.drag, keep, unit)}
+  </div>`;
+}
+
+/**
+ * The crest saving, on the trade banner, as the one thing the verdict above it hasn't priced.
+ *
+ * Same shape as `tdrag`, the other line here that names a cost living outside the week's arithmetic.
+ * It says "on top of that" rather than converting: the whole reason the figure is quoted in crests
+ * is that no rate exists to fold it into a score with (see `crestNote`).
+ *
+ * @param {import("./types.js").Row} roll  The top roll — the one the banner is costing.
+ */
+function crestEdgeHTML(roll) {
+  const c = roll.reward && roll.reward.crests;
+  if (!c) return "";
+  return html`<div class="tcrest">
+    On top of that, the roll
+    <b>saves ≈${c} ${roll.reward.crestKind || ""} crests</b> — the crests you'd
+    have spent taking that slot to
+    ${roll.reward.label || html`the top of its track`}. Your vault item saves
+    none, and neither number above counts it.
   </div>`;
 }
 
@@ -1203,16 +1239,25 @@ function promoNote(b, r) {
 }
 
 /**
- * Crest yield, in the card's one-line summary. Uniform per roll, so it needs no qualifier there.
+ * Crests a roll here saves, in the card's one-line summary. Uniform per roll, so it needs no
+ * qualifier there — but it does need the verb. "≈80 Myth crests" alone reads as crests the roll
+ * *pays out*, which the game never does; what a roll does is hand the item over already upgraded,
+ * so the crests are ones you never spend. That distinction is the whole of the figure's meaning.
  *
- * Guarded with an `if` rather than `c && html\`…\``: most payouts bank *zero* crests, and zero is a
+ * Only a handful of encounters carry a non-zero figure, and where it lands it's the one thing on a
+ * collapsed card the EV can't say — so it gets a gold rule and ink lettering rather than a third
+ * faint clause after the dot. Gold rule, not gold text: see "struck, not painted" in styles.css.
+ *
+ * Guarded with an `if` rather than `c && html\`…\``: most payouts save *zero* crests, and zero is a
  * number the tag would faithfully render as "0". The `&&` shorthand is only safe where the left
  * side is a boolean or an object.
  */
 function crestMeta(r) {
   const c = r.reward && r.reward.crests;
   if (!c) return "";
-  return html` · ≈${c} ${r.reward.crestKind || ""} crests per roll`;
+  return html`<span class="crest-save"
+    >saves <b>≈${c} ${r.reward.crestKind || ""} crests</b></span
+  >`;
 }
 
 /**
@@ -1222,23 +1267,30 @@ function crestMeta(r) {
  * currency is that converting it would need a crests-to-score rate that depends on which item you'd
  * have spent them on — which is exactly the opportunity cost no report computes.
  *
+ * Written as a saving throughout, because that is literally what it is: no roll hands you crests.
+ * It hands you an item at the top of its track, and the crests that would have taken it there are
+ * crests you keep. Phrasing it as a yield invites the reader to look for a currency drop that isn't
+ * coming, and to double-count it against the crests they're already earning that week.
+ *
  * The figure doesn't vary within a pool, and that is the useful part. An item handed over already
  * upgraded saves the crests you'd have spent getting it there; one you'd never wear still unlocks
- * that slot, so the item you *do* wear upgrades free. Filler and upgrade yield the same crests.
+ * that slot, so the item you *do* wear upgrades free. Filler and upgrade save the same crests.
  * So it can never reorder items inside an encounter — only encounters against each other, which is
  * precisely where a season that charges one token for both a Mythic boss and a dungeon needs it.
  */
 function crestNote(b, r) {
   const c = r.reward && r.reward.crests;
   if (!c) return "";
-  return html`<div class="swap-note">
-    <b>≈${c} ${r.reward.crestKind || ""} crests</b> per roll, whatever it hands
-    you. An item you want arrives already upgraded; one you don’t still unlocks
-    that slot, so the piece you actually wear upgrades free. Same for every item
-    here, so it can’t change <em>which</em> item you want, only whether this
-    encounter beats another. Not in the EV above: folding it in needs a
-    crests-to-${unitOf(b)} rate that depends on what you’d have spent them on,
-    which no report gives.
+  const kind = r.reward.crestKind || "";
+  return html`<div class="swap-note crest-note">
+    Rolling here <b>saves you ≈${c} ${kind} crests</b> — what you'd otherwise
+    spend taking this slot to ${r.reward.label || html`the top of its track`},
+    and you save it whatever the roll hands you. An item you want arrives
+    already upgraded; one you don’t still unlocks that slot, so the piece you
+    actually wear upgrades free. Same for every item here, so it can’t change
+    <em>which</em> item you want, only whether this encounter beats another. Not
+    in the EV above: folding it in needs a crests-to-${unitOf(b)} rate that
+    depends on what you’d have spent them on, which no report gives.
   </div>`;
 }
 

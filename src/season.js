@@ -118,7 +118,7 @@ export const SEASONS = {
     qeSeasonId: 34,
     qeRaids: ["1307", "1314", "1308", "1305"], // Voidspire, Dreamrift, Quel'Danas, Sporefall
     // A Season 1 roll is the drop, so there is no reward scheme to document: no promotion, no
-    // crests banked, no end-of-raid tier. This is why the reward pane is pinned to Season 2.
+    // crests saved, no end-of-raid tier. This is why the reward pane is pinned to Season 2.
     tokenRaid: 2,
     tokenDungeon: 1,
     tokenNote:
@@ -198,7 +198,7 @@ export const SEASONS = {
         // three in between sit inside the overlap between two tracks — 308 is both Champion 6/6 and
         // a Hero step — so they stay item levels.
         //
-        // No rung below the top banks a crest, for the same reason no raid difficulty below Mythic
+        // No rung below the top saves a crest, for the same reason no raid difficulty below Mythic
         // does: they all land on the first step of a track, which is where the drop would have
         // started anyway. Only a Mythic boss hands the item over already finished.
         ladder: [
@@ -242,14 +242,14 @@ export const SEASONS = {
         "the game, and the reason most raiders bank a token for kill week instead of spending it here.",
       // Larias' 8/10 revision, and a reversal of the advice above rather than a footnote to it: at
       // current tuning a cantrip item is worth more to almost every spec than the 80 Myth crests a
-      // Mythic roll banks somewhere else, and the cantrips are on these items at every difficulty.
+      // Mythic roll saves you somewhere else, and the cantrips are on these items at every difficulty.
       // So the recommended weekly roll became these same bosses on Heroic — a small pool where every
       // item carries a cantrip, paying Myth 1/6 like any other Heroic boss. Both sentences are true
       // at once: roll them on Heroic most weeks, and hold a token for the Mythic kill.
       heroicNote:
         "The cantrip effects are on these items at every difficulty, so rolling here on Heroic is " +
         "the week-to-week play for most specs — a small pool where everything carries a cantrip, " +
-        "still paying Myth 1/6. Guides rate that above the ≈80 crests a Mythic roll banks elsewhere.",
+        "still paying Myth 1/6. Guides rate that above the ≈80 crests a Mythic roll saves you elsewhere.",
     },
   },
 };

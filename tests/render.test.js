@@ -336,6 +336,21 @@ test("rendering closes the report picker", () => {
   );
 });
 
+// One of the two places this file asserts wording, and for the same reason as the escaping tests:
+// the verb is the claim, not the decoration. No bonus roll pays crests out — it hands the item over
+// already upgraded, so the figure is crests you never spend. Quoted as a yield instead, a reader
+// goes looking for a currency drop that isn't coming, or counts it twice against the crests they're
+// already farming that week. The figure also has to survive on a *collapsed* card, since that's the
+// one term the EV column beside it can't account for.
+test("a card presents its crest figure as a saving, without being expanded", () => {
+  const doc = renderWith([makeBoard()]);
+  const meta = doc.querySelector("#sources .card .card-head .meta");
+  const save = meta.querySelector(".crest-save");
+  assert.ok(save, "the crest figure is in the collapsed card's summary line");
+  assert.match(save.textContent, /saves/);
+  assert.match(save.textContent, /80 Myth crests/);
+});
+
 /* ---------- the reward pane ---------- */
 
 test("the reward pane documents its own season, whatever season the app is pricing", () => {
@@ -382,6 +397,19 @@ test("the M+ ladder is on screen, since the ranking only ever quotes its top run
   rungs.forEach((k) => {
     assert.match(rows, new RegExp("\\b" + k.ilvl + "\\b"));
   });
+});
+
+// The pane's own statement of the figure, read off the season rather than hard-coded — the number
+// is a PTR figure and will move. What's pinned is that the pane leads with it and frames it as a
+// saving; see the card test above for why the verb is worth a test at all.
+test("the pane leads its crest section with what a roll saves you", () => {
+  const doc = renderWith([]);
+  const fig = doc.querySelector("#rewardBody .rwd-figure");
+  assert.ok(fig, "the saving is a figure in its own right, not a clause");
+  const crests = ((REWARD_SEASON.rollReward || {}).mythic || {}).crests;
+  assert.ok(crests, "the season has a saving to state");
+  assert.match(fig.textContent, new RegExp("\\b" + crests + "\\b"));
+  assert.match(fig.textContent, /saved/);
 });
 
 // The pane's one live connection to the page behind it: the row you're actually being ranked at.

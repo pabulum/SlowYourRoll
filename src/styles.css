@@ -735,6 +735,23 @@ a {
   color: var(--danger);
   font-weight: 650;
 }
+/* The crests the roll saves and the vault item doesn't — the one term of this trade that sits
+   wholly on one side of it and wholly outside both numbers above. Same footnote shape as .tdrag,
+   ink rather than danger red: that line is what taking the item costs you, this one is what rolling
+   gets you, and the two must not read as the same kind of warning. */
+.trade .tcrest {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.6;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--rule);
+  padding-right: 18%;
+}
+.trade .tcrest b {
+  color: var(--ink);
+  font-weight: 650;
+}
 .vault-items {
   display: flex;
   flex-direction: column;
@@ -1253,6 +1270,22 @@ select.board.slim {
   color: var(--faint);
   margin-top: 3px;
 }
+/* Crests a roll here saves. It lands on a handful of encounters and it's the only thing on a
+   collapsed card the EV column can't account for, so it gets separated by the accent rule the page
+   uses everywhere else to mark a live figure — not by a third interpunct, which would file it with
+   the pool count as one more piece of provenance. Gold rule, ink lettering: the figure itself is
+   11.5px, and 11.5px gold is the paint the system doesn't allow (see "struck, not painted").
+   inline-block so the border resolves against the text's own box rather than the line box. */
+.crest-save {
+  display: inline-block;
+  margin-left: 10px;
+  padding-left: 9px;
+  border-left: 2px solid var(--accent);
+}
+.crest-save b {
+  color: var(--ink);
+  font-weight: 650;
+}
 /* These tags sit inside the display-face headings — the heading gets the display face, the tag
    doesn't. At 10px the character reads as noise, and uppercase tracking wants the plainer face. */
 .type-tag,
@@ -1629,6 +1662,14 @@ img.icon,
   display: block;
   margin-top: 7px;
 }
+/* The crest saving, expanded. It takes the accent rule while the other notes in this body keep the
+   plain one, which is the same mark the collapsed card put beside the figure — so opening a card
+   lands the reader on the continuation of the line they just read, rather than on a third grey note
+   they have to find. It's also the only one of these notes that's a reason *to* roll here: the other
+   two qualify what the score means. */
+.swap-note.crest-note {
+  border-left-color: var(--accent);
+}
 
 /* ── reward pane ──────────────────────────────────────────────────────────────────────────────────
    A drawer off the right edge: reference read against the ranking, not a step in any flow, so it
@@ -1742,6 +1783,39 @@ img.icon,
 .rwd-sec b {
   color: var(--ink);
   font-weight: 650;
+}
+/* The crest saving, as the pane's one statement piece.
+   It earns the size because it's a figure the game gives you no other way and the term the ranking
+   behind this pane deliberately leaves out, so a reader who only skims the pane should still leave
+   holding it. Size and a gold rule do that work — the figure itself stays ink. It is over the 22px
+   line where gold gets struck rather than painted, so the sheen would be legal here, but the struck
+   list is three figures long on purpose and all three are the answer to "where do I roll"; this is
+   reference material for a term that answer excludes. A fourth sheen would make the sheen a heading
+   style. The caption stays muted: the sentence explaining a figure is not itself the figure. */
+.rwd-figure {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 11px;
+  margin: 0 0 11px;
+  padding: 9px 0 11px;
+  border-top: 1px solid var(--accent-line);
+  border-bottom: 1px solid var(--rule);
+}
+.rwd-sec .rwd-figure b {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+  color: var(--ink);
+}
+.rwd-figure span {
+  flex: 1 1 22ch;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
 }
 /* Which week it is, against the rule stated above it. The one line in the pane that changes on its
    own, so it's marked the way the page marks anything live — the accent rule, nothing louder. */
