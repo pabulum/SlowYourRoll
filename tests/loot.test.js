@@ -10,7 +10,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { QE_DATA } from "../src/data.js";
 import { state } from "../src/store.js";
-import { canLoot, specId, specInfo, specIdInClass } from "../src/loot.js";
+import {
+  canLoot,
+  isRollable,
+  specId,
+  specInfo,
+  specIdInClass,
+} from "../src/loot.js";
 import { buildGroups } from "../src/model.js";
 
 const MISTWEAVER = "270";
@@ -289,4 +295,52 @@ test("a spec name no spec of that class has resolves to nothing", () => {
   assert.equal(specIdInClass("frost", specId("Mistweaver Monk")), null);
   assert.equal(specIdInClass("windwalker", null), null);
   assert.equal(specIdInClass("", specId("Holy Paladin")), null);
+});
+
+/* ---------- things filed against a boss that a roll can't hand you ----------
+   The item database catalogues everything attached to an encounter, and a little of it isn't loot:
+   Season 2's raid lists three cosmetic head pieces and one reagent. They diluted the pools of three
+   encounters, two of them the Venomcursed bosses, where a pool is a handful of items and one extra
+   is a third of the denominator. QE Live's own roll expected value omits them from both halves. */
+
+test("a reagent and a cosmetic aren't loot; real gear and tier tokens are", () => {
+  assert.equal(isRollable({ c: 5, u: 2 }), false, "reagent");
+  assert.equal(isRollable({ c: 4, u: 5, iv: 1 }), false, "cosmetic head");
+  assert.equal(isRollable({ c: 4, u: 2 }), true, "leather");
+  assert.equal(isRollable({ c: 2, u: 10 }), true, "a weapon");
+  assert.equal(isRollable({ c: 15, u: 0, p: [270] }), true, "a tier token");
+  assert.equal(isRollable(null), true, "nothing known — leave it lootable");
+});
+
+// The refusal has to be spec-independent, or the alt-spec lines would offer a loot spec that
+// "fixes" a cosmetic — and there is no such spec.
+test("nothing that isn't loot is loot for some other spec either", () => {
+  const mw = specId("Mistweaver Monk");
+  assert.ok(mw, "the database knows the spec this is asked about");
+  const lt = canLoot({ c: 4, u: 5, iv: 1, n: "Cosmetic Hat" }, mw);
+  assert.equal(lt.ok, false);
+  assert.match(lt.why, /Cosmetic/);
+  assert.equal(lt.swap, undefined, "no sibling spec to swap to");
+  // And with no spec resolved at all, where everything else defaults to lootable.
+  assert.equal(canLoot({ c: 5, u: 2 }, null).ok, false);
+  assert.equal(canLoot({ c: 4, u: 2 }, null).ok, true);
+});
+
+// The four are real ids in the shipped database, so this fails loudly if upstream reclassifies them.
+test("Season 2's four non-loot entries are still classified that way", () => {
+  const named = {
+    270909: "Slumbering Coil Curio",
+    275937: "Hex Lord's Visage",
+    275938: "Hex Lord's Gaze",
+    281227: "Soulcoiler's Rush'kah",
+  };
+  Object.keys(named).forEach((id) => {
+    const m = QE_DATA.items[id];
+    if (!m) return; // a later season may not ship them
+    assert.equal(isRollable(m), false, named[id] + " is not roll loot");
+  });
+  // Tier tokens sit right beside them in the same raid and must survive.
+  const token = QE_DATA.items["270927"]; // Venomcured Icon, off Vashnikt
+  if (token)
+    assert.equal(isRollable(token), true, "tier tokens stay in the pool");
 });

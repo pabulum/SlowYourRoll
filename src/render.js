@@ -1283,7 +1283,15 @@ function itemsHTML(b, r) {
           so it folds away. What it's *for* is the alt-spec lines below, which read from it. */
         blocked.length > 0 &&
         html` <div class="item-group tap" data-act="showblocked">
-            ${showBlocked ? "Hide" : "Show"} what this loot spec can’t get
+            ${showBlocked ? "Hide" : "Show"}
+            ${
+              /* Two different "no" here. Nearly always it's loot spec, which is what the alt-spec
+                 lines below are about; occasionally it's an item that is nobody's loot, and calling
+                 that a loot-spec problem would send the reader looking for a spec that fixes it. */
+              blocked.every((i) => (i.specs || []).length === 0 && !i.swap)
+                ? "what a roll can’t hand you"
+                : "what this loot spec can’t get"
+            }
             <span class="n">${blocked.length}</span>
           </div>
           ${showBlocked && blocked.map((it) => itemRow(b, it))}`

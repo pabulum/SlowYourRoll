@@ -39,6 +39,46 @@ export function statLabel(set) {
 }
 const BACK = 16; // inventoryType: cloaks are filed as cloth but everyone wears them
 
+// Item classes that are catalogued against a boss but are not gear a bonus roll hands over.
+const CLS_REAGENT = 5; // whole item class: crafting reagents, with no equip slot at all
+const CLS_ARMOR = 4;
+const ARMOR_COSMETIC = 5; // armor subclass: appearance-only pieces, no stats and no item level
+
+/**
+ * Is this something a bonus roll could actually award?
+ *
+ * The item database catalogues everything filed against an encounter, and a little of that is not
+ * loot in the sense this app means. Season 2's raid lists three cosmetic head pieces and one
+ * reagent; QE Live's Upgrade Finder doesn't evaluate any of them, and its own roll expected value
+ * leaves them out of both halves of the fraction.
+ *
+ * They are rare — four items across all current content — and that is exactly why they mattered.
+ * A pool is only what one loot spec can be given, so it is small, and the four land on three
+ * encounters: one is a third of Ula'tek's denominator, and two more are two sevenths of Coiled
+ * Altar's. Both are Venomcursed bosses, so the understatement fell on the two encounters every
+ * guide tells you to think hardest about.
+ *
+ * A blacklist rather than a whitelist, following this file's rule at the top: something we can't
+ * judge stays lootable, because wrongly hiding an item costs a roll that should have been made.
+ * Tier tokens are the case that proves it — item class 15, evaluated by nothing, and unmistakably
+ * a real thing to be handed. They carry a spec list, so `allows` already awards the right one of
+ * the four per boss, and they stay.
+ *
+ * @param {Partial<import("./types.js").Item>} item
+ */
+export function isRollable(item) {
+  if (!item) return true;
+  if (item.c === CLS_REAGENT) return false;
+  return !(item.c === CLS_ARMOR && item.u === ARMOR_COSMETIC);
+}
+
+/** Why an item isn't loot at all, as opposed to not loot *for you*. */
+function notLootWhy(item) {
+  return item.c === CLS_REAGENT
+    ? "Reagent — not gear a roll hands you"
+    : "Cosmetic — appearance only";
+}
+
 /** "Leather" / "Warglaive" — what kind of gear this is, where we know. */
 export function gearLabel(item) {
   if (!item) return "";
@@ -115,6 +155,9 @@ export function classSpecs(id) {
  * @returns {{ ok: boolean, why?: string, swap?: string[] }}
  */
 export function canLoot(item, spec) {
+  // Asked before the spec is even looked up: a cosmetic is not loot for anybody, so this is not the
+  // kind of "no" that a different loot spec could turn into a yes.
+  if (item && !isRollable(item)) return { ok: false, why: notLootWhy(item) };
   const me = specInfo(spec);
   if (!item || !me) return { ok: true }; // unknown spec, or an item with no loot facts — don't filter
   if (allows(item, spec)) return { ok: true };
@@ -171,6 +214,7 @@ export function canLoot(item, spec) {
  * @param {string} spec
  */
 function allows(item, spec) {
+  if (!isRollable(item)) return false; // not loot for any spec, so no sibling can be offered it
   const me = specInfo(spec);
   if (!me) return true;
   // 1. An explicit spec list settles it outright.

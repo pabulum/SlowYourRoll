@@ -138,6 +138,33 @@ same finished item level and leaves the crests each roll saves as a separate fig
 cards say which of the two they are showing. A Droptimizer, and any QE report from before 12.1,
 still sims the drop.
 
+### QE Live computes this too, now
+
+The 12.1 Upgrade Finder shows a "Roll Expected Value" per boss. It is the same formula this app uses
+— `getRollExpectedValue` in QE's `ItemUtilities.ts` filters a boss's `bonus` rows and returns
+`sum(percDiff) / count`, the mean percentage upgrade over the pool. Two tools, arrived at
+independently, same fraction. Where the pools agree the numbers agree to three decimals, which makes
+QE a useful check on this app's arithmetic.
+
+The pools disagree in three places, and all three are worth knowing:
+
+- **Things that aren't loot.** Season 2's raid catalogues three cosmetic head pieces and one reagent
+  against bosses. QE omits them; this app used to count them, which understated Ula'tek by a third
+  and Coiled Altar by two sevenths — both Venomcursed bosses. `isRollable` in
+  [`src/loot.js`](src/loot.js) now drops them, and the two tools agree exactly on those encounters.
+- **Tier tokens, which QE misses.** The 20 Venomcured / Venomwoven / Venomcast / Venomforged tokens
+  are item class 15 and never reach QE's Upgrade Finder, so its EV omits them from both halves of
+  the fraction. They are real roll outcomes and they carry a spec list, so `allows` awards the right
+  one of the four per boss. This app keeps them, and its numbers on those five bosses are the lower,
+  more honest ones.
+- **Items QE has no source data for.** Knot of Writhing Serpents, Mindpiercer's Sigil and Sapling of
+  the Dawnroot carry `sources: null` in QE's `ItemDB.json`, so QE cannot file them against a boss at
+  all. This app has them because the data build backfills sources from Raidbots
+  ([`scripts/build-data.mjs`](scripts/build-data.mjs)), which is Blizzard's own item data.
+
+So: agree with QE wherever QE has an opinion, and differ only where it has a blind spot. If a future
+divergence appears that doesn't fit one of those three, it is worth treating as a bug here first.
+
 **A dungeon row's `dropDifficulty` is the M+ key level**, an index into `MPLUS_KEY_REWARDS` in QE's
 `Databases/MPlusKeyRewards.ts` (mirrored as `QE_MPLUS_KEYS`). That is new in 12.1 and it is the
 answer to a question the app used to have to duck: what a dungeon roll pays depends on the key, and
