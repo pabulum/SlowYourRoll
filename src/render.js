@@ -38,6 +38,7 @@ import {
   vaultStatus,
   priceWith,
   rollScored,
+  crestSavingRange,
 } from "./model.js";
 import { specId, specInfo, classSpecs } from "./loot.js";
 import { CLASS_COLOR } from "./classes.js";
@@ -155,9 +156,14 @@ function weekNowHTML(s, long) {
         choice, not two.`;
 }
 
-/** "≈80 Myth" — crests the payout saves you, or an em dash where it saves none. */
+/**
+ * "up to 80 Myth" — crests the payout saves you, or an em dash where it saves none.
+ *
+ * "Up to" rather than "≈": the figure is a ceiling, not a rounding, and the two signal different
+ * things to someone reading a number off a table. What it assumes is set out under the table.
+ */
 function crestCell(r) {
-  return r.crests ? html`≈${r.crests} ${r.crestKind || ""}` : "—";
+  return r.crests ? html`up to ${r.crests} ${r.crestKind || ""}` : "—";
 }
 
 /**
@@ -306,6 +312,16 @@ export function renderRewards(here, keyLevel) {
   const win = tokenVaultWindow(s);
   const mythCrest = (table.mythic && table.mythic.crests) || 0;
   const weekNow = weekNowHTML(s, true);
+  // The pane documents REWARD_SEASON rather than a board, but the one thing in it that *is* about
+  // this character is whether the crest figure has been checked — so it reads the active board for
+  // that alone. Null with no report loaded, which the copy handles as "can't check".
+  const b = active();
+  const paneRange = b ? crestSavingRange(b, table.mythic) : null;
+  const paneSure = !!paneRange && paneRange.flat;
+  // The track the crest figure is the climb across, shown so the number can be re-derived rather
+  // than taken on trust. Absent for a season whose steps aren't recorded.
+  const steps =
+    table.mythic && table.mythic.crestPerStep && table.mythic.crestSteps;
 
   setHTML(
     "rewardBody",
@@ -381,10 +397,25 @@ export function renderRewards(here, keyLevel) {
       <section class="rwd-sec">
         <h3>The crests you don't spend</h3>
         <p class="rwd-figure">
-          <b>≈${mythCrest} ${table.mythic.crestKind || ""} crests</b>
-          <span
-            >saved every week by rolling a Mythic boss — and there is no other
-            way to get them</span
+          <b
+            >${
+              paneRange && !paneRange.flat
+                ? html`${paneRange.min}–${paneRange.max}`
+                : paneRange
+                  ? paneRange.max
+                  : mythCrest
+            }
+            ${table.mythic.crestKind || ""} crests</b
+          >
+          <span class="cap"
+            >a week saved by rolling a Mythic boss, and there is no other way to
+            get
+            them${
+              paneRange
+                ? html` — computed from your <code>/simc</code>`
+                : html` — for a slot capped on the track below, which is the
+                  assumption the next panels unpack`
+            }</span
           >
         </p>
         <p>
@@ -401,6 +432,65 @@ export function renderRewards(here, keyLevel) {
           <em>which</em> item you're rolling for — only whether a Mythic boss
           beats a dungeon for the same single token, which is exactly the
           comparison the EV can't make.
+        </p>
+        <p class="rwd-assume">
+          <b>Where the figure comes from.</b>
+          ${
+            steps
+              ? html`The ${table.mythic.crestKind || ""} track runs
+                ${steps.join(" · ")}, at ${table.mythic.crestPerStep} crests a
+                step — one flat price for every slot, two-handers included. A
+                Mythic boss drops at ${steps[0]} and a roll hands it over at
+                ${steps[steps.length - 1]}, which is ${steps.length - 1} steps.`
+              : html`It's the climb from where a Mythic boss drops an item to
+                where a roll hands it over.`
+          }
+        </p>
+        <p class="rwd-assume">
+          <b>Why one of those steps is free.</b> A step costs nothing if your
+          slot's <em>high watermark</em> — the best item level you've held there
+          — already covers it, and Midnight's tracks overlap by two steps, so
+          ${
+            table.mythic.crestFreeTo == null
+              ? html`the top of the track below is also this track's second step`
+              : html`ilvl ${table.mythic.crestFreeTo} is both the top of the
+                Hero track and the second step of
+                ${table.mythic.crestKind || ""}`
+          }.
+          Take a Heroic item in that slot to the top of <em>its</em> track and
+          you've bought that mark with Hero crests, which M+ hands out freely —
+          so the first ${table.mythic.crestKind || ""} step never costs
+          ${table.mythic.crestKind || ""} crests.
+          ${
+            steps &&
+            html`That's why the figure is
+            ${(steps.length - 2) * table.mythic.crestPerStep} and not
+            ${(steps.length - 1) * table.mythic.crestPerStep}:
+            ${steps.length - 2} paid steps, not ${steps.length - 1}.`
+          }
+          Never spend ${table.mythic.crestKind || ""} crests on that step, and
+          the page never prices a roll as though you had.
+        </p>
+        <p class="rwd-assume">
+          <b>What yours actually is.</b>
+          ${
+            !paneRange
+              ? html`A <code>/simc</code> paste carries
+                  <code>slot_high_watermarks</code>, the best item level you've
+                  held in each slot, which is all this needs to compute the
+                  figure per slot instead of assuming it. Without one it stays
+                  the assumption above.`
+              : paneSure
+                ? html`Every one of your ${paneRange.slots} slots works out at
+                  ${paneRange.max}, so that's the figure wherever a roll lands —
+                  computed from your marks, not assumed.`
+                : html`Across your ${paneRange.slots} slots it ranges from
+                  ${paneRange.min} to ${paneRange.max}: the further a slot has
+                  climbed, the less is left to save.`
+          }
+          What no <code>/simc</code> pins down reliably is <em>which</em> mark
+          belongs to which slot — those indices don't survive being checked
+          against real gear — so a roll's slot is never named.
         </p>
       </section>
 
@@ -996,7 +1086,7 @@ function tradeHTML(b, vc) {
       ${roll.cost !== 1 && html` That roll costs ${roll.cost} tokens.`}
       ${tokenWeeksHTML()}
     </div>
-    ${crestEdgeHTML(roll)} ${vc.drag && dragHTML(b, vc.drag, keep, unit)}
+    ${crestEdgeHTML(b, roll)} ${vc.drag && dragHTML(b, vc.drag, keep, unit)}
   </div>`;
 }
 
@@ -1007,17 +1097,41 @@ function tradeHTML(b, vc) {
  * It says "on top of that" rather than converting: the whole reason the figure is quoted in crests
  * is that no rate exists to fold it into a score with (see `crestNote`).
  *
+ * Whether the figure is computed matters more on this line than anywhere else: this is the one place
+ * the crests could tip a decision, as the tiebreak on a close margin. A reader leaning on an assumed
+ * number deserves to know it rests on an assumption about their gear, and one leaning on a computed
+ * number deserves not to be told to discount it. `crestSavingRange` settles which — and a banner gets
+ * the verdict only, with the encounter card carrying the working.
+ *
+ * Always reads off the same `/simc` as the vault options beside it, since both come off `b`.
+ *
+ * @param {import("./types.js").Board} b
  * @param {import("./types.js").Row} roll  The top roll — the one the banner is costing.
  */
-function crestEdgeHTML(roll) {
+function crestEdgeHTML(b, roll) {
   const c = roll.reward && roll.reward.crests;
   if (!c) return "";
+  const kind = roll.reward.crestKind || "";
+  const rng = crestSavingRange(b, roll.reward);
+  const figure = !rng
+    ? html`up to ${c} ${kind} crests`
+    : rng.flat
+      ? html`${rng.max} ${kind} crests`
+      : html`${rng.min}–${rng.max} ${kind} crests`;
   return html`<div class="tcrest">
-    On top of that, the roll
-    <b>saves ≈${c} ${roll.reward.crestKind || ""} crests</b> — the crests you'd
-    have spent taking that slot to
-    ${roll.reward.label || html`the top of its track`}. Your vault item saves
-    none, and neither number above counts it.
+    On top of that, the roll <b>saves ${figure}</b> — what you'd have spent
+    taking that slot to ${roll.reward.label || html`the top of its track`}. Your
+    vault item saves none, and neither number above counts it.
+    ${
+      !rng
+        ? html`That figure assumes the slot is capped on the track below; open
+          the encounter for what it turns on.`
+        : rng.flat
+          ? html`Computed from your <code>/simc</code>, where every slot works
+              out the same.`
+          : html`Computed from your <code>/simc</code> — open the encounter for
+              why it's a range.`
+    }
   </div>`;
 }
 
@@ -1154,7 +1268,9 @@ function cardHTML(b, r, i) {
           <span class="txt">${g.name}</span
           ><span class="type-tag ${g.type}">${g.type}</span>${special}${pays}
         </div>
-        <div class="meta">${r.remaining} in pool · ${sub}${crestMeta(r)}</div>
+        <div class="meta">
+          ${r.remaining} in pool · ${sub}${crestMeta(b, r)}
+        </div>
       </div>
       <div class="ev-cell">
         <div class="ev tnum">${dv(b, r.ev)}</div>
@@ -1248,15 +1364,28 @@ function promoNote(b, r) {
  * collapsed card the EV can't say — so it gets a gold rule and ink lettering rather than a third
  * faint clause after the dot. Gold rule, not gold text: see "struck, not painted" in styles.css.
  *
+ * Three shapes, because the figure is a computed one and how much is known about it varies. With a
+ * linked `/simc` whose slots all agree it's a plain number; where they disagree it's a range, since a
+ * roll lands in one slot and which one isn't knowable; with nothing linked it's the season's baseline
+ * figure, hedged with "about" because that baseline is an assumption about the character's gear
+ * rather than a bound on it. See `crestSavingRange`, and `Reward.crestFreeTo` for the baseline.
+ *
  * Guarded with an `if` rather than `c && html\`…\``: most payouts save *zero* crests, and zero is a
  * number the tag would faithfully render as "0". The `&&` shorthand is only safe where the left
  * side is a boolean or an object.
  */
-function crestMeta(r) {
+function crestMeta(b, r) {
   const c = r.reward && r.reward.crests;
   if (!c) return "";
-  return html`<span class="crest-save"
-    >saves <b>≈${c} ${r.reward.crestKind || ""} crests</b></span
+  const kind = r.reward.crestKind || "";
+  const rng = crestSavingRange(b, r.reward);
+  const figure = !rng
+    ? html`up to ${c} ${kind} crests`
+    : rng.flat
+      ? html`${rng.max} ${kind} crests`
+      : html`${rng.min}–${rng.max} ${kind} crests`;
+  return html`<span class="crest-save ${rng && rng.flat ? "sure" : ""}"
+    >saves <b>${figure}</b></span
   >`;
 }
 
@@ -1277,21 +1406,81 @@ function crestMeta(r) {
  * that slot, so the item you *do* wear upgrades free. Filler and upgrade save the same crests.
  * So it can never reorder items inside an encounter — only encounters against each other, which is
  * precisely where a season that charges one token for both a Mythic boss and a dungeon needs it.
+ *
+ * What it *does* vary with is the slot the roll lands in, and this is the one note with room to say
+ * so. Each step of the climb is free where the slot's high watermark already covers it, so the figure
+ * falls as a slot climbs — and because Midnight's tracks overlap by two steps, a slot merely capped on
+ * the *Hero* track already has its first Myth step covered. That overlap is why the quoted baseline is
+ * 80 rather than the 100 a naive five-step count gives; `crestSavingAt` carries the arithmetic.
+ *
+ * Where a `/simc` is linked none of that has to be assumed: the marks give a real figure per slot, and
+ * the note quotes it. It still won't say *which* slot is which — see `crestSavingRange` for why that
+ * would be a guess — so a character whose slots disagree gets the range and the reason for it.
  */
 function crestNote(b, r) {
   const c = r.reward && r.reward.crests;
   if (!c) return "";
   const kind = r.reward.crestKind || "";
+  const step = r.reward.label || html`the top of its track`;
+  const rng = crestSavingRange(b, r.reward);
+  const lead = !rng
+    ? html`up to ${c} ${kind} crests`
+    : rng.flat
+      ? html`${rng.max} ${kind} crests`
+      : html`${rng.min}–${rng.max} ${kind} crests`;
   return html`<div class="swap-note crest-note">
-    Rolling here <b>saves you ≈${c} ${kind} crests</b> — what you'd otherwise
-    spend taking this slot to ${r.reward.label || html`the top of its track`},
-    and you save it whatever the roll hands you. An item you want arrives
-    already upgraded; one you don’t still unlocks that slot, so the piece you
-    actually wear upgrades free. Same for every item here, so it can’t change
-    <em>which</em> item you want, only whether this encounter beats another. Not
-    in the EV above: folding it in needs a crests-to-${unitOf(b)} rate that
-    depends on what you’d have spent them on, which no report gives.
+    Rolling here <b>saves you ${lead}</b> — what you'd otherwise spend taking a
+    slot to ${step}, and you save it whatever the roll hands you. An item you
+    want arrives already upgraded; one you don’t still unlocks that slot, so the
+    piece you actually wear upgrades free. Same for every item here, so it can’t
+    change <em>which</em> item you want, only whether this encounter beats
+    another. ${crestCheckHTML(r.reward, kind, step, rng)}
+    <span class="crest-caveat"
+      >Not in the EV above either: folding it in needs a crests-to-${unitOf(b)}
+      rate that depends on what you’d have spent them on, which no report
+      gives.</span
+    >
   </div>`;
+}
+
+/**
+ * Where the figure above it came from — the ceiling, or your actual gear.
+ *
+ * Three states. Nothing linked, so the maximum stands and the note says what reaching it takes.
+ * Linked and unanimous, so it's simply the number. Linked and mixed, so it's a range, with the reason
+ * it can't be narrowed further stated rather than left as vagueness.
+ *
+ * The first case names the overlap and the play it implies, because that is the one sentence making
+ * the figure re-derivable: without it a reader comparing against a guide can't tell whether the two
+ * disagree or are answering different questions. It says *do this* rather than *this is assumed* —
+ * capping the slot's lower track is a thing the reader controls, and cheaply.
+ */
+function crestCheckHTML(reward, kind, step, rng) {
+  const mark = reward.crestFreeTo;
+  if (!rng)
+    return html`<span class="crest-caveat"
+      >That's the most it can save, and it assumes you take a lower-difficulty
+      item in that slot to
+      ${mark == null ? html`the step below this track` : html`ilvl ${mark}`}
+      first — cheap crests off M+, and the tracks' two-step overlap makes it the
+      second ${kind} step, so the first ${kind} step costs you no ${kind} crests
+      at all. Don't spend ${kind} crests there. A slot already further up
+      ${kind} saves less than this, down to nothing at ${step}. Paste your
+      <code>/simc</code> and it's computed instead of assumed.</span
+    >`;
+  if (rng.flat)
+    return html`<span class="crest-caveat checked"
+      >Computed from your <code>/simc</code>, not assumed: every one of your
+      ${rng.slots} slots works out at ${rng.max}, so that's what this saves
+      wherever it lands.</span
+    >`;
+  return html`<span class="crest-caveat"
+    >Computed from your <code>/simc</code>: across your ${rng.slots} slots this
+    works out between <b>${rng.min} and ${rng.max}</b>, depending which one the
+    roll lands in — the further a slot has already climbed, the less is left to
+    save. Which mark belongs to which slot isn’t something a
+    <code>/simc</code> pins down reliably, so it stays a range.</span
+  >`;
 }
 
 /** The end-of-raid encounters worth banking a token for, called out where the ranking can't see it. */

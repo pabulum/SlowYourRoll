@@ -45,9 +45,28 @@
  * @property {string} label  Upgrade track and step, for display ("Myth 6/6"); "" when unrecognised.
  * @property {number|null} ilvl  Item level of that step — null until Blizzard publishes it. Null
  *   means "promoted, by an amount we don't know", which is not the same as "not promoted".
- * @property {number} [crests]  Upgrade crests the payout saves you, per roll. Zero where the roll
+ * @property {number} [crests]  Upgrade crests the payout saves you, per roll — the **maximum**, for a
+ *   slot that hasn't been up this track yet. It only falls from here, as a slot climbs and there is
+ *   less left to buy; `crestSavingAt` computes the figure for a known watermark. Zero where the roll
  *   lands on a track's first step, which is where a drop would have started anyway.
  * @property {string} [crestKind]  Which crest currency that is ("Myth").
+ * @property {number} [crestFrom]  Item level this payout's own track starts at — the floor its
+ *   `crests` buy the climb from ("Myth 1/6", 318, for a payout of "Myth 6/6", 334). Stated rather
+ *   than read off whichever other row happens to share the number, and it is the threshold a slot's
+ *   high watermark is compared against: a slot already at or above it has had part of that climb
+ *   paid for, so a roll into it saves less than the full figure. Absent where nothing is saved.
+ * @property {number} [crestPerStep]  Crests one step up this track costs — flat across every slot
+ *   in Midnight, two-handers included.
+ * @property {number[]} [crestSteps]  Item level of each step on this track, first to last. With
+ *   `crestPerStep` this is the whole cost model: every step above `crestFrom` that a slot's watermark
+ *   doesn't already cover costs `crestPerStep`. Kept so the arithmetic is checkable rather than a
+ *   number nobody can re-derive.
+ * @property {number} [crestFreeTo]  Item level a slot reaches without spending *this* track's crests,
+ *   which is a floor on the watermark rather than a guess at it. 321 in Season 2: Hero 6/6, which the
+ *   tracks' two-step overlap also makes Myth 2/6, so taking a Heroic item in that slot to the top of
+ *   the Hero track — in Hero crests, which M+ hands out freely — covers the first Myth step. Anyone
+ *   paying Myth crests for that step has simply misplayed, so `crestSavingAt` clamps to this and the
+ *   figure never claims the roll saved you from it.
  * @property {LadderStep[]} [ladder]  The full run of payouts this one is the top of, where the
  *   payout depends on something the app can't see. Display only — nothing prices off it.
  */
@@ -172,13 +191,65 @@ export const SEASONS = {
     // on screen as Want that a lower payout would have called a dupe, and an extra line argues with
     // itself where a silently dropped one doesn't.
     //
-    // The crest figures are what the payout saves you, and they follow from Larias' arithmetic:
-    // 1,280 Myth crests to cap 16 slots is 80 per slot, so an item handed over at Myth 6/6 is 80
-    // crests you never have to spend — the "80 free crests a week, unobtainable any other way".
+    // The crest figure is what the payout saves you. The step tables are read off the game's own
+    // upgrade data — QE's `src/Retail/Engine/BonusIDs.ts`, every Midnight step under `seasonId: 37`
+    // with its item level and price — and the two tracks that matter run
+    //
+    //     Hero  1/6 = 305 · 2/6 = 308 · 3/6 = 311 · 4/6 = 315 · 5/6 = 318 · 6/6 = 321
+    //     Myth  1/6 = 318 · 2/6 = 321 · 3/6 = 324 · 4/6 = 328 · 5/6 = 331 · 6/6 = 334
+    //
+    // at a flat 20 crests a step, in that track's own currency. Those item levels are the ones pinned
+    // from the PTR sheet above, from an unrelated source, which is the check on the table.
+    //
+    // **The two-step overlap is the whole reason this figure is 80 and not 100.** A slot's crest cost
+    // is discounted by its *high watermark*, an item level: any step landing at or below the mark is
+    // free (`highWatermarkDiscounts`, `scaling: 0`). And the tracks overlap by two, so
+    //
+    //     Hero 6/6 = 321 = Myth 2/6
+    //
+    // which means capping a slot's Hero track — paid for in *Hero* crests, the plentiful ones — puts
+    // the mark at 321 and makes the first Myth step free. So climbing a Mythic drop (318) to a roll's
+    // payout (334) is five steps but only **four paid ones**: 4 × 20 = 80 Myth crests. That is Larias'
+    // figure, and its "1,280 to cap 16 slots" is exactly 16 × 80. The guide is right, and it is right
+    // for a reason worth writing down rather than rounded to.
+    //
+    // So 80 is a genuine **maximum**, and the figure only ever falls from it:
+    //
+    //     mark ≤ 321 (Myth untouched)      80   the most a roll can save
+    //     mark = 324 (Myth 3/6)            60   ... and down by 20 a step from there
+    //     mark = 331 (Myth 5/6)            20
+    //     mark ≥ 334 (Myth 6/6)             0   nothing left to buy
+    //
+    // Note what is *not* on that list: a mark below 321 does not push the figure to 100. Arithmetically
+    // it would — an unhelped slot pays all five steps — but nobody should ever be in that position,
+    // because the fix is to take a Heroic item in that slot to Hero 6/6 and pay in Hero crests, which
+    // fall out of running M+ and are the plentiful currency. Spending *Myth* crests on a step you can
+    // have for Hero crests is simply a mistake, so pricing the roll as if you'd make it would credit
+    // the token with rescuing you from bad play. `crestFreeTo` is that floor, and `crestSavingAt`
+    // clamps to it. The Hero crests themselves are deliberately not modelled: they're cheap, they're
+    // farmable on demand, and putting a second currency on an encounter card buys noise.
+    //
+    // A linked /simc carries the marks, so where there is one the app computes this instead of
+    // assuming it; see `crestSavingAt` and `crestSavingRange` in model.js. `crests` below is only the
+    // fallback for having nothing to compute from.
+    //
     // Every other payout lands on the first step of a track, which is where a drop starts anyway,
     // so it saves no crests even though it is still a better item than the boss would have given.
+    //
+    // Cost does not vary by slot. Every Midnight step carries a single cost block at
+    // `mask_inv_type: 0` — one price for every inventory type — so a two-hander, a ring and a helm
+    // all climb at 20 a step. See "double slots" in the README for what that does and doesn't mean.
     rollReward: {
-      mythic: { label: "Myth 6/6", ilvl: 334, crests: 80, crestKind: "Myth" },
+      mythic: {
+        label: "Myth 6/6",
+        ilvl: 334,
+        crests: 80,
+        crestKind: "Myth",
+        crestFrom: 318,
+        crestPerStep: 20,
+        crestSteps: [318, 321, 324, 328, 331, 334],
+        crestFreeTo: 321, // Hero 6/6, which is also Myth 2/6
+      },
       heroic: { label: "Myth 1/6", ilvl: 318, crests: 0, crestKind: "Myth" },
       normal: { label: "Hero 1/6", ilvl: 305, crests: 0, crestKind: "Hero" },
       lfr: {
@@ -249,7 +320,7 @@ export const SEASONS = {
       heroicNote:
         "The cantrip effects are on these items at every difficulty, so rolling here on Heroic is " +
         "the week-to-week play for most specs — a small pool where everything carries a cantrip, " +
-        "still paying Myth 1/6. Guides rate that above the ≈80 crests a Mythic roll saves you elsewhere.",
+        "still paying Myth 1/6. Guides rate that above the 80 crests a Mythic roll saves you elsewhere.",
     },
   },
 };

@@ -351,6 +351,92 @@ test("a card presents its crest figure as a saving, without being expanded", () 
   assert.match(save.textContent, /80 Myth crests/);
 });
 
+/* ---------- is the crest figure assumed, or computed from your gear? ----------
+   The saving is the climb from a Mythic drop to the payout, minus any step the slot's high watermark
+   already covers, so it is a function of that mark and not a constant. With no /simc the season's
+   baseline stands and has to be labelled as an assumption; with one it is computed per slot, and the
+   answer can legitimately come out *above* the baseline — a slot short of the track overlap pays all
+   five steps. Both directions are asserted, because hedging a computed number and presenting an
+   assumed one as computed are both misreadings a reader would act on. */
+
+/** An element's text with runs of whitespace collapsed, so prose assertions survive line reflow. */
+function words(el) {
+  return el.textContent.replace(/\s+/g, " ").trim();
+}
+
+/** `makeBoard`'s character, with per-slot high watermarks linked. */
+function withMarks(marks) {
+  return {
+    simc: {
+      testkey: {
+        owned: {},
+        watermarks: marks,
+        at: new Date().toISOString(),
+        vault: [],
+      },
+    },
+  };
+}
+
+test("with no /simc linked the figure is the maximum, and says what reaching it takes", () => {
+  const doc = renderWith([makeBoard()]);
+  assert.match(
+    words(doc.querySelector("#sources .card .crest-save")),
+    /up to 80 Myth crests/,
+  );
+  const note = words(doc.querySelector("#sources .card .crest-note"));
+  assert.match(note, /most it can save/);
+  // The actionable half: the maximum is only reached if you buy the overlap step with the cheaper
+  // track's crests. A reader told "80" without that could sit at a lower mark and never see it.
+  assert.match(note, /take a lower-difficulty item in that slot to ilvl 321/);
+  assert.doesNotMatch(note, /Computed from/);
+});
+
+// The clamp, through the UI. Every mark here is below ilvl 321 where the Hero and Myth tracks overlap,
+// so arithmetically no slot has its free step and the climb is five paid ones. It must still read 80:
+// reaching 321 costs Hero crests off a dungeon, not Myth crests, so a roll is never worth more than
+// the guides' figure and the page must not invent a number above it. Real values, off a 12.1 export
+// whose best slot is 308.
+test("a /simc under the track overlap is still capped at the maximum", () => {
+  const marks = [298, 298, 289, 289, 308, 289, 292, 305, 266, 279];
+  const doc = renderWith([makeBoard()], withMarks(marks));
+  const save = words(doc.querySelector("#sources .card .crest-save"));
+  assert.match(save, /saves 80 Myth crests/);
+  assert.doesNotMatch(save, /100/, "a roll never rescues a misplay");
+  const note = words(doc.querySelector("#sources .card .crest-note"));
+  assert.match(note, /Computed from your/);
+  assert.match(
+    note,
+    new RegExp("every one of your " + marks.length + " slots"),
+  );
+});
+
+// Hero capped everywhere reaches the same answer by the other route, so these two must agree. If they
+// ever diverge, the clamp has stopped applying to one of them.
+test("a /simc capped on the Hero track computes the same maximum", () => {
+  const doc = renderWith([makeBoard()], withMarks([321, 321, 321]));
+  assert.match(
+    words(doc.querySelector("#sources .card .crest-save")),
+    /saves 80 Myth crests/,
+  );
+});
+
+// Slots in different states can't be collapsed to one number, because a roll lands in one of them and
+// which is unknowable. The range is the honest answer, and it has to say why it stays a range — and
+// its top must be the maximum, never above it.
+test("a /simc with slots in mixed states gives a range and says why", () => {
+  const doc = renderWith([makeBoard()], withMarks([300, 321, 324, 334]));
+  assert.match(
+    words(doc.querySelector("#sources .card .crest-save")),
+    /saves 0–80 Myth crests/,
+  );
+  const note = words(doc.querySelector("#sources .card .crest-note"));
+  assert.match(note, /between 0 and 80/);
+  // It must say it can't name the slots, rather than quietly not naming them: a reader who sees a
+  // range will otherwise assume the app knows which is which, and act on a mapping never established.
+  assert.match(note, /isn’t something a .*pins down reliably/);
+});
+
 /* ---------- the reward pane ---------- */
 
 test("the reward pane documents its own season, whatever season the app is pricing", () => {

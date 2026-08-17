@@ -753,6 +753,77 @@ function ownedGear(b) {
 }
 
 /**
+ * The crests a roll saves in a slot whose high watermark is `mark`.
+ *
+ * The whole model, in one line of arithmetic. An item arrives at the payout's step, and without the
+ * roll you'd have climbed there from where the boss drops it (`crestFrom`). Every step of that climb
+ * costs `crestPerStep` — *except* steps landing at or below the slot's watermark, which Blizzard
+ * discounts to nothing (`highWatermarkDiscounts`, `scaling: 0`).
+ *
+ * The watermark is an item level, not a track position, and that is what makes this interesting:
+ * Midnight's tracks overlap by two steps, so Hero 6/6 and Myth 2/6 are both ilvl 321.
+ *
+ * Which is why the mark is clamped up to `crestFreeTo` rather than taken as given. A slot below that
+ * line would arithmetically pay all five steps — 100 crests — but reaching the line costs only *Hero*
+ * crests, which M+ hands out freely, so nobody should ever pay Myth crests for that step. Pricing the
+ * roll at 100 would be crediting the token with rescuing a mistake the player shouldn't make, and it
+ * would put a number on screen above the one every guide quotes. So this tops out at the guides'
+ * figure and only ever falls: `crestFreeTo` is the floor, the payout's own step is the ceiling.
+ *
+ * The Hero crests that floor assumes are deliberately not priced. They're cheap and farmable on
+ * demand, and a second currency on an encounter card is noise against the decision being made.
+ *
+ * A null mark means "unknown", which lands on the same clamp and so returns the maximum.
+ *
+ * @param {import("./season.js").Reward|null|undefined} reward
+ * @param {number|null} [mark]  The slot's high watermark, or null for unknown.
+ * @returns {number|null} Crests saved, or null where the payout has no step table to reason over.
+ */
+export function crestSavingAt(reward, mark) {
+  if (!reward || !reward.crestSteps || !reward.crestPerStep) return null;
+  if (reward.crestFrom == null) return null;
+  const floor = Math.max(
+    mark == null ? -Infinity : mark,
+    reward.crestFreeTo == null ? -Infinity : reward.crestFreeTo,
+  );
+  const paid = reward.crestSteps.filter(
+    (s) => s > reward.crestFrom && s > floor,
+  );
+  return paid.length * reward.crestPerStep;
+}
+
+/**
+ * What a roll here saves this character, across every slot it could land in.
+ *
+ * A roll hands you one item in one slot, and which slot is unknowable until it lands — so the honest
+ * answer is a range over the slots, collapsing to a single figure when they all agree. Early in a
+ * season they usually do agree, because nothing is capped anywhere.
+ *
+ * This deliberately does **not** say which slot is which. The addon's `slot_high_watermarks` indices
+ * look like SimC's slot enum and do not survive being checked against a real character's gear — the
+ * marks come out over-subscribed against the item levels actually held, so something (crafted gear,
+ * old-world drops, some other exclusion) isn't counting the way a naive reading assumes. Attributing
+ * a mark to a slot would be a guess under a figure people spend tokens on. A range needs no
+ * attribution and is exactly as true as the line it reads.
+ *
+ * @param {import("./types.js").Board} b
+ * @param {import("./season.js").Reward|null|undefined} reward
+ * @returns {{min: number, max: number, flat: boolean, slots: number}|null} null when there's nothing
+ *   to compute from — no linked `/simc`, a paste too old to carry the marks, or a payout with no
+ *   step table or nothing to save.
+ */
+export function crestSavingRange(b, reward) {
+  if (!reward || !reward.crests) return null;
+  const marks = (state.simc[b.key] || {}).watermarks;
+  if (!Array.isArray(marks) || !marks.length) return null;
+  const each = marks.map((m) => crestSavingAt(reward, m));
+  if (each.some((v) => v == null)) return null;
+  const min = Math.min(...each),
+    max = Math.max(...each);
+  return { min, max, flat: min === max, slots: marks.length };
+}
+
+/**
  * The spec a bonus roll would actually award against, best source first.
  *
  * 1. What the user picked in the loot-spec dropdown. An explicit choice outranks everything.

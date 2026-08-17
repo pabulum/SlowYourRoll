@@ -69,6 +69,55 @@ test("an unrecognised difficulty saves no crests rather than guessing a figure",
   assert.equal(rewardOf(SEASONS[2], "raid", "diff 7").crests, undefined);
 });
 
+// The figure is derived, so it is checked against what derives it rather than pinned on its own.
+//
+// This test exists because the derivation was got wrong once. Counting the climb naively — five steps
+// from a Mythic drop at 318 to a roll's 334, at 20 a step — gives 100, and that number briefly shipped
+// over the top of the 80 every guide quotes. The missing term is the two-step track overlap: a step
+// costs nothing if the slot's high watermark already covers it, and Hero 6/6 is the same item level as
+// Myth 2/6, so a slot capped on the Hero track has the first Myth step for free. Four paid steps, 80.
+test("the crest saving is the climb minus the step the overlap already covers", () => {
+  const m = rewardOf(SEASONS[2], "raid", "mythic");
+  assert.ok(m.crestSteps.length > 1, "a track needs steps to climb");
+  const paid = m.crestSteps.filter((s) => s > m.crestFrom && s > m.crestFreeTo);
+  assert.equal(m.crests, paid.length * m.crestPerStep);
+  assert.equal(m.crests, 80, "and that is the figure the guides quote");
+});
+
+// The overlap itself, as a property rather than a number: the mark the figure assumes is the top of
+// the track below, and it lands exactly on this track's *second* step. That coincidence is the whole
+// reason one step comes free, so if the tracks are ever renumbered this is what should fail.
+test("the assumed watermark lands on the track's second step", () => {
+  const m = rewardOf(SEASONS[2], "raid", "mythic");
+  assert.equal(m.crestFreeTo, m.crestSteps[1]);
+  assert.ok(
+    m.crestFreeTo > m.crestFrom,
+    "an assumed mark at or below the drop would discount nothing",
+  );
+});
+
+// Each end of the step table has to agree with the payout figures pinned from the PTR sheet above —
+// two unrelated sources describing the same track. If they ever disagree, one of them is stale.
+test("the step table starts where the drop lands and ends where the roll pays", () => {
+  const m = rewardOf(SEASONS[2], "raid", "mythic");
+  assert.equal(m.crestSteps[0], m.crestFrom); // Myth 1/6, 318
+  assert.equal(m.crestSteps[m.crestSteps.length - 1], m.ilvl); // Myth 6/6, 334
+  assert.equal(m.crestFrom, rewardOf(SEASONS[2], "raid", "heroic").ilvl);
+});
+
+// Midnight prices every upgrade step at one rate for every inventory type — one cost block at
+// `mask_inv_type: 0` — so no slot, two-handers included, climbs at a different price. A step table
+// that ever needed a per-slot rate would mean the whole flat-figure model had to be revisited.
+test("the track climbs at one rate the whole way, for every slot", () => {
+  const m = rewardOf(SEASONS[2], "raid", "mythic");
+  const gaps = m.crestSteps.slice(1).map((s, i) => s - m.crestSteps[i]);
+  assert.ok(
+    gaps.every((g) => g > 0),
+    "a track only goes up",
+  );
+  assert.equal(typeof m.crestPerStep, "number");
+});
+
 test("only a season with an end-of-raid tier describes one", () => {
   assert.equal(SEASONS[1].special, null);
   assert.equal(SEASONS[2].special.lastBosses, 2);

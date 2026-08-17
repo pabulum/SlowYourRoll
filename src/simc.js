@@ -7,11 +7,13 @@ import { $, toast } from "./dom.js";
 import { render } from "./render.js";
 
 /**
- * Parse a raw /simc export into { name, realm, spec, lootSpec, region, vault, rolledIds, owned }.
- *   vault:     [{ name, ilvl, id }] this week's Great Vault choices
- *   rolledIds: item ids the addon logged as already bonus-rolled
- *   owned:     { [itemId]: highestIlvlHeld } from equipped + bags (excludes the vault block)
- *   lootSpec:  the character's in-game loot spec, which decides what a bonus roll can award
+ * Parse a raw /simc export into
+ * { name, realm, spec, lootSpec, region, vault, rolledIds, owned, watermarks }.
+ *   vault:      [{ name, ilvl, id }] this week's Great Vault choices
+ *   rolledIds:  item ids the addon logged as already bonus-rolled
+ *   owned:      { [itemId]: highestIlvlHeld } from equipped + bags (excludes the vault block)
+ *   lootSpec:   the character's in-game loot spec, which decides what a bonus roll can award
+ *   watermarks: per-slot highest item level held, or null — see `parseWatermarks`
  */
 export function parseSimc(t) {
   const g = (re) => {
@@ -69,7 +71,56 @@ export function parseSimc(t) {
     if (!owned[iid] || il > owned[iid]) owned[iid] = il;
   }
 
-  return { name, realm, spec, lootSpec, region, vault, rolledIds, owned };
+  return {
+    name,
+    realm,
+    spec,
+    lootSpec,
+    region,
+    vault,
+    rolledIds,
+    owned,
+    watermarks: parseWatermarks(t),
+  };
+}
+
+/**
+ * The highest item level this character has held in each equipment slot, off the addon's
+ * `slot_high_watermarks` line. Null where the paste has none — every export before this line existed,
+ * and any hand-written fixture.
+ *
+ * This is the only thing in a /simc paste that describes *upgrade* state rather than possession, and
+ * it is what the crest figure needs: Blizzard charges crests only for the steps that take an item
+ * above its slot's watermark, so a slot already up a track has had part of that cost paid. QE's
+ * `BonusIDs.ts` records the rule as `highWatermarkDiscounts` — crest currencies carry `scaling: 0`
+ * at or below the mark, i.e. free, and `accountWide: false`, so it is the character's own mark that
+ * counts. Read the Midnight entries there (`seasonId: 37`) rather than the TWW ones that fill most
+ * of that file: TWW charged Valorstones alongside crests, and Valorstones no longer exist.
+ *
+ * Each entry is `slot:a:b`, and the two figures differ in the wild (QE's own sample has `14:0:89`),
+ * which reads as character mark and account mark — the same split `highWatermarkDiscounts` draws with
+ * `accountWide`. Which is which isn't established here, so this takes the **higher** of the pair
+ * deliberately: a higher mark means more of a track already paid for, which means a *smaller* crest
+ * saving, so guessing wrong this way understates what a roll is worth rather than overstating it.
+ *
+ * The slot indices are left as they arrive. They look like SimC's slot enum but don't survive being
+ * checked against a real character's gear — see "What the crest figure assumes" in the README — so
+ * nothing here maps an index to a slot, and nothing downstream may either. The array is used only
+ * for questions that don't need to know which slot is which.
+ *
+ * @param {string} t  The raw paste.
+ * @returns {number[]|null}
+ */
+function parseWatermarks(t) {
+  const m = t.match(/^#?\s*slot_high_watermarks=(\S+)/m);
+  if (!m) return null;
+  const out = [];
+  m[1].split("/").forEach((rec) => {
+    const p = rec.split(":").map(Number);
+    if (p.length < 2 || p.some((n) => !Number.isFinite(n))) return;
+    out.push(Math.max(...p.slice(1)));
+  });
+  return out.length ? out : null;
 }
 
 /** Read the /simc textarea, store the parsed data, and link it to any matching board. */
@@ -95,6 +146,7 @@ export async function readSimc() {
     vault: d.vault,
     rolledIds: d.rolledIds,
     owned: d.owned,
+    watermarks: d.watermarks,
     name: d.name,
     realm: d.realm,
     spec: d.spec,

@@ -1670,6 +1670,31 @@ img.icon,
 .swap-note.crest-note {
   border-left-color: var(--accent);
 }
+/* The conditions under which the figure above is true. Broken out as their own paragraphs and set
+   down a step, because they qualify a number the reader has already taken — running them into the
+   claim is how a caveat gets skimmed past. */
+.crest-caveat {
+  display: block;
+  margin-top: 7px;
+  color: var(--faint);
+}
+/* A caveat that turned out not to apply. It sits one step up from the hedged version because it is
+   a different kind of sentence — a confirmation the figure survived a check, not a warning that it
+   might not. No colour introduced for it: "checked" is not a status the palette needs a hue for. */
+.crest-caveat.checked {
+  color: var(--muted);
+}
+/* Quieter than the other code chips on the page: these sit inside faint text, and the usual ink-on-
+   panel-3 treatment would make "/simc" the loudest thing in a paragraph that is deliberately the
+   least loud. Colour is inherited so the chip stays inside its sentence. */
+.crest-caveat code,
+.rwd-assume code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  background: var(--panel-3);
+  padding: 1px 4px;
+  color: inherit;
+}
 
 /* ── reward pane ──────────────────────────────────────────────────────────────────────────────────
    A drawer off the right edge: reference read against the ranking, not a step in any flow, so it
@@ -1811,11 +1836,31 @@ img.icon,
   white-space: nowrap;
   color: var(--ink);
 }
-.rwd-figure span {
+/* "up to" qualifies the figure without becoming it — a 26px "up to" would put the display face on
+   the two least interesting words in the sentence. Small, muted, on the same baseline. */
+.rwd-figure .lead {
+  font-size: 12px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--faint);
+}
+.rwd-figure .cap {
   flex: 1 1 22ch;
   font-size: 12px;
   color: var(--muted);
   line-height: 1.5;
+}
+/* The assumptions behind the figure above them. Indented under it rather than ruled off, so they
+   read as conditions on the claim rather than as a new claim of their own. */
+.rwd-sec .rwd-assume {
+  font-size: 12px;
+  color: var(--faint);
+  padding-left: 11px;
+  border-left: 1px solid var(--rule);
+}
+.rwd-sec .rwd-assume b {
+  color: var(--muted);
 }
 /* Which week it is, against the rule stated above it. The one line in the pane that changes on its
    own, so it's marked the way the page marks anything live — the accent rule, nothing louder. */

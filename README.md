@@ -296,11 +296,62 @@ off the 12.1 PTR and pinned in [`tests/season.test.js`](tests/season.test.js), s
 fails a test rather than quietly changing everyone's numbers. The M+ figure is the payout for a +10
 key or higher; lower keys pay under it, and nothing in a QE report says which key you run.
 
-**A Mythic roll saves you ≈80 Myth crests, and the app says so as a saving.** That promotion is not
-just a better item: capping 16 slots costs 1,280 Myth crests, so 80 a slot, and an item handed over
-at Myth 6/6 is 80 crests you never have to spend. It's the one reward in the game you can't farm for
-by any other route, which makes it a real reason to roll a Mythic boss over a dungeon for the same
-single token — the comparison the EV, priced in score per token, cannot make.
+**A Mythic roll saves you up to 80 Myth crests, and the app says so as a saving.** That promotion is
+not just a better item: it's the crests you'd have spent climbing to it. It's the one reward in the
+game you can't farm for by any other route, which makes it a real reason to roll a Mythic boss over a
+dungeon for the same single token — the comparison the EV, priced in score per token, cannot make.
+
+The 80 is derived, not quoted, and the derivation is the interesting part. Midnight's tracks come off
+QE's `src/Retail/Engine/BonusIDs.ts` (`seasonId: 37`), which carries every upgrade step with its item
+level and price:
+
+```
+Hero  1/6 = 305 · 2/6 = 308 · 3/6 = 311 · 4/6 = 315 · 5/6 = 318 · 6/6 = 321
+Myth  1/6 = 318 · 2/6 = 321 · 3/6 = 324 · 4/6 = 328 · 5/6 = 331 · 6/6 = 334
+```
+
+A flat 20 crests a step, in that track's own currency, with one cost block at `mask_inv_type: 0` — one
+price for every slot. A Mythic boss drops at 318 and a roll hands it over at 334, which looks like
+five steps and 100 crests. **It isn't, because of the two-step overlap.** A step costs nothing when
+the slot's high watermark already covers it (`highWatermarkDiscounts`, `scaling: 0`), and the
+watermark is an _item level_, so
+
+```
+Hero 6/6 = 321 = Myth 2/6
+```
+
+Take a Heroic item in that slot to the top of _its_ track and you've bought the 321 mark with **Hero**
+crests, which M+ hands out freely. The first Myth step then costs no Myth crests at all. Four paid
+steps, **80**, which is exactly what the guides say — and their "1,280 to cap 16 slots" is 16 × 80.
+
+That is also why 80 is a genuine **maximum** rather than a middle case. A slot below 321 would
+arithmetically pay all five steps, but the fix for such a slot is Hero crests off a dungeon, not a
+bonus roll — anyone spending Myth crests on that step has simply misplayed. Pricing the roll at 100
+would credit the token with rescuing a mistake nobody should make, so `crestSavingAt` clamps the
+watermark up to `crestFreeTo` and the figure only ever falls from 80:
+
+| Slot high watermark    | Myth crests a roll saves |
+| ---------------------- | ------------------------ |
+| anything up to 321     | **80** — the maximum     |
+| 324 (Myth 3/6)         | 60                       |
+| 328 (Myth 4/6)         | 40                       |
+| 331 (Myth 5/6)         | 20                       |
+| 334 (Myth 6/6, capped) | 0                        |
+
+The Hero crests that clamp assumes are deliberately **not** modelled. They're cheap, farmable on
+demand, and a second currency on an encounter card is noise against the decision being made — so the
+copy says "don't spend Myth crests on that step" and leaves it there.
+
+`season.js` records `crestSteps`, `crestPerStep` and `crestFreeTo` so all of this is re-derivable, and
+the tests assert the arithmetic rather than pinning the number — including that no watermark can push
+the figure above the maximum, and a cross-check that 80 × 16 reproduces the guide's 1,280.
+
+> **This shipped as 100 for one commit, and the overlap is what was missing.** Counting the climb
+> naively gives five steps, and the guide's 80 looked like it must be answering a different question.
+> It wasn't — it was accounting for a free step that a naive count doesn't see, and for the fact that
+> no competent player ever pays for that step in Myth crests. Worth recording because the failure mode
+> is seductive: game data beat a guide, the arithmetic checked out, and it was still wrong. When a
+> well-maintained guide disagrees with your derivation, the derivation is missing a term.
 
 The wording is load-bearing rather than stylistic. No roll pays crests _out_; described as a yield,
 a reader goes looking for a currency drop that never arrives, or counts it a second time against the
@@ -317,6 +368,67 @@ opportunity cost no report computes. It also can't reorder items _within_ a pool
 arrives already upgraded, and one you'd never wear still unlocks the slot so the piece you do wear
 upgrades free. Filler and upgrade save the same crests. Only a payout above a track's first step
 saves anything, which is why every non-Mythic row is zero rather than small.
+
+#### How far that figure is checked against your gear
+
+**A linked `/simc` makes this real rather than assumed.** The addon writes a `slot_high_watermarks`
+line — the best item level held in each slot — which is the only thing in a paste describing _upgrade_
+state rather than possession. `parseWatermarks` reads it and `crestSavingRange` prices every slot, so
+the app quotes a computed figure: one number where the slots agree, a range where they don't. With no
+paste it quotes the maximum and says so ("saves up to 80"), along with what reaching it takes.
+
+That rule is the game's, not an inference: `highWatermarkDiscounts` gives every crest currency
+`"scaling": 0` at or below the mark — free — with `accountWide: false`, so it's the character's own
+mark that counts. Read the Midnight entries (`seasonId: 37`) for this, not the TWW ones that dominate
+that file: TWW charged Valorstones alongside crests at `"scaling": 0.5`, and **Valorstones don't exist
+in Midnight**, where a step costs crests only (plus gold, which QE doesn't model). TWW also varied
+cost by slot mask, where Midnight has one price for every slot.
+
+Each entry is `slot:a:b` and the pair is not always equal — QE's own sample export carries `14:0:89` —
+which reads as a character mark and an account mark, the same split `accountWide` draws. Which is which
+isn't established, so `parseWatermarks` takes the **higher**: a higher mark means more of the climb
+already covered and therefore a _smaller_ saving claimed, so a wrong guess undersells a roll rather
+than overselling it.
+
+**What is deliberately not done is saying _which_ slot.** The indices look like SimC's slot enum and
+do not survive contact with a real character's gear. Checked against a 12.1 export: two marks (308, 305) are high enough that only the waist and back slots can claim them, which leaves six marks at 298
+for seven slots that demonstrably held a 298 item — over-subscribed by one. Something (crafted gear,
+old-world drops with `content_tuning`, some other exclusion) isn't counting the way a naive reading
+assumes. Attributing a mark to a slot would be a guess under a figure people spend tokens on. A range
+over the slots needs no attribution and is exactly as true as the line it reads.
+
+So a per-_encounter_ figure — as opposed to a per-character one — needs one thing still missing:
+
+| Needed                       | Status                                                                                                         |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Slot per item                | **Have it.** Every row of `data/qe-data.json` carries `iv`, Raidbots' `inventoryType`, set in `build-data.mjs` |
+| Per-step ilvls, crest costs  | **Have it.** `crestSteps` / `crestPerStep` in `season.js`, off QE's `seasonId: 37` upgrade data                |
+| Which slot a mark belongs to | **Missing.** Usable as a set of marks, not per slot, until the indices are pinned                              |
+
+Pinning the indices needs a second real export whose gear constrains them differently — ideally one
+with a slot obviously capped and others obviously not. With that, a roll could be priced against the
+slots its own pool can actually fill instead of against all of them.
+
+#### Double slots, and two-handers
+
+Rings, trinkets and weapons come in pairs, and it's reasonable to wonder whether that doubles or
+halves anything. It doesn't change the app's figure, for a slightly boring reason: the figure is
+per _roll_, a roll hands you one item, and that item lands in one slot. Whether the other ring slot is
+capped has no bearing on what this ring saves you.
+
+The marks confirm paired slots are tracked separately — a real export carries 17, which is one per
+equipment slot with `finger1`/`finger2` and `trinket1`/`trinket2` counted apart, not 15 with the pairs
+merged. So capping one ring slot does not discount the other, and each is its own 100-crest climb.
+
+**A two-hander doesn't cost double, and doesn't save double either.** Every Midnight upgrade step
+carries a single cost block at `mask_inv_type: 0`, so a two-hander climbs its track at the same 20 a
+step as a ring — there is no per-slot rate to make a two-hander's climb worth 200. The intuition that
+it might comes from the other half of the mechanic: a two-hander occupies main hand _and_ off hand, so
+if obtaining one raised both slots' marks it would unlock two slots' worth of free upgrades at once.
+Whether it does is **not established here** — nothing in the upgrade data speaks to it, and it can't
+be read off a single export. If it turns out to be true it would be the first thing that makes the
+crest saving vary _within_ a pool, which would contradict a property the copy currently asserts
+("same for every item here"), so it's worth settling before anyone leans on it.
 
 **The last two bosses of the tier raid are a class apart** — Venomcursed 9/6 items with cantrip
 effects — so those encounter cards carry a badge and a note the EV can't express: it prices this

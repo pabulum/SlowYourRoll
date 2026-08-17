@@ -24,6 +24,7 @@ import {
   simcLootSpec,
   qeIsModern,
   rollScored,
+  crestSavingAt,
 } from "../src/model.js";
 
 // A current raid + one of its bosses, pulled from the live database so the test
@@ -970,4 +971,54 @@ test("the piece itself stays out of the pool — only the token drops", (t) => {
     0,
     "counting both would price the same reward twice",
   );
+});
+
+/* ---------- what a roll saves in crests, given a slot's high watermark ----------
+   A step is free where the slot's watermark already covers it, so the saving is a function of the mark
+   — but only downward. The interesting value isn't on the Myth track at all: Hero 6/6 is ilvl 321, the
+   same as Myth 2/6, and reaching it costs Hero crests, which M+ hands out freely. So no sensible player
+   ever pays Myth crests for that first step, the figure is clamped there, and 80 is a real maximum. */
+
+test("an unknown watermark prices the maximum, which is the clamped figure", () => {
+  const m = rollReward("raid", "mythic");
+  assert.equal(crestSavingAt(m, null), 80);
+  assert.equal(crestSavingAt(m, null), m.crests, "which is the quoted figure");
+});
+
+// The clamp, stated as the thing it prevents. Arithmetically a slot below the overlap pays all five
+// steps and the roll would "save" 100 — but the fix for such a slot is Hero crests off a dungeon, not
+// a bonus roll, so quoting 100 would credit the token with rescuing a misplay. It never exceeds 80.
+test("a watermark under the overlap still prices no more than the maximum", () => {
+  const m = rollReward("raid", "mythic");
+  assert.equal(crestSavingAt(m, 0), 80, "an empty slot is not worth more");
+  assert.equal(crestSavingAt(m, 308), 80); // Champion 6/6
+  assert.equal(crestSavingAt(m, 318), 80); // the Mythic drop itself
+  assert.equal(crestSavingAt(m, 321), 80); // Hero 6/6 = Myth 2/6, the clamp
+  const marks = [0, 100, 250, 308, 311, 315, 318, 321];
+  marks.forEach((k) =>
+    assert.ok(
+      crestSavingAt(m, k) <= m.crests,
+      "mark " + k + " must not exceed the quoted maximum",
+    ),
+  );
+});
+
+test("the saving falls a step at a time up the track, to nothing at the top", () => {
+  const m = rollReward("raid", "mythic");
+  assert.equal(crestSavingAt(m, 324), 60); // Myth 3/6
+  assert.equal(crestSavingAt(m, 328), 40); // Myth 4/6
+  assert.equal(crestSavingAt(m, 331), 20); // Myth 5/6
+  assert.equal(crestSavingAt(m, 334), 0, "a capped slot saves no crests");
+  assert.equal(crestSavingAt(m, 999), 0, "and cannot go negative");
+});
+
+// Larias' guide quotes 1,280 Myth crests to cap a character's 16 slots. That is the same arithmetic
+// from the other end, so it is a free check on the per-slot figure against an outside source.
+test("the per-slot figure agrees with the guide's whole-character total", () => {
+  assert.equal(crestSavingAt(rollReward("raid", "mythic"), null) * 16, 1280);
+});
+
+test("a payout with no step table yields no figure rather than a wrong one", () => {
+  assert.equal(crestSavingAt(rollReward("dungeon"), 300), null);
+  assert.equal(crestSavingAt(null, 300), null);
 });

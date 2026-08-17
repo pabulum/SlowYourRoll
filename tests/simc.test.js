@@ -60,6 +60,37 @@ test("parseSimc records owned copies but excludes the vault block", () => {
   assert.equal(d.owned[1111], undefined); // vault items are not yet owned
 });
 
+// `slot_high_watermarks` is the only line in a /simc that describes upgrade state rather than
+// possession, which is what the crest figure needs. Values are taken from a real 12.1 export.
+test("parseSimc reads the per-slot high watermarks", () => {
+  const d = parseSimc(`monk="Bar"
+server=tichondrius
+spec=mistweaver
+#
+# slot_high_watermarks=0:298:298/1:298:298/2:289:289/3:289:289/4:308:308
+#
+`);
+  assert.deepEqual(d.watermarks, [298, 298, 289, 289, 308]);
+});
+
+// The pair per slot is not always equal — QE's own sample export carries `14:0:89` — and which of
+// the two is the character's own mark isn't established. The higher is taken on purpose: a higher
+// mark means more of a track already paid for, so it can only shrink the crest saving claimed. If
+// the guess is wrong it undersells a roll, which is the safe direction to be wrong in.
+test("a differing watermark pair resolves to the higher of the two", () => {
+  const d = parseSimc(`monk="Bar"
+server=tichondrius
+# slot_high_watermarks=0:0:89/1:334:200
+`);
+  assert.deepEqual(d.watermarks, [89, 334]);
+});
+
+// Every export from before the addon wrote that line, and every hand-written fixture. The figure
+// falls back to being quoted as a ceiling rather than the parse failing or inventing zeroes.
+test("a paste with no watermark line reports none rather than empty slots", () => {
+  assert.equal(parseSimc(SAMPLE).watermarks, null);
+});
+
 // The addon writes the loot spec commented out, because SimulationCraft ignores it. It is the only
 // place either report format states what the game will actually award against, so it is read here.
 test("parseSimc reads the in-game loot spec the addon comments out", () => {
