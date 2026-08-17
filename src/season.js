@@ -20,16 +20,22 @@
 /**
  * One rung of a payout that varies with how hard the content was — M+ key level, so far.
  *
- * Reference only: the app has no key-level input, so `Reward.ilvl` quotes the top rung and this is
- * what the reward pane shows to say what the quoted figure is the *ceiling* of. A `label` is only
- * carried where the season's own table pins that item level to a track step; Midnight's tracks
- * overlap by two, so an item level in the middle of the ladder can be read as two different steps
- * and guessing one would be inventing data.
+ * A rung is a `Reward` in its own right, not a footnote to one: where the report says which key was
+ * run, `rewardOf` returns the rung and every figure on the card comes from it. Where it doesn't,
+ * `Reward.ilvl` quotes the top rung and the ladder is what the reward pane shows to say what that
+ * quote is the *ceiling* of. A `label` is only carried where the season's own table pins that item
+ * level to a track step; Midnight's tracks overlap by two, so an item level in the middle of the
+ * ladder can be read as two different steps and guessing one would be inventing data.
  *
  * @typedef {Object} LadderStep
  * @property {string} at    Which keys pay this rung ("+4–5").
  * @property {number} ilvl  Item level it pays.
  * @property {string} [label]  Track and step, where it's known rather than inferred.
+ * @property {number} [crests]  Crests this rung's payout saves you, as on a Reward.
+ * @property {string} [crestKind]  Which crest currency that is.
+ * @property {number[]} [keys]  QE Live key-slider indices that land on this rung — the join between
+ *   a report's `dropDifficulty` on a dungeon row and what that key actually pays. Mirrored from
+ *   `MPLUS_KEY_REWARDS` in QE's `Databases/MPlusKeyRewards.ts`; see `QE_MPLUS_KEYS` in data.js.
  */
 
 /**
@@ -158,11 +164,13 @@ export const SEASONS = {
     // so they overlap by two: Champion 1/6 = 292 … 6/6 = 308, Hero 1/6 = 305, Myth 1/6 = 318.
     //
     // The M+ figure is the payout for a +10 key or higher, which is where the track tops out. Lower
-    // keys pay less (+2-3 → 305, +4-5 → 308, +6 → 311, +7-9 → 315), and there is nowhere in a QE
-    // report to learn which key someone runs. Quoting the ceiling overstates a low-key roll by up to
-    // 13 item levels, which is the safe direction: it can only leave an item on screen as Want that
-    // a lower payout would have called a dupe, and an extra line argues with itself where a silently
-    // dropped one doesn't. If key level ever becomes an input, this is the entry to split.
+    // keys pay less, and the `ladder` below is now a real lookup rather than a footnote: QE Live's
+    // 12.1 Upgrade Finder records the key the report was run at, so `rewardOf` resolves the rung and
+    // the card quotes what that key actually pays. The top rung remains the answer for a report that
+    // doesn't say — a Droptimizer, or anything from before 12.1. Quoting the ceiling there overstates
+    // a low-key roll by up to 16 item levels, which is the safe direction: it can only leave an item
+    // on screen as Want that a lower payout would have called a dupe, and an extra line argues with
+    // itself where a silently dropped one doesn't.
     //
     // The crest figures are what the payout saves you, and they follow from Larias' arithmetic:
     // 1,280 Myth crests to cap 16 slots is 80 per slot, so an item handed over at Myth 6/6 is 80
@@ -184,16 +192,36 @@ export const SEASONS = {
         ilvl: 318,
         crests: 0,
         crestKind: "Myth",
-        // The rungs below the quoted one. Only the two ends carry a track step, and only because
-        // the table above pins them: 305 is where Hero starts (a Normal boss pays it) and 318 is
-        // where Myth starts (a Heroic boss pays it). The three in between sit inside the overlap
-        // between two tracks — 308 is both Champion 6/6 and a Hero step — so they stay item levels.
+        // The rungs below the quoted one, and the key-slider indices that select them. Only the two
+        // ends carry a track step, and only because the table above pins them: 305 is where Hero
+        // starts (a Normal boss pays it) and 318 is where Myth starts (a Heroic boss pays it). The
+        // three in between sit inside the overlap between two tracks — 308 is both Champion 6/6 and
+        // a Hero step — so they stay item levels.
+        //
+        // No rung below the top banks a crest, for the same reason no raid difficulty below Mythic
+        // does: they all land on the first step of a track, which is where the drop would have
+        // started anyway. Only a Mythic boss hands the item over already finished.
         ladder: [
-          { at: "+2–3", ilvl: 305, label: "Hero 1/6" },
-          { at: "+4–5", ilvl: 308 },
-          { at: "+6", ilvl: 311 },
-          { at: "+7–9", ilvl: 315 },
-          { at: "+10 or higher", ilvl: 318, label: "Myth 1/6" },
+          { at: "M0", keys: [0], ilvl: 302, crests: 0, crestKind: "Champion" },
+          {
+            at: "+2–3",
+            keys: [1],
+            ilvl: 305,
+            label: "Hero 1/6",
+            crests: 0,
+            crestKind: "Hero",
+          },
+          { at: "+4–5", keys: [2, 3], ilvl: 308, crests: 0, crestKind: "Hero" },
+          { at: "+6", keys: [4], ilvl: 311, crests: 0, crestKind: "Hero" },
+          { at: "+7–9", keys: [5, 6], ilvl: 315, crests: 0, crestKind: "Hero" },
+          {
+            at: "+10 or higher",
+            keys: [7],
+            ilvl: 318,
+            label: "Myth 1/6",
+            crests: 0,
+            crestKind: "Myth",
+          },
         ],
       },
     },
@@ -315,6 +343,34 @@ export function seasonWeek(season, now) {
 }
 
 /**
+ * The most recent weekly reset, which is when everything weekly stopped being true.
+ *
+ * A Great Vault is a weekly object: three options appear at reset and are replaced at the next one.
+ * Nothing else in the app has a reason to know that, but the pasted `/simc` block describing those
+ * options is stored indefinitely, so something has to be able to say when it expired.
+ *
+ * Counted off `week1` in sevens, so it inherits the same US-reset caveat as `seasonWeek` — for the
+ * hours between the US reset and a later region's, this names a reset the reader hasn't had yet, and
+ * a vault read just before theirs reads as expired a few hours early. The failure is a prompt to
+ * re-paste, which is cheap; the opposite error prices a week's decision off last week's vault.
+ *
+ * Before the season opens this still answers, with the reset that began the pre-season week — which
+ * is a real reset with a real vault behind it, so there is nothing to special-case.
+ *
+ * @param {Season} season
+ * @param {Date} [now]
+ * @returns {Date|null} null where the season publishes no calendar to count from.
+ */
+export function lastReset(season, now) {
+  if (!season.week1) return null;
+  const open = Date.parse(season.week1);
+  if (!Number.isFinite(open)) return null;
+  const at = (now || new Date()).getTime();
+  const weeks = Math.floor((at - open) / WEEK_MS);
+  return new Date(open + weeks * WEEK_MS);
+}
+
+/**
  * Where today sits against the token window — the one thing the two week sentences on the page are
  * really being asked.
  *
@@ -359,25 +415,37 @@ export function tokenWeekNow(season, now) {
  * promotes, "I can't tell which step" must not be mistaken for "no promotion", because the two
  * disagree about whether a copy you already own makes the roll redundant.
  *
+ * For a dungeon the difficulty that matters is the key level, and where the report records one the
+ * matching rung of the M+ ladder *is* the reward — same shape, same fields, resolved the same way.
+ * A report that doesn't say falls back to the entry itself, which quotes the top rung; see the
+ * comment on `mythic-plus` for why overstating is the safe direction there.
+ *
  * @param {Season} season
  * @param {"raid"|"dungeon"} type
  * @param {string} [diffKey]  Canonical difficulty ("mythic", "heroic", …); ignored for dungeons.
+ * @param {number|null} [keyLevel]  QE key-slider index the report was run at; dungeons only.
  * @returns {Reward|null}
  */
-export function rewardOf(season, type, diffKey) {
+export function rewardOf(season, type, diffKey, keyLevel) {
   const table = season.rollReward;
   if (!table) return null;
-  return (
-    table[type === "dungeon" ? "mythic-plus" : String(diffKey)] || {
-      label: "",
-      ilvl: null,
-    }
-  );
+  if (type === "dungeon") {
+    const mp = table["mythic-plus"];
+    if (!mp) return { label: "", ilvl: null };
+    const rung =
+      keyLevel == null
+        ? null
+        : (mp.ladder || []).find((k) => (k.keys || []).includes(keyLevel));
+    // The ladder rides along on the resolved rung: the reward pane draws the whole thing, and it
+    // still wants every rung even when the card is only quoting one of them.
+    return rung ? { ...rung, label: rung.label || "", ladder: mp.ladder } : mp;
+  }
+  return table[String(diffKey)] || { label: "", ilvl: null };
 }
 
 /** `rewardOf` against the season this build targets. */
-export function rollReward(type, diffKey) {
-  return rewardOf(SEASON, type, diffKey);
+export function rollReward(type, diffKey, keyLevel) {
+  return rewardOf(SEASON, type, diffKey, keyLevel);
 }
 
 /**

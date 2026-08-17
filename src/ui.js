@@ -242,6 +242,19 @@ export function initUI() {
     commit();
   });
 
+  // Forget the vault half of a linked /simc. Weeks where you have no vault pending are ordinary,
+  // and until this existed the only way out of a stale one was to paste a fresh export — which is
+  // exactly what someone with nothing in their vault hasn't got. The rest of the paste survives:
+  // owned gear and logged rolls don't expire at a reset, so they aren't what's being cleared.
+  on("vaultPanel", "click", '[data-act="clearvault"]', () => {
+    const b = active(),
+      simc = state.simc[b.key];
+    if (simc) simc.vault = [];
+    b.vaultTake = null;
+    commit();
+    toast("Vault cleared. Paste a fresh /simc when your next one opens");
+  });
+
   initBoardPicker();
   initRewardPane();
 

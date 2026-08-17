@@ -16,6 +16,7 @@ import {
   seasonName,
   REWARD_SEASON,
   REWARDS_LIVE,
+  rewardOf,
   tokenVaultWindow,
   tokenWeekNow,
 } from "./season.js";
@@ -34,7 +35,9 @@ import {
   simcLootSpec,
   dv,
   vaultChoice,
+  vaultStatus,
   priceWith,
+  rollScored,
 } from "./model.js";
 import { specId, specInfo, classSpecs } from "./loot.js";
 import { CLASS_COLOR } from "./classes.js";
@@ -71,10 +74,9 @@ export function renderSeason() {
       <strong>as if the item came from your Great Vault</strong>, not off the
       boss: a Mythic boss hands back a fully upgraded item, Heroic and a +10 or
       higher key the first step of Myth. The item levels below are what a roll
-      would actually give you — from the 12.1 PTR, so they may still move, and
-      lower keys pay a little under the M+ figure. The scores are still your
-      report's, simmed at the ilvl each boss <em>drops</em> at, so they run low
-      wherever a roll promotes.`,
+      would actually give you — from the 12.1 PTR, so they may still move. What
+      the <em>scores</em> are the value of depends on which tool ran the report,
+      and each encounter says so where it matters.`,
   );
 }
 
@@ -159,19 +161,27 @@ function crestCell(r) {
 }
 
 /**
- * One source's row. `here` marks the difficulty the board is currently being ranked at, which is
- * the pane's one live connection to the page behind it: the table is otherwise the same table all
- * week, and the row that answers "so what am I looking at" is the one you came for.
+ * One source's row. `here` marks the difficulty the board is currently being ranked at, and
+ * `keyLevel` does the same job for the M+ row, which has no raid difficulty to be marked by. They
+ * are the pane's one live connection to the page behind it: the table is otherwise the same table
+ * all week, and the row that answers "so what am I looking at" is the one you came for.
+ *
+ * The M+ row quotes whichever rung the report was run at, resolved the same way the cards resolve
+ * it, so the pane and the ranking cannot disagree about what a dungeon roll pays.
  */
-function rewardRowHTML(table, row, here) {
-  const r = table[row.key];
+function rewardRowHTML(table, row, here, keyLevel) {
+  const dungeon = row.key === "mythic-plus";
+  const r = dungeon
+    ? rewardOf(REWARD_SEASON, "dungeon", null, keyLevel)
+    : table[row.key];
   if (!r) return "";
   const top = r.ladder && r.ladder[r.ladder.length - 1];
-  const mine = row.key === here;
+  const mine = dungeon ? keyLevel != null : row.key === here;
   return html`<tr class="${mine ? "here" : ""}">
     <th scope="row">
-      ${row.name}${top && html`<span class="qual">${top.at}</span>`}${
-        mine && html`<span class="mine">your raid diff</span>`
+      ${row.name}${top && html`<span class="qual">${r.at || top.at}</span>`}${
+        mine &&
+        html`<span class="mine">your ${dungeon ? "key" : "raid diff"}</span>`
       }
     </th>
     <td>${r.label || "—"}</td>
@@ -191,14 +201,24 @@ function specialRowHTML(sp) {
 }
 
 /**
- * The M+ ladder. The app quotes its top rung everywhere, because nothing in a report says which key
- * you run — so the honest place to put the rest of it is here, next to the amount that quote can be
- * out by.
+ * The M+ ladder, and which rung the page is pricing.
+ *
+ * `keyLevel` is QE's key-slider index off the loaded report, or null where nothing recorded one —
+ * a Droptimizer, a QE report from before 12.1, or no report at all. Those still get the top rung
+ * quoted everywhere, so the foot has to keep saying by how much that can be out; a report that
+ * *does* say gets the row marked instead, because the ceiling caveat is then simply not true of it.
+ *
+ * @param {import("./season.js").Reward} r
+ * @param {number|null} [keyLevel]
  */
-function ladderHTML(r) {
+function ladderHTML(r, keyLevel) {
   const rungs = r.ladder || [];
   if (rungs.length < 2) return "";
   const over = rungs[rungs.length - 1].ilvl - rungs[0].ilvl;
+  const mine =
+    keyLevel == null
+      ? null
+      : rungs.find((k) => (k.keys || []).includes(keyLevel));
   return html`<section class="rwd-sec">
     <h3>M+, by key level</h3>
     <table class="rwd">
@@ -212,8 +232,10 @@ function ladderHTML(r) {
       <tbody>
         ${rungs.map(
           (k) =>
-            html`<tr>
-              <th scope="row">${k.at}</th>
+            html`<tr class="${k === mine ? "here" : ""}">
+              <th scope="row">
+                ${k.at}${k === mine && html`<span class="mine">your key</span>`}
+              </th>
               <td>${k.label || ""}</td>
               <td class="tnum">${k.ilvl}</td>
             </tr>`,
@@ -221,11 +243,17 @@ function ladderHTML(r) {
       </tbody>
     </table>
     <p class="rwd-foot">
-      Every dungeon row on this page is priced at the top rung, since no report
-      records the keys you run — so a lower key is overstated by up to ${over}
-      item levels. Only the two ends are named tracks: Midnight's tracks overlap
-      by two steps, so the rungs between can be read as a step of either track
-      and this table won't guess which.
+      ${
+        mine
+          ? html`Your report was run at ${mine.at}, so every dungeon row on this
+            page is priced at that rung rather than the ceiling.`
+          : html`Every dungeon row on this page is priced at the top rung, since
+            this report doesn't record the keys you run — so a lower key is
+            overstated by up to ${over} item levels.`
+      }
+      Only the two ends are named tracks: Midnight's tracks overlap by two
+      steps, so the rungs between can be read as a step of either track and this
+      table won't guess which.
     </p>
   </section>`;
 }
@@ -236,8 +264,10 @@ function ladderHTML(r) {
  *
  * @param {string|null} here  Canonical difficulty key the board is ranked at, or null when there's
  *   no report loaded to have one.
+ * @param {number|null} [keyLevel]  QE key-slider index the loaded report was run at, where it
+ *   records one. Absent or null leaves the M+ ladder quoting its ceiling, unmarked.
  */
-export function renderRewards(here) {
+export function renderRewards(here, keyLevel) {
   const s = REWARD_SEASON,
     table = s.rollReward;
   // Season first, in its own line: which season's rules these are is the first thing a reader has
@@ -325,7 +355,7 @@ export function renderRewards(here) {
           <tbody>
             ${REWARD_ROWS.map(
               (row) =>
-                html`${rewardRowHTML(table, row, here)}${
+                html`${rewardRowHTML(table, row, here, keyLevel)}${
                   row.key === "mythic" && s.special && specialRowHTML(s.special)
                 }`,
             )}
@@ -346,7 +376,7 @@ export function renderRewards(here) {
         }
       </section>
 
-      ${ladderHTML(table["mythic-plus"] || {})}
+      ${table["mythic-plus"] && ladderHTML(table["mythic-plus"], keyLevel)}
 
       <section class="rwd-sec">
         <h3>Crests</h3>
@@ -728,7 +758,7 @@ export function render() {
     ),
   );
 
-  renderRewards(diffKey(b, built.selDiff));
+  renderRewards(diffKey(b, built.selDiff), built.keyLevel);
   renderLootSpec(b);
   renderSimcNote(b);
   renderDataNote(built);
@@ -771,10 +801,51 @@ function renderSimcNote(b) {
   );
 }
 
+/**
+ * A vault that has expired, offered for removal rather than silently ranked.
+ *
+ * The options in it are gone from the game — a vault is replaced wholesale at the weekly reset — so
+ * there is no trade left to price and no item left to take. What it isn't is *deleted*: the paste it
+ * came from is the user's, and quietly dropping the panel would leave someone who pasted a `/simc`
+ * an hour ago wondering where it went. Naming the date and offering the button says which of the two
+ * happened.
+ *
+ * The rest of that same paste — owned gear, logged rolls, loot spec — is untouched and still in use.
+ * Only the weekly half of it expired, so only the weekly half is disowned here.
+ */
+function staleVaultHTML(st, n) {
+  const when = st.at ? RESET_FMT.format(st.at) : null;
+  return html`<div class="vault stale">
+    <h3>Last week’s vault</h3>
+    <div class="vsub">
+      ${
+        when
+          ? html`These ${n} options were read from a <code>/simc</code> paste on
+              ${when}, before the reset on ${RESET_FMT.format(st.reset)}.`
+          : html`These ${n} options came from a <code>/simc</code> paste with no
+              date on it, so they predate this app recording one.`
+      }
+      A vault is replaced at every reset, so they aren’t offered any more and
+      nothing on this page is being weighed against them. Paste a fresh
+      <code>/simc</code> when your next vault opens, or clear these.
+    </div>
+    <button class="btn tiny" data-act="clearvault">Clear vault options</button>
+    <div class="note">
+      Only the vault expires. The gear you own, your logged rolls and your loot
+      spec came from the same paste and are still in use.
+    </div>
+  </div>`;
+}
+
 function renderVault(b, built) {
   const simc = state.simc[b.key];
   if (!simc || !simc.vault || !simc.vault.length) {
     setHTML("vaultPanel", "");
+    return;
+  }
+  const st = vaultStatus(b);
+  if (st && st.stale) {
+    setHTML("vaultPanel", staleVaultHTML(st, simc.vault.length));
     return;
   }
   const rowByItem = {};
@@ -792,7 +863,10 @@ function renderVault(b, built) {
   setHTML(
     "vaultPanel",
     html`<div class="vault">
-      <h3>This week’s vault</h3>
+      <h3>
+        This week’s vault
+        <button class="linky" data-act="clearvault">clear</button>
+      </h3>
       <div class="vsub">
         Taking an item leaves it in your roll pool: worth 0 to you, still
         diluting your odds, and a dupe if you roll that source too. Mark what
@@ -821,9 +895,9 @@ function renderVault(b, built) {
 function vaultOptionHTML(b, v, row, opt) {
   const meta = QE_DATA.items[v.id];
   const taken = b.vaultTake === v.id;
-  // The report scored the boss's drop; the vault is handing you its own copy, often a track step or
-  // more apart. Said out loud only where it's load-bearing — the two levels differ and the number
-  // being qualified isn't zero.
+  // The report scored the item at one level; the vault is handing you its own copy, often a track
+  // step or more apart. Said out loud only where it's load-bearing — the two levels differ and the
+  // number being qualified isn't zero.
   const offBy =
     opt && opt.score > 0 && opt.scoredIlvl && opt.scoredIlvl !== v.ilvl
       ? opt.scoredIlvl
@@ -901,7 +975,7 @@ function tradeHTML(b, vc) {
         keep.score > 0 &&
         keep.scoredIlvl > 0 &&
         keep.scoredIlvl !== keep.ilvl &&
-        html` That score is the report’s, for the ilvl ${keep.scoredIlvl} drop —
+        html` That score is the report’s, simmed at ilvl ${keep.scoredIlvl} —
         your vault offers ilvl ${keep.ilvl}.`
       }
       ${roll.cost !== 1 && html` That roll costs ${roll.cost} tokens.`}
@@ -1069,26 +1143,62 @@ function cardHTML(b, r, i) {
           pool${r.cost !== 1 ? " · ÷" + r.cost + " tokens" : ""}</span
         >
       </div>
-      ${specialNote(r)} ${promoNote(r)} ${crestNote(b, r)} ${itemsHTML(b, r)}
+      ${specialNote(r)} ${promoNote(b, r)} ${crestNote(b, r)} ${itemsHTML(b, r)}
     </div>
   </div>`;
 }
 
 /**
- * Say out loud that the scores below are not the scores of the item you'd receive.
+ * Say what the scores below are the value of, which is a different sentence per report format.
  *
- * A report sims each drop at the item level it drops at, so where the season promotes the reward
- * every score in the pool is a floor. It biases *between* encounters too — the same token buys a
- * Mythic boss's fully-upgraded item or a dungeon's first step, and nothing in the EV maths knows
- * that. Correcting the scores would mean re-simming at the promoted item level, which is the
- * report's job, not ours; naming the bias is what we can honestly do here.
+ * A Droptimizer — and any QE report from before 12.1 — sims each drop at the item level it drops
+ * at, so where the season promotes the reward every score in the pool is a floor. It biases
+ * *between* encounters too: the same token buys a Mythic boss's fully-upgraded item or a dungeon's
+ * first step, and nothing in the EV maths knows that. Correcting those scores would mean re-simming
+ * at the promoted item level, which is the report's job, not ours; naming the bias is what we can
+ * honestly do here.
+ *
+ * A 12.1 QE report *is* that re-sim, so the note has the opposite job — the numbers are the payout
+ * already, taken to the top of its track, and the reader should know that's the assumption rather
+ * than discover it by wondering why a Heroic boss scores like a Mythic one. See `rollScored`.
+ *
+ * "A floor" is a claim about two numbers, so it is checked rather than assumed. A Droptimizer run
+ * with an upgrade level set — Raidbots will happily sim every Heroic drop at Hero 6/6 — sims *above*
+ * what a Heroic roll pays, and telling that reader their scores run low would be the wrong warning
+ * in the wrong direction. Where the levels straddle the payout, no direction is claimed at all.
  */
-function promoNote(r) {
+function promoNote(b, r) {
   if (!r.reward || !r.reward.label) return "";
+  if (rollScored(b))
+    return html`<div class="swap-note">
+      A roll here pays out at <b>${r.reward.label}</b>, and the scores below are
+      your report's value for exactly that — the payout, taken to the top of its
+      track with crests spent. Not the drop, which is lower.
+    </div>`;
+  const simmed = r.items
+    .filter((i) => i.score > 0 && i.scoreLvl)
+    .map((i) => i.scoreLvl);
+  const pays = r.reward.ilvl;
+  const lead = html`A roll here pays out at <b>${r.reward.label}</b>`;
+  if (!simmed.length || pays == null)
+    return html`<div class="swap-note">
+      ${lead}, which is not the item level your report simmed each drop at.
+    </div>`;
+  if (pays >= Math.max(...simmed))
+    return html`<div class="swap-note">
+      ${lead}, above the ilvl your report simmed each drop at. So the scores
+      below are a floor, and they understate this encounter against one that
+      pays a lower track.
+    </div>`;
+  if (pays < Math.min(...simmed))
+    return html`<div class="swap-note">
+      ${lead} — ilvl ${pays} — while your report simmed these at ilvl
+      ${Math.min(...simmed)} and up. So the scores below run a little high for
+      what a roll would actually hand you.
+    </div>`;
   return html`<div class="swap-note">
-    A roll here pays out at <b>${r.reward.label}</b>, above the ilvl your report
-    simmed each drop at. So the scores below are a floor, and they understate
-    this encounter against one that pays a lower track.
+    ${lead} — ilvl ${pays} — which some of the items below were simmed above and
+    some below. The scores aren't the payout's either way.
   </div>`;
 }
 
@@ -1139,8 +1249,10 @@ function specialNote(r) {
     <b>${SEASON.special.badge}.</b> ${SEASON.special.note} The EV above prices
     <em>this week</em> only. It can’t weigh a token banked for kill week against
     one spent now.
-    ${SEASON.special.heroicNote &&
-    html`<span class="special-alt">${SEASON.special.heroicNote}</span>`}
+    ${
+      SEASON.special.heroicNote &&
+      html`<span class="special-alt">${SEASON.special.heroicNote}</span>`
+    }
   </div>`;
 }
 

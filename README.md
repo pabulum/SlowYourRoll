@@ -63,6 +63,14 @@ common filler, which is usually a reason to chase it rather than shy off it.
 Optionally paste your in-game `/simc` addon export to fold in this week's Great Vault choices,
 auto-mark owned gear, and import your logged bonus-roll history.
 
+**The vault half of that paste expires at the weekly reset**, and only that half. Three options
+appear at reset and are gone at the next one, so a `/simc` read before the last reset has no live
+trade in it — the panel says which week it is describing and offers to clear it, rather than pricing
+this week's decision against options that no longer exist. Owned gear, logged rolls and your loot
+spec come from the same paste and don't expire that way, so they keep working. There's a **clear**
+control on the live panel too: weeks where you have nothing pending are ordinary, and the only other
+way out used to be pasting a fresh export.
+
 ## Reading a report's numbers
 
 Neither report format is quite what it looks like, and both quirks are load-bearing. The details
@@ -94,11 +102,48 @@ rounded on the way out (`rawDiff` to an integer, `percDiff` to three decimals) a
 are where that hurts. A Droptimizer states its baseline outright, at
 `sim.players[0].collected_data.dps.mean`.
 
-**A QE `dropDifficulty` is an index, not a rank.** It indexes QE's own difficulty slider —
-`["Raid Finder", "Raid Finder (Max)", "Normal", "Normal (Max)", "Heroic", "Heroic (Max)", "Mythic",
-"Mythic (Max)"]` — mirrored as `QE_RAID_DIFFICULTIES` in [`src/data.js`](src/data.js). `(Max)` is
-the same difficulty at the top of its upgrade track (QE prices Mythic at 272 and Mythic (Max) at
-289), so `diffKey` folds the suffix away before asking the season what a roll pays.
+**A QE `dropDifficulty` is an index, not a rank — and 12.1 renumbered the list.** It indexes QE's
+own difficulty slider, and the 12.1 Upgrade Finder release cut that slider from eight values to
+four: `["Raid Finder", "Normal", "Heroic", "Mythic"]`. The old list interleaved each difficulty with
+a `(Max)` twin meaning "that item at the top of its upgrade track", and 12.1 moved that idea onto
+its own `dropType` field (below). Both lists live in [`src/data.js`](src/data.js) as
+`QE_RAID_DIFFICULTIES` and `QE_RAID_DIFFICULTIES_LEGACY`, because reports are saved to localStorage
+and outlive the patch that made them; `qeIsModern` in [`src/model.js`](src/model.js) picks between
+them per board, on the presence of `dropType`.
+
+Read the new list off `itemLevels.raid` in QE's `ItemLevelsDB.ts`, **not** off
+`convertRaidDifficultyToString` in `UpgradeFinderEngine.js` — upstream left that function on the old
+eight-entry list, where it now mislabels everything it is handed. Mirroring it is what made a Mythic
+report read as Normal here, and then price the roll off the Hero track.
+
+**A 12.1 report describes each item three times.** Every item at every source arrives as three rows,
+tagged `dropType`:
+
+| `dropType` | What it is                                                            |
+| ---------- | --------------------------------------------------------------------- |
+| `drop`     | the item as the boss or the end-of-run chest hands it over            |
+| `max`      | that drop taken to the top of its own upgrade track, crests spent     |
+| `bonus`    | what a **bonus roll** pays for that source, at the top of _its_ track |
+
+`bonus` is the row this app is about — QE simming the exact thing the ranking prices — so `mergeRow`
+in [`src/model.js`](src/model.js) takes the score from it and the drop level from `drop`. Taking the
+best of the three instead lands on `bonus` nearly every time, since scores climb with item level,
+and nearly is not a rule: Top Gear re-optimises the whole set per item level, so nothing guarantees
+monotonicity. It also leaves the item row claiming the boss "drops at" the promoted level.
+
+One consequence worth stating plainly: for a 12.1 QE report the scores on the page are the payout
+_after_ the crests you would spend capping it, not the drop. That puts every source's scores at the
+same finished item level and leaves the crests each roll saves as a separate figure
+(`Reward.crests`) rather than hiding inside the EV. `rollScored` is the predicate, and the encounter
+cards say which of the two they are showing. A Droptimizer, and any QE report from before 12.1,
+still sims the drop.
+
+**A dungeon row's `dropDifficulty` is the M+ key level**, an index into `MPLUS_KEY_REWARDS` in QE's
+`Databases/MPlusKeyRewards.ts` (mirrored as `QE_MPLUS_KEYS`). That is new in 12.1 and it is the
+answer to a question the app used to have to duck: what a dungeon roll pays depends on the key, and
+with no key to read the app quoted the +10 ceiling for every dungeon on the page. The season's M+
+ladder now names those indices, `rewardOf` resolves the rung, and the ceiling is quoted only for a
+report that genuinely doesn't say.
 
 **A QE report also ships the gear it was run in**, as `equippedItems`. Reduced at ingest to
 `{ itemId: ilvl }` and merged with any `/simc` data by taking the higher item level, so a healer who

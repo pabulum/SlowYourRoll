@@ -157,6 +157,7 @@ test("a hostile item name renders as text, not as markup", () => {
     simc: {
       testkey: {
         owned: {},
+        at: new Date().toISOString(),
         vault: [
           { id: 900001, ilvl: 639, name: "<img src=x onerror=alert(1)>" },
         ],
@@ -179,11 +180,35 @@ test("a hostile character name renders as text in the report picker", () => {
   );
 });
 
+// A Season 1 vault sat in localStorage for months, offered every week as if it were live: three
+// items from raids that aren't current, each priced against this week's rolls. The panel now says
+// which week it is describing, and offers to be rid of it.
+test("an expired vault is a notice rather than a list of things to take", () => {
+  const doc = renderWith([makeBoard()], {
+    simc: {
+      testkey: {
+        owned: {},
+        at: "2026-01-01T00:00:00Z",
+        vault: [{ id: 900002, ilvl: 639, name: "V900002" }],
+      },
+    },
+  });
+  const panel = doc.getElementById("vaultPanel");
+  assert.equal(
+    panel.querySelectorAll("[data-vault]").length,
+    0,
+    "nothing left to take",
+  );
+  assert.ok(panel.querySelector('[data-act="clearvault"]'), "but a way out");
+  assert.doesNotMatch(panel.textContent, /if you leave it/);
+});
+
 test("the vault panel prices the choice both ways and offers to take it", () => {
   const doc = renderWith([makeBoard()], {
     simc: {
       testkey: {
         owned: {},
+        at: new Date().toISOString(),
         vault: [{ id: 900002, ilvl: 639, name: "V900002" }],
       },
     },
@@ -205,6 +230,7 @@ test("the vault names the item level its score was simmed at when it isn't the o
     simc: {
       testkey: {
         owned: {},
+        at: new Date().toISOString(),
         vault: [{ id: 900002, ilvl: 652, name: "V900002" }],
       },
     },
@@ -219,6 +245,7 @@ test("a vault item scored at the level it's offered at is quoted without qualifi
     simc: {
       testkey: {
         owned: {},
+        at: new Date().toISOString(),
         vault: [{ id: 900002, ilvl: 639, name: "V900002" }],
       },
     },

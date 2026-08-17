@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { QE_DATA } from "../src/data.js";
-import { SEASON, rollReward } from "../src/season.js";
+import { SEASON, rollReward, lastReset } from "../src/season.js";
 import { state } from "../src/store.js";
 import { specId } from "../src/loot.js";
 import {
@@ -10,6 +10,8 @@ import {
   rollIlvlFor,
   isDupe,
   vaultChoice,
+  vaultStatus,
+  vaultTakeOf,
   finalBosses,
   baselineOf,
   fmt,
@@ -20,6 +22,8 @@ import {
   diffKey,
   activeLootSpec,
   simcLootSpec,
+  qeIsModern,
+  rollScored,
 } from "../src/model.js";
 
 // A current raid + one of its bosses, pulled from the live database so the test
@@ -232,15 +236,110 @@ test("a raid with fewer bosses than asked for yields all of them", () => {
 
 /* ---------- the vault item you give up to roll ---------- */
 
-/** Put `ids` in this week's vault, as the /simc addon would report them. */
+/**
+ * Put `ids` in this week's vault, as the /simc addon would report them.
+ *
+ * Stamped `at` now, because a vault is only this week's until the next reset and the app disowns one
+ * it can't date. A fixture without the stamp is testing the expiry rule, not the trade — see the
+ * expiry tests below, which build one deliberately.
+ */
 function withVault(ids) {
   state.simc = {
     testkey: {
       owned: {},
+      at: new Date().toISOString(),
       vault: ids.map((id) => ({ name: "V" + id, ilvl: 639, id })),
     },
   };
 }
+
+/* ---------- a vault is only this week's ----------
+   Three options appear at the weekly reset and are gone at the next one, but the /simc paste
+   describing them sits in localStorage forever. Undated, a Season 1 vault kept being offered as a
+   live trade months later — three items from raids that aren't even current, each priced against
+   this week's rolls. Only the vault half expires; owned gear and logged rolls don't. */
+
+const WEEK = 7 * 24 * 60 * 60 * 1000;
+
+/** Put `ids` in a vault last read at `at` — omit `at` for a paste from before the app dated them. */
+function withVaultAt(ids, at) {
+  withVault(ids);
+  if (at) state.simc.testkey.at = at.toISOString();
+  else delete state.simc.testkey.at;
+}
+
+test("a vault read since the last reset is still this week's", () => {
+  state.showAll = false;
+  withVaultAt([900002], new Date());
+  const b = makeBoard();
+  assert.equal(vaultStatus(b).stale, false);
+  assert.ok(vaultChoice(b), "so there is still a trade to weigh");
+});
+
+test("a vault read before the last reset has expired", () => {
+  state.showAll = false;
+  const b = makeBoard();
+  const reset = lastReset(SEASON);
+  assert.ok(
+    reset,
+    "the active season publishes a calendar to count resets from",
+  );
+  withVaultAt([900002], new Date(reset.getTime() - 1000));
+  assert.equal(vaultStatus(b).stale, true);
+  assert.equal(vaultChoice(b), null, "an expired vault offers no trade");
+});
+
+test("an undated vault is treated as expired rather than as this week's", () => {
+  state.showAll = false;
+  withVaultAt([900002]);
+  const b = makeBoard();
+  assert.equal(vaultStatus(b).at, null);
+  assert.equal(vaultStatus(b).stale, true);
+  assert.equal(vaultChoice(b), null);
+});
+
+test("with no vault at all there is no state to report", () => {
+  state.simc = {};
+  assert.equal(vaultStatus(makeBoard()), null);
+});
+
+// The damage an expired vault could still do to the ranking, which is the reason this isn't purely
+// a display concern: `vaultTake` marks an item Own, and an Own item drops out of the numerator.
+test("an expired vault's pick stops being folded into the pools", () => {
+  state.showAll = false;
+  const b = makeBoard();
+  b.vaultTake = 900002;
+
+  withVaultAt([900002], new Date());
+  assert.equal(vaultTakeOf(b), 900002);
+  assert.equal(
+    buildGroups(b).rows[0].num,
+    10,
+    "taken, so its 20 stops counting",
+  );
+
+  withVaultAt([900002], new Date(lastReset(SEASON).getTime() - 1000));
+  assert.equal(vaultTakeOf(b), null);
+  assert.equal(
+    buildGroups(b).rows[0].num,
+    30,
+    "expired, so last week's pick isn't editing this week's pool",
+  );
+});
+
+test("expiry is scoped to the vault, not to the rest of the paste", () => {
+  state.showAll = false;
+  withVaultAt([900002], new Date(lastReset(SEASON).getTime() - WEEK));
+  state.simc.testkey.owned = { 900002: PAYOUT };
+  const it = buildGroups(makeBoard()).rows[0].items.filter(
+    (x) => x.id === 900002,
+  )[0];
+  assert.equal(
+    it.state,
+    "own",
+    "gear you own doesn't stop being owned at a reset",
+  );
+});
 
 test("with no vault imported there is no trade to weigh", () => {
   state.showAll = false;
@@ -479,6 +578,185 @@ test("a maxed-out difficulty pays out on its own track, not one of its own", () 
     diffKey(b, 1),
     "lfr",
     "Raid Finder is keyed the way people say it",
+  );
+});
+
+/* ---------- QE Live 12.1: the same index, a different slider ----------
+   The 12.1 Upgrade Finder renumbered raid difficulty from eight values to four — the "(Max)" twins
+   moved onto their own `dropType` axis — and dropped the ability to sim two difficulties at once.
+   So the same `dropDifficulty` names a different difficulty either side of that release, and a
+   Mythic report read on the old table came out as Normal, which then priced the roll off the Hero
+   track instead of Myth. Reports live in localStorage and outlive the patch that made them, so both
+   scales have to keep working, told apart by the `dropType` only 12.1 sends. */
+
+/** A 12.1 QE board: three rows per item, and one raid difficulty rather than a spread. */
+function makeQE121Board(over = {}) {
+  const b = makeQEBoard();
+  const row = b.results[0];
+  // Mythic is 3 on the new slider and "Normal (Max)" on the old one, which is what made the bug
+  // visible rather than merely wrong: the app confidently named a difficulty it had never been told.
+  b.results = [
+    {
+      ...row,
+      dropType: "drop",
+      dropDifficulty: 3,
+      level: 318,
+      rawDiff: 100,
+      percDiff: 1,
+    },
+    {
+      ...row,
+      dropType: "max",
+      dropDifficulty: 3,
+      level: 334,
+      rawDiff: 200,
+      percDiff: 2,
+    },
+    {
+      ...row,
+      dropType: "bonus",
+      dropDifficulty: 3,
+      level: 334,
+      rawDiff: 250,
+      percDiff: 2.5,
+    },
+  ];
+  return { ...b, ...over };
+}
+
+test("a 12.1 report's difficulty is read off 12.1's slider, not Season 1's", () => {
+  const b = makeQE121Board();
+  assert.equal(qeIsModern(b), true);
+  assert.equal(diffLabel(b, 3), "Mythic");
+  assert.equal(diffKey(b, 3), "mythic");
+  assert.equal(diffLabel(b, 2), "Heroic");
+  assert.equal(diffLabel(b, 1), "Normal");
+  assert.equal(diffLabel(b, 0), "Raid Finder");
+});
+
+test("a report from before 12.1 keeps being read off the slider it was written on", () => {
+  const b = makeQEBoard();
+  assert.equal(qeIsModern(b), false);
+  assert.equal(diffLabel(b, 3), "Normal (Max)");
+  assert.equal(diffLabel(b, 6), "Mythic");
+});
+
+test("a Mythic 12.1 report prices its rolls on the Myth track", () => {
+  state.showAll = false;
+  state.simc = {};
+  const built = buildGroups(makeQE121Board());
+  const row = built.rows.find((r) => r.g.type === "raid");
+  assert.equal(built.selDiff, "3");
+  assert.deepEqual(row.reward, rollReward("raid", "mythic"));
+});
+
+/* ---------- three rows, one item ----------
+   A 12.1 report describes each item three times: the drop, the drop taken to the top of its own
+   track, and the bonus roll taken to the top of *its* track. They are three different questions and
+   the card asks two of them. Taking the best of the three — which is what "keep its best showing"
+   did once the rows started arriving — lands on `bonus` nearly every time, and nearly is not a rule. */
+
+test("a pool's score is the bonus row's, and its drop level the drop row's", () => {
+  state.showAll = false;
+  state.simc = {};
+  const b = makeQE121Board();
+  const row = buildGroups(b).rows.find((r) => r.g.type === "raid");
+  const it = row.items.find((i) => i.score > 0);
+  assert.equal(it.score, 250, "the bonus row is what a roll here is worth");
+  assert.equal(it.scoreLvl, 334, "and the level that value was simmed at");
+  assert.equal(it.lvl, 318, "while the drop level stays the drop's");
+  assert.equal(rollScored(b), true);
+});
+
+test("the bonus row wins even when a lower row happens to score higher", () => {
+  state.showAll = false;
+  state.simc = {};
+  const b = makeQE121Board();
+  // Not a realistic sim, but the whole point is that the choice is a rule rather than an ordering:
+  // Top Gear re-optimises the whole set per item level, so nothing guarantees monotonicity.
+  b.results = b.results.map((r) =>
+    r.dropType === "max" ? { ...r, rawDiff: 9000, percDiff: 90 } : r,
+  );
+  const row = buildGroups(b).rows.find((r) => r.g.type === "raid");
+  const it = row.items.find((i) => i.score > 0);
+  assert.equal(it.score, 250);
+});
+
+test("a report with no dropType still yields the one reading it has", () => {
+  state.showAll = false;
+  state.simc = {};
+  const b = makeQEBoard();
+  const row = buildGroups(b).rows.find((r) => r.g.type === "raid");
+  const it = row.items.find((i) => i.score > 0);
+  assert.equal(it.score, 250);
+  assert.equal(it.lvl, 272);
+  assert.equal(it.scoreLvl, 272, "one row, so both readings are that row");
+  assert.equal(rollScored(b), false);
+});
+
+/* ---------- M+ key level ----------
+   What a dungeon roll pays depends on the key, and until 12.1 no report said which key was run — so
+   the app quoted the +10 ceiling for every dungeon on the page. A 12.1 report carries the key
+   slider's index on every dungeon row, which is the join the season's ladder was already written
+   against. */
+
+/** A 12.1 QE board whose scored item drops in a current M+ dungeon, run at `keyLevel`. */
+function makeDungeonBoard(keyLevel) {
+  const dungeon = Number(QE_DATA.currentDungeons[0]);
+  const item = Number(
+    Object.keys(QE_DATA.items).find((id) =>
+      QE_DATA.items[id].s.some((s) => s[0] === -1 && s[1] === dungeon),
+    ),
+  );
+  const b = makeQE121Board();
+  b.results = b.results.map((r) => ({
+    ...r,
+    item,
+    dropDifficulty: keyLevel,
+    dropLoc: "Dungeon",
+  }));
+  return b;
+}
+
+test("a dungeon roll is priced at the key the report was run at", () => {
+  state.showAll = false;
+  state.simc = {};
+  const ladder = SEASON.rollReward["mythic-plus"].ladder;
+  const top = ladder[ladder.length - 1];
+  const low = ladder.find((k) => k.at === "+6");
+
+  const built = buildGroups(makeDungeonBoard(low.keys[0]));
+  const row = built.rows.find((r) => r.g.type === "dungeon");
+  assert.equal(built.keyLevel, low.keys[0]);
+  assert.equal(row.reward.ilvl, low.ilvl);
+  assert.ok(
+    low.ilvl < top.ilvl,
+    "and that is below the ceiling it used to quote",
+  );
+
+  const high = buildGroups(makeDungeonBoard(top.keys[0]));
+  assert.equal(
+    high.rows.find((r) => r.g.type === "dungeon").reward.ilvl,
+    top.ilvl,
+  );
+});
+
+test("a report that records no key level still gets the ceiling quoted", () => {
+  state.showAll = false;
+  state.simc = {};
+  const b = makeDungeonBoard(7);
+  // Strip what 12.1 added: a pre-12.1 report's dungeon difficulty indexed a different list
+  // entirely, so reading it as a key would be a guess dressed as data.
+  b.results = b.results.map((r) => {
+    const bare = { ...r };
+    delete bare.dropType;
+    return bare;
+  });
+  const built = buildGroups(b);
+  assert.equal(built.keyLevel, null);
+  assert.equal(
+    built.rows.find((r) => r.g.type === "dungeon").reward,
+    SEASON.rollReward["mythic-plus"],
   );
 });
 

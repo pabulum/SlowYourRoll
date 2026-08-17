@@ -128,13 +128,43 @@ test("a token cost override is clamped to at least one token", () => {
 test("taking a vault item toggles, and toggles back off", () => {
   const { doc, board } = boot({
     simc: {
-      testkey: { owned: {}, vault: [{ id: 900001, ilvl: 639, name: "V" }] },
+      testkey: {
+        owned: {},
+        at: new Date().toISOString(),
+        vault: [{ id: 900001, ilvl: 639, name: "V" }],
+      },
     },
   });
   click(doc, '#vaultPanel [data-vault="900001"]');
   assert.equal(board.vaultTake, 900001);
   click(doc, '#vaultPanel [data-vault="900001"]');
   assert.equal(board.vaultTake, null);
+});
+
+test("clearing the vault empties it and drops any pick made from it", () => {
+  const { doc, board } = boot({
+    simc: {
+      testkey: {
+        owned: { 900001: 1 },
+        rolledIds: [900001],
+        at: new Date().toISOString(),
+        vault: [{ id: 900001, ilvl: 639, name: "V" }],
+      },
+    },
+  });
+  click(doc, '#vaultPanel [data-vault="900001"]');
+  assert.equal(board.vaultTake, 900001);
+  click(doc, '#vaultPanel [data-act="clearvault"]');
+  assert.deepEqual(state.simc.testkey.vault, []);
+  assert.equal(
+    board.vaultTake,
+    null,
+    "the pick went with the vault it came from",
+  );
+  // Only the weekly half is disowned; the paste's other halves outlive a reset.
+  assert.deepEqual(state.simc.testkey.owned, { 900001: 1 });
+  assert.deepEqual(state.simc.testkey.rolledIds, [900001]);
+  assert.equal(doc.getElementById("vaultPanel").innerHTML, "");
 });
 
 test("the show-older-content toggle drives the shared filter, not the board", () => {

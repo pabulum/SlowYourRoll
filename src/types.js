@@ -56,8 +56,12 @@
  *   person who ran it had selected, so not safe to read directly — see `scoreOf` in src/model.js.
  * @property {number} [rawDiff]  QE: the HPS gained, whatever that report's metric setting was.
  * @property {number} [percDiff] QE: the same gain as a percentage of the character's HPS.
- * @property {number} [level] Item level of the drop.
- * @property {string|number} [dropDifficulty] QE difficulty, an index into QE_RAID_DIFFICULTIES.
+ * @property {number} [level] Item level this row was simmed at — see `dropType`.
+ * @property {string|number} [dropDifficulty] QE difficulty. On a raid row an index into
+ *   QE_RAID_DIFFICULTIES (or QE_RAID_DIFFICULTIES_LEGACY for a pre-12.1 report); on a dungeon row
+ *   the M+ key level, as an index into QE_MPLUS_KEYS.
+ * @property {"drop"|"max"|"bonus"} [dropType] QE 12.1 and later: which item level of the item this
+ *   row is. Three rows arrive per item per source. Absent on older reports. See QE_DROP_TYPES.
  * @property {string} [dropLoc] QE source category ("Raid", "Dungeon", "Crafted", "Delves").
  * @property {number} [inst]  Droptimizer instance id.
  * @property {number} [enc]   Droptimizer encounter id.
@@ -109,6 +113,9 @@
  * @property {string} [spec]
  * @property {string|null} [lootSpec]  The loot spec set in game, which is what a bonus roll is
  *   actually awarded against. Often not the spec the report was simmed as.
+ * @property {string} [at]  ISO instant this export was read. Only `vault` needs it: a Great Vault
+ *   is replaced at every weekly reset, so an undated one can't be told from last season's. Absent
+ *   on records saved before the app started stamping them, which `vaultStatus` reads as expired.
  */
 
 /**
@@ -118,7 +125,9 @@
  * @property {string} name
  * @property {number} q
  * @property {number} score
- * @property {number} [lvl]  Item level this source drops it at — what the report simmed.
+ * @property {number} [lvl]  Item level this source drops it at.
+ * @property {number} [scoreLvl]  Item level `score` was simmed at, which is not `lvl` once the
+ *   report sims the bonus roll's payout rather than the drop. See `mergeRow` in src/model.js.
  * @property {number|null} [rollIlvl]  Item level a bonus roll would actually hand you. Equal to
  *   `lvl` in a season that pays out at the drop; null when the season promotes the reward to a
  *   vault track whose item level isn't known yet. See src/season.js.
@@ -136,7 +145,8 @@
  * An encounter grouping and its ranked pool.
  * @typedef {Object} Row
  * @property {{ key: string, type: "raid"|"dungeon", name: string, instName: string,
- *   special?: boolean }} g  `special` marks an end-of-raid encounter carrying the season's top tier.
+ *   special?: boolean, keyLevel?: number }} g  `special` marks an end-of-raid encounter carrying the
+ *   season's top tier. `keyLevel` is the M+ key the report was run at, where it recorded one.
  * @property {PoolItem[]} items
  * @property {number} remaining
  * @property {number} num

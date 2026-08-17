@@ -649,6 +649,25 @@ a {
   font-weight: 700;
   letter-spacing: -0.01em;
   margin-bottom: 3px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+/* The clear affordance sits in the heading rather than under the options, because it acts on the
+   whole block and not on any one of them. Quiet: it undoes a paste, so it should be findable
+   without ever being the thing your eye lands on first. */
+.vault h3 .linky {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+}
+/* An expired vault is a notice, not an offer — no option rows, so no list to lead the eye down. */
+.vault.stale .btn {
+  margin-top: 4px;
+}
+.vault.stale .note {
+  margin-top: 13px;
 }
 .vault .vsub {
   font-size: 12.5px;

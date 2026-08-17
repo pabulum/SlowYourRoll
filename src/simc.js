@@ -99,6 +99,11 @@ export async function readSimc() {
     realm: d.realm,
     spec: d.spec,
     lootSpec: d.lootSpec,
+    // When this was read, which only the vault half of it needs. Owned gear and logged rolls stay
+    // true until the next paste replaces them; a vault is three options that vanish at the weekly
+    // reset, and without a date on it the app cannot tell this week's from last season's. See
+    // `vaultStatus` in model.js.
+    at: new Date().toISOString(),
   };
   let applied = false;
   state.boards.forEach((b) => {

@@ -3,8 +3,13 @@
 //
 //   EV = ( Σ score of items you still "want" ÷ items still in the pool ) ÷ token cost
 
-import { QE_DATA, QE_RAID_DIFFICULTIES, DIFF_ORDER } from "./data.js";
-import { SEASON, rollReward } from "./season.js";
+import {
+  QE_DATA,
+  QE_RAID_DIFFICULTIES,
+  QE_RAID_DIFFICULTIES_LEGACY,
+  DIFF_ORDER,
+} from "./data.js";
+import { SEASON, rollReward, lastReset } from "./season.js";
 import { state } from "./store.js";
 import { canLoot, specId, classSpecs, specIdInClass } from "./loot.js";
 
@@ -108,6 +113,55 @@ function diffOf(b, r) {
 }
 
 /**
+ * Is this board's QE report written in the 12.1 Upgrade Finder's vocabulary?
+ *
+ * It has to be asked per board rather than assumed per build, because reports are saved to
+ * localStorage and outlive the patch that produced them. The two formats disagree about what a
+ * `dropDifficulty` of 2 means — Heroic in 12.1, Normal before it — so a board saved last season and
+ * one pasted this morning cannot be read off the same table.
+ *
+ * `dropType` is the tell. 12.1 emits three rows per item per source and labels each one; nothing
+ * before it emitted the field at all. That is a fact about the payload rather than about the item,
+ * so a single row anywhere in the report settles it, and no report can be half of each.
+ *
+ * Cached against the results array, not the board, for the same reason `baselineOf` is: reloading a
+ * report replaces that array, which is exactly when the answer can change.
+ *
+ * @param {import("./types.js").Board} b
+ */
+const qeModern = new WeakMap();
+export function qeIsModern(b) {
+  if (!Array.isArray(b.results)) return true;
+  const hit = qeModern.get(b.results);
+  if (hit !== undefined) return hit;
+  const v = b.results.some((r) => !!r.dropType);
+  qeModern.set(b.results, v);
+  return v;
+}
+
+/**
+ * Are this board's scores the value of what a *roll* pays, or of what the boss *drops*?
+ *
+ * The question the whole page turns on, and until 12.1 there was only one answer. A report simmed
+ * each item at the level its source drops it at, and where the season promotes the reward every
+ * score in every pool was therefore a floor — which the cards said out loud, because there was
+ * nothing else to be done about it.
+ *
+ * QE Live's 12.1 Upgrade Finder sims the bonus roll itself, so for those reports the floor is gone
+ * and the scores are the thing. It sims that payout taken to the top of its track, i.e. after the
+ * crests you'd spend on it, which is what a bonus-rolled item is actually worth to someone playing
+ * the season out — and, usefully, puts every source's scores at the same finished item level, so the
+ * crests each roll saves stay a separate figure (`Reward.crests`) instead of hiding inside the EV.
+ *
+ * A Droptimizer sims the drop, and so does any QE report from before 12.1.
+ *
+ * @param {import("./types.js").Board} b
+ */
+export function rollScored(b) {
+  return b.source !== "droptimizer" && qeIsModern(b);
+}
+
+/**
  * One result's value in the board's raw unit, which for a QE report is not the field it looks like.
  *
  * A QE result carries the same upgrade three times: `rawDiff` (HPS gained), `percDiff` (that gain
@@ -158,11 +212,16 @@ export function raidDiffs(b) {
  * Human label for a difficulty value. The two report formats encode it differently: a Droptimizer
  * sends a name ("raid-mythic"), a QE report sends an index into QE's own difficulty slider.
  *
- * The index is looked up in `QE_RAID_DIFFICULTIES`, which is that slider. It used to be resolved by
- * position instead — the board's difficulties sorted best-first, then read off a list of rank names
- * — which is right only when a report happens to contain a run of adjacent difficulties ending at
- * Mythic. A report with Normal and Mythic in it labelled Normal "Heroic", and since `diffKey` feeds
- * the season's reward table, that mislabelling also picked the wrong upgrade track.
+ * The index is looked up in QE's own slider. It used to be resolved by position instead — the
+ * board's difficulties sorted best-first, then read off a list of rank names — which is right only
+ * when a report happens to contain a run of adjacent difficulties ending at Mythic. A report with
+ * Normal and Mythic in it labelled Normal "Heroic", and since `diffKey` feeds the season's reward
+ * table, that mislabelling also picked the wrong upgrade track.
+ *
+ * *Which* slider is a per-report question: 12.1 renumbered it from eight values to four, so the
+ * same index names a different difficulty either side of that release. See `qeIsModern`. Getting
+ * this wrong is not cosmetic for the same reason as above — a Mythic report read on the old table
+ * comes out as Normal, and the card then claims the roll pays Hero 1/6 instead of Myth 6/6.
  */
 export function diffLabel(b, d) {
   d = String(d);
@@ -170,7 +229,10 @@ export function diffLabel(b, d) {
     const t = d.split("-").pop(); // "raid-mythic" -> "mythic"
     return t.charAt(0).toUpperCase() + t.slice(1);
   }
-  return QE_RAID_DIFFICULTIES[Number(d)] || "Diff " + d;
+  const slider = qeIsModern(b)
+    ? QE_RAID_DIFFICULTIES
+    : QE_RAID_DIFFICULTIES_LEGACY;
+  return slider[Number(d)] || "Diff " + d;
 }
 
 /**
@@ -390,17 +452,21 @@ function itemsAt(key) {
  * @param {number|string} id
  * @param {Partial<import("./types.js").Item>} meta
  * @param {string|null} sp  Loot spec id.
+ * @param {{score: number, lvl: number, scoreLvl?: number, vr?: any}} read  What the report says
+ *   about this item at this source, already folded down from however many rows it sent — see
+ *   `mergeRow`.
  * @returns {import("./types.js").PoolItem}
  */
-function poolItem(id, meta, sp, score, lvl, vr) {
+function poolItem(id, meta, sp, read) {
   const lt = canLoot(meta, sp);
   return {
     id: Number(id),
     name: meta.n || "Item " + id,
     q: meta.q || 3,
-    score,
-    lvl,
-    vr: !!vr,
+    score: read.score,
+    lvl: read.lvl,
+    scoreLvl: read.scoreLvl || read.lvl,
+    vr: !!read.vr,
     elig: lt.ok,
     why: lt.why || "",
     swap: lt.swap || null,
@@ -409,12 +475,67 @@ function poolItem(id, meta, sp, score, lvl, vr) {
 }
 
 /**
+ * How much this app wants a given row's score, when a report sends several for one item.
+ *
+ * A 12.1 report sends three: the drop, the drop taken to the top of its own track, and the bonus
+ * roll taken to the top of *its* track. Only the last is the thing being priced here — a bonus roll
+ * pays out on your Great Vault's track, so `bonus` is QE simming the exact item this app is about to
+ * rank. The other two describe a different way of getting the item and belong nowhere near the EV.
+ *
+ * Rank rather than filter, so a report missing the row we want still yields a number: an older
+ * report sends one unlabelled row per item and it is the only reading there is. Everything ties at
+ * 1, and `mergeRow` falls back to the best score within a rank, which is the old behaviour exactly.
+ *
+ * The distinction matters more than it looks. Taking the best of the three — which is what "keep its
+ * best showing" quietly did once 12.1 started sending them — lands on `bonus` by accident nearly
+ * every time, since the scores climb with item level. Nearly. It is not a rule, and a rule is what
+ * the numerator of every EV on the page needs.
+ */
+function scoreRank(r) {
+  if (!r.dropType) return 1; // pre-12.1: one row per item, and it's this one
+  return r.dropType === "bonus" ? 2 : 1;
+}
+
+/**
+ * Fold one more of a report's rows into what we know about an item at a source.
+ *
+ * Two readings come out, because the card asks two different questions of them. `score`/`scoreLvl`
+ * are what a roll here is worth and the item level that was simmed at — the `bonus` row. `lvl` is
+ * what the boss actually drops, which is the number the item row shows next to "a bonus roll pays
+ * out at" and would be nonsense if it were the promoted figure.
+ *
+ * @param {{score: number, lvl: number, scoreLvl: number, vr: any, rank: number}|undefined} acc
+ * @param {import("./types.js").Result} r
+ * @param {any} vr  Very-rare flag for this source.
+ */
+function mergeRow(acc, r, vr) {
+  const rank = scoreRank(r),
+    sc = scoreOf(r),
+    lvl = r.level || 0;
+  if (!acc) acc = { score: 0, lvl: 0, scoreLvl: 0, vr, rank: -1 };
+  if (rank > acc.rank || (rank === acc.rank && sc > acc.score)) {
+    acc.rank = rank;
+    acc.score = sc;
+    acc.scoreLvl = lvl;
+  }
+  // The drop row wins outright wherever it exists; otherwise the first row seen stands in, which is
+  // all an older report gives us.
+  if (r.dropType === "drop" || !acc.lvl) acc.lvl = lvl;
+  return acc;
+}
+
+/**
  * Group the report's own results by source, at the selected difficulty — the half of each pool the
  * report knows about. Sources the ranking can't or shouldn't show are dropped here; the ones it
  * shows but can't name are recorded in `unknown` for the staleness banner.
+ *
+ * Rows are folded per item as they arrive (`mergeRow`) and only turned into pool items once the
+ * whole report has been read, because a 12.1 report describes one item with three rows and no two
+ * of them answer the same question.
  */
 function collectScored(b, sp, diffs, selDiff, unknown) {
   const groups = {};
+  const keyed = qeIsModern(b) && b.source !== "droptimizer";
   b.results.forEach((r) => {
     const rd = String(diffOf(b, r));
     srcList(b, r).forEach((s) => {
@@ -440,21 +561,23 @@ function collectScored(b, sp, diffs, selDiff, unknown) {
           type: info.type,
           name: info.name,
           instName: info.instName || "",
+          rows: {},
           items: {},
           special: info.type === "raid" && isSpecial(instId, encId),
         });
-      // The same item can be simmed more than once for one source; keep its best showing.
-      const ex = g.items[r.item],
-        sc = scoreOf(r);
-      if (!ex || sc > ex.score)
-        g.items[r.item] = poolItem(
-          r.item,
-          QE_DATA.items[r.item] || {},
-          sp,
-          sc,
-          r.level,
-          vr,
-        );
+      // A dungeon row's difficulty is the key level the report was run at, which is the one thing
+      // that decides what a roll there pays. Only a 12.1 QE report says it: before that the field
+      // indexed a different list entirely, and a Droptimizer never carried a key at all.
+      if (keyed && info.type === "dungeon" && g.keyLevel == null) {
+        const k = Number(rd);
+        if (Number.isInteger(k)) g.keyLevel = k;
+      }
+      g.rows[r.item] = mergeRow(g.rows[r.item], r, vr);
+    });
+  });
+  Object.values(groups).forEach((g) => {
+    Object.keys(g.rows).forEach((id) => {
+      g.items[id] = poolItem(id, QE_DATA.items[id] || {}, sp, g.rows[id]);
     });
   });
   return groups;
@@ -475,7 +598,7 @@ function fillTable(groups, sp) {
       if (g.items[id]) return;
       const meta = QE_DATA.items[id];
       const src = meta.s.find((x) => x[0] + ":" + x[1] === key) || [];
-      g.items[id] = poolItem(id, meta, sp, 0, 0, src[2]);
+      g.items[id] = poolItem(id, meta, sp, { score: 0, lvl: 0, vr: src[2] });
     });
   });
 }
@@ -484,10 +607,11 @@ function fillTable(groups, sp) {
  * Price one grouped encounter: settle what a roll here pays out, decide each item's state against
  * it, then hand the pool to `priceOf`.
  */
-function priceGroup(b, g, selDiff, ownedMap, sp) {
+function priceGroup(b, g, selDiff, ownedMap, sp, takeId) {
   // What a roll here hands you, which is not always what the boss drops. Same for every item in
-  // the row: an upgrade track step is one item level, whichever item lands on it.
-  const reward = rollReward(g.type, diffKey(b, selDiff));
+  // the row: an upgrade track step is one item level, whichever item lands on it. For a dungeon the
+  // key level is the difficulty, and `collectScored` picked it off the report's own rows.
+  const reward = rollReward(g.type, diffKey(b, selDiff), g.keyLevel);
   const items = Object.values(g.items)
     .map((it) => {
       const ov = b.overlay[g.key + ":" + it.id];
@@ -501,7 +625,7 @@ function priceGroup(b, g, selDiff, ownedMap, sp) {
       it.state =
         ov === "rolled" || ov === "own"
           ? ov
-          : b.vaultTake === it.id || it.dupe
+          : takeId === it.id || it.dupe
             ? "own"
             : "want";
       return it;
@@ -534,7 +658,8 @@ function priceGroup(b, g, selDiff, ownedMap, sp) {
  * Returns { rows, selDiff, diffs, unknown } where each row carries its items, pool size, and EV,
  * and `unknown` names the visible sources the encounter database couldn't identify.
  * @param {import("./types.js").Board} b
- * @returns {{ rows: import("./types.js").Row[], selDiff: string, diffs: string[], unknown: string[] }}
+ * @returns {{ rows: import("./types.js").Row[], selDiff: string, diffs: string[],
+ *   keyLevel: number|null, unknown: string[] }}
  */
 /**
  * The best copy of each item the character is known to hold, as `{ itemId: ilvl }`.
@@ -602,13 +727,24 @@ export function buildGroups(b) {
   const groups = collectScored(b, sp, diffs, selDiff, unknown);
   fillTable(groups, sp);
 
+  const take = vaultTakeOf(b);
   const rows = Object.values(groups).map((g) =>
-    priceGroup(b, g, selDiff, ownedGear(b), sp),
+    priceGroup(b, g, selDiff, ownedGear(b), sp, take),
   );
   rows.sort(
     (a, c) => c.ev - a.ev || c.num - a.num || a.g.name.localeCompare(c.g.name),
   );
-  return { rows, selDiff, diffs, unknown: Object.values(unknown) };
+  // One report is run at one key level, so any dungeon group's is the board's. Surfaced here rather
+  // than dug out of the rows by the caller: the reward pane wants it to mark the rung the page is
+  // actually pricing, and that pane never sees a row.
+  const keyed = Object.values(groups).find((g) => g.keyLevel != null);
+  return {
+    rows,
+    selDiff,
+    diffs,
+    keyLevel: keyed ? keyed.keyLevel : null,
+    unknown: Object.values(unknown),
+  };
 }
 
 /**
@@ -629,27 +765,72 @@ export function buildGroups(b) {
  *   verdict: "keep"|"roll", drag: {amount: number, name: string, isTop: boolean}|null}|null}
  *   null when no vault has been imported.
  */
+/**
+ * What state the linked `/simc`'s Great Vault block is in — and in particular whether it is still
+ * this week's.
+ *
+ * A vault is three options that appear at the weekly reset and are gone at the next one. The rest of
+ * a `/simc` paste doesn't work that way: the gear you own and the rolls you've logged stay true
+ * until a newer paste replaces them, and a month-old export is still worth reading for both. So the
+ * expiry is scoped to the vault alone rather than to the record holding it.
+ *
+ * A paste with no `at` is treated as expired. Those predate the app dating them at all, so the honest
+ * reading is "recorded at an unknown time", and an unknown time is not evidence of this week. The
+ * cost of being wrong is a prompt to re-paste; the cost of the opposite is pricing this week's one
+ * irreversible decision against a vault that closed weeks ago.
+ *
+ * @param {import("./types.js").Board} b
+ * @param {Date} [now]
+ * @returns {{at: Date|null, reset: Date|null, stale: boolean}|null} null when there is no vault to
+ *   have a state — no linked `/simc`, or one whose export held no Weekly Reward Choices block.
+ */
+export function vaultStatus(b, now) {
+  const simc = state.simc[b.key];
+  if (!simc || !simc.vault || !simc.vault.length) return null;
+  const reset = lastReset(SEASON, now);
+  const t = simc.at ? Date.parse(simc.at) : NaN;
+  const at = Number.isFinite(t) ? new Date(t) : null;
+  // No calendar to measure against means no claim either way — a season nobody has dated can't be
+  // told that its vault expired.
+  return { at, reset, stale: !!reset && (!at || t < reset.getTime()) };
+}
+
+/**
+ * The vault pick the ranking should honour, which is none once the vault it was picked from has
+ * expired. Marking an item Own is a real edit to a pool, and an expired vault must not be making it.
+ *
+ * @param {import("./types.js").Board} b
+ * @param {Date} [now]
+ */
+export function vaultTakeOf(b, now) {
+  const st = vaultStatus(b, now);
+  return st && st.stale ? null : b.vaultTake;
+}
+
 export function vaultChoice(b) {
   const simc = state.simc[b.key];
   if (!simc || !simc.vault || !simc.vault.length) return null;
+  // An expired vault has no trade in it: the options are gone from the game, so there is nothing to
+  // weigh a roll against. The panel says so rather than the app quietly ranking last week's items.
+  const st = vaultStatus(b);
+  if (st && st.stale) return null;
 
-  // Each item's best showing in the report, and the item level that showing was simmed at — which
-  // is the boss's drop, not the vault's copy of it. The two disagree routinely (a vault reward
-  // arrives at the top of its track), so the level is carried alongside the number rather than
-  // quietly folded into it; `vaultOptionHTML` says so where they differ.
+  // Each item's value in the report, and the item level that value was simmed at — which is not the
+  // vault's copy of it. The two disagree routinely, and in both directions: a report from before
+  // 12.1 sims the boss's drop, one after it sims the bonus roll's payout at the top of its track. So
+  // the level is carried alongside the number rather than quietly folded into it; `vaultOptionHTML`
+  // says so where they differ. Folded with the same `mergeRow` the pools use, because a vault option
+  // priced off a different row of the report than the ranking is a comparison of two things.
   const scored = {};
   b.results.forEach((r) => {
-    const sc = scoreOf(r);
-    const ex = scored[r.item];
-    if (!ex || sc > ex.score)
-      scored[r.item] = { score: sc, ilvl: r.level || 0 };
+    scored[r.item] = mergeRow(scored[r.item], r, false);
   });
   const options = simc.vault.map((v) => ({
     id: v.id,
     name: (QE_DATA.items[v.id] || {}).n || v.name,
     ilvl: v.ilvl,
     score: (scored[v.id] || {}).score || 0,
-    scoredIlvl: (scored[v.id] || {}).ilvl || 0,
+    scoredIlvl: (scored[v.id] || {}).scoreLvl || 0,
     // Distinguished from a genuine zero: an item the report never evaluated has no value we can
     // quote, and saying "worth 0" about it would be a claim we haven't earned.
     scored: scored[v.id] != null,
