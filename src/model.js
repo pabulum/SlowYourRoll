@@ -668,6 +668,26 @@ function applyToken(it, idx) {
 }
 
 /**
+ * The item level this encounter's *scores* belong to, which is not always the one a roll pays.
+ *
+ * A 12.1 QE report sims the bonus roll as QE's own "Upgraded Bonus Rolls" panel does: the payout
+ * taken to the top of its track, crests spent. So a Heroic boss's scores are ilvl 334 while the
+ * roll itself hands the item over at 318, and a card that prints 318 beside an 11,053 HPS gain is
+ * describing two different items. One number covers the whole card because the top of a track is a
+ * property of the payout rather than of the item — every `bonus` row from a source carries the same
+ * level — which is also what lets a filler the report never evaluated be shown at it.
+ *
+ * The max rather than the first seen, so the last two Mythic bosses (ilvl 344, three steps past
+ * Myth 6/6) can't be quoted at a lower level by an item that happens to sort first.
+ *
+ * @param {import("./types.js").PoolItem[]} items
+ * @returns {number|null} Null where nothing in the pool was scored at a known level.
+ */
+function scoreIlvlOf(items) {
+  return items.reduce((m, it) => Math.max(m, it.scoreLvl || 0), 0) || null;
+}
+
+/**
  * Price one grouped encounter: settle what a roll here pays out, decide each item's state against
  * it, then hand the pool to `priceOf`.
  */
@@ -675,7 +695,8 @@ function priceGroup(b, g, selDiff, ownedMap, sp, takeId) {
   // What a roll here hands you, which is not always what the boss drops. Same for every item in
   // the row: an upgrade track step is one item level, whichever item lands on it. For a dungeon the
   // key level is the difficulty, and `collectScored` picked it off the report's own rows.
-  const reward = rollReward(g.type, diffKey(b, selDiff), g.keyLevel);
+  const diff = diffKey(b, selDiff);
+  const reward = rollReward(g.type, diff, g.keyLevel);
   const idx = reportIndex(b);
   const items = Object.values(g.items)
     .map((it) => {
@@ -712,7 +733,9 @@ function priceGroup(b, g, selDiff, ownedMap, sp, takeId) {
     g,
     items,
     cost,
+    diff,
     reward,
+    scoreIlvl: scoreIlvlOf(items),
     remaining: p.remaining,
     num: p.num,
     ev: p.ev,

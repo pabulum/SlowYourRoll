@@ -7,8 +7,10 @@
 // re-do that would fight the layout.
 //
 // The `ilvl` we pass matters. Retail rolls an item's stats from its item level, so the generic card
-// describes an item level nothing actually drops at; handing over the drop's own level makes the
-// numbers on the card the numbers you'd get.
+// describes an item level nothing actually drops at; handing over the level the row is about makes
+// the numbers on the card the numbers you'd get. Which level that is belongs to the caller: it is
+// the one the row's score was simmed at, so a card and the score beside it describe one item. See
+// `shownIlvl` in render.js.
 //
 // This is the app's one third-party script, and with it the one thing that tells anybody else what
 // you're looking at. Nothing about your report leaves the browser; hovering an item tells Wowhead
@@ -21,7 +23,7 @@ const ICON_CDN = "https://wow.zamimg.com/images/wow/icons/large/";
 const WOWHEAD = "https://www.wowhead.com/item=";
 
 /**
- * The `data-wowhead` payload — item id, plus the item level this source drops it at. The separator
+ * The `data-wowhead` payload — item id, plus the item level the row is showing. The separator
  * is a literal `&amp;` because the widget reads the attribute after the parser has unescaped it;
  * `raw` because it is markup, written here, not a value from anywhere.
  */

@@ -48,8 +48,8 @@ still only describe the spec it was simmed as; the app says so when the two diff
 
 **Icons and hover cards.** Item names and icons link to Wowhead, and Wowhead's tooltip widget
 (`widgets/power.js`, the same one QE Live and Raidbots use) renders its card on hover. Links carry
-the item level _this source_ drops at, so the card describes the item you'd actually be handed
-rather than a generic one. Icons come from Blizzard's icon CDN.
+the same item level the row shows — the one its score was simmed at — so the card's stats and the
+gain beside them describe one item rather than two. Icons come from Blizzard's icon CDN.
 
 That widget is the app's only third-party script, and the only thing that tells anyone else what
 you're doing: hovering an item tells Wowhead which item you hovered. Nothing from your report is
@@ -135,8 +135,17 @@ One consequence worth stating plainly: for a 12.1 QE report the scores on the pa
 _after_ the crests you would spend capping it, not the drop. That puts every source's scores at the
 same finished item level and leaves the crests each roll saves as a separate figure
 (`Reward.crests`) rather than hiding inside the EV. `rollScored` is the predicate, and the encounter
-cards say which of the two they are showing. A Droptimizer, and any QE report from before 12.1,
-still sims the drop.
+cards say which of the two they are showing — by name, since "Upgraded Bonus Rolls" is what QE's own
+panel calls the figure and cross-checking the two should not require a guess. A Droptimizer, and any
+QE report from before 12.1, still sims the drop.
+
+The item level on each row follows the score rather than the payout, for the same reason: a Heroic
+boss's roll hands you Myth 1/6 (ilvl 318) and QE prices it at 334, so a row printing 318 beside a
++11,053 HPS gain describes an item nobody is being offered — and hands Wowhead the wrong stats. The
+row shows both, payout first — `318→334`, the arrow being the crests — and `Row.scoreIlvl` (`scoreIlvlOf` in
+[`src/model.js`](src/model.js)) is the one figure the whole card uses, so fillers the report never
+scored don't sit at a different item level from the items above them. Where the report sims the drop
+instead, nothing has been taken to a track top and the payout stays the number shown.
 
 ### QE Live computes this too, now
 
@@ -444,6 +453,15 @@ the wrong boss to tell someone to bank a token for.
 And the badge is gated on the season naming its tier raid (`special.raid`), because Season 2 ranks
 two raids: the tier raid and Tidebound Grotto, a one-boss flex world boss. "The last two bosses" of
 a one-boss raid is that boss, so without the gate the world boss wore the badge too.
+
+The badge is also gated on **difficulty**, because "Venomcursed 9/6" quotes an item level and an
+item level is a claim about the roll it's attached to. Those bosses carry their tier at Mythic only;
+on Heroic the same encounter pays Myth 1/6 like any other Heroic boss, five upgrade steps below the
+badge. What survives the difficulty change is the cantrips — the reason Larias' guide recommends
+rolling exactly these bosses on Heroic week to week — so the card wears `special.badgeAlt` instead
+and the note leads with the claim that applies. Both claims stay on the card either way: bank a
+token for the Mythic kill, and spend one here on Heroic most weeks are both true, and which one
+leads is decided by what the reader is being ranked at (`specialAtTier` in `src/render.js`).
 
 In Season 2 the roll token is itself a Great Vault reward for weeks 2–7, so taking it costs you the
 item you'd otherwise have picked; from week 8 it's free again and you get both. That window is a

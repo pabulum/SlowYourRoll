@@ -1567,6 +1567,16 @@ img.icon,
   color: var(--cool);
   border-bottom: 1px dotted color-mix(in srgb, var(--cool) 50%, transparent);
 }
+/* Where the row carries both: the payout the roll hands over, then the level its score is for. The
+   payout is stated rather than emphasised — the second number is the one the score and the Wowhead
+   card agree with, so it keeps the cell's colour and the first steps back to the column's own. */
+.ilvl .pays {
+  color: var(--faint);
+}
+.ilvl .to {
+  margin: 0 1.5px;
+  opacity: 0.5;
+}
 /* Deliberately not amber. "Want" is the default state of nearly every row, so colouring it would
    put twenty accent-coloured boxes in a column and spend the one colour that means "this is the
    answer" on the least remarkable thing on screen. The two states you *changed* are the ones that

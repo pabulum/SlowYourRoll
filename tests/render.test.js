@@ -9,6 +9,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { QE_DATA } from "../src/data.js";
+import { finalBosses } from "../src/model.js";
 import { render, renderSeason } from "../src/render.js";
 import {
   REWARD_SEASON,
@@ -334,6 +335,136 @@ test("rendering closes the report picker", () => {
     doc.getElementById("boardBtn").getAttribute("aria-expanded"),
     "false",
   );
+});
+
+/* ---------- the item level a score belongs to ----------
+   A 12.1 QE report scores the bonus roll as QE's own "Upgraded Bonus Rolls" panel does: the payout
+   taken to the top of its track. So a Heroic boss's +11,053 is ilvl 334 while the roll hands the
+   item over at 318, and the row printing 318 beside it — which it used to — describes an item
+   nobody is being offered, and builds the Wowhead card from the wrong stats. Asserted through the
+   DOM because the coupling is between two cells of one row, which no unit test on either sees. */
+
+/** A 12.1 QE board on Heroic: scores at the top of the Myth track, a roll that pays its first step. */
+function makeQEHeroicBoard(over = {}) {
+  const item = Number(
+    Object.keys(QE_DATA.items).find((id) =>
+      QE_DATA.items[id].s.some((s) => s[0] === RAID_ID && s[1] === ENC_ID),
+    ),
+  );
+  const row = { item, dropDifficulty: 2, score: 0.033 };
+  return {
+    id: "q",
+    key: "qekey",
+    reportId: "r",
+    player: "Heals",
+    realm: "area-52",
+    spec: "holy",
+    source: "qe",
+    metric: "raw",
+    results: [
+      { ...row, dropType: "drop", level: 315, rawDiff: 7118, percDiff: 2.122 },
+      { ...row, dropType: "max", level: 321, rawDiff: 8216, percDiff: 2.449 },
+      {
+        ...row,
+        dropType: "bonus",
+        level: 334,
+        rawDiff: 11053,
+        percDiff: 3.294,
+      },
+    ],
+    overlay: {},
+    tokenOverride: {},
+    vaultTake: null,
+    raidDiff: null,
+    ...over,
+  };
+}
+
+test("a scored row shows the item level its score was simmed at, not the one the roll pays", () => {
+  const doc = renderWith([makeQEHeroicBoard()]);
+  const scored = [...doc.querySelectorAll("#sources .card .item")].find((el) =>
+    /11,053/.test(el.textContent),
+  );
+  assert.ok(scored, "the bonus row's value is the one on the card");
+  // Both numbers, payout first: the roll hands over 318 and the score beside it is worth 334.
+  assert.equal(words(scored.querySelector(".ilvl")), "318→334");
+  assert.equal(words(scored.querySelector(".ilvl .pays")), "318");
+  assert.match(
+    scored.querySelector(".ilvl .promoted").getAttribute("title"),
+    /hands it over at ilvl 318 \(Myth 1\/6\)/,
+  );
+  // Wowhead rolls an item's stats from the level it's given, so the card has to agree with the score.
+  assert.match(
+    scored.querySelector(".iname a").getAttribute("data-wowhead"),
+    /ilvl=334/,
+  );
+});
+
+test("every row on the card reads at that level, so a pool quotes one item level", () => {
+  const doc = renderWith([makeQEHeroicBoard()]);
+  const levels = new Set(
+    [...doc.querySelectorAll("#sources .card .item .ilvl")].map(words),
+  );
+  assert.deepEqual([...levels], ["318→334"], "fillers included");
+});
+
+test("the card says which of the report's figures the scores are", () => {
+  const doc = renderWith([makeQEHeroicBoard()]);
+  const note = words(doc.querySelector("#sources .card .swap-note"));
+  assert.match(note, /Upgraded Bonus Rolls/);
+  assert.match(note, /pays out at Myth 1\/6 — ilvl 318/);
+  assert.match(note, /ilvl 334/);
+  assert.match(note, /Droptimizer/);
+});
+
+/* ---------- a badge that quotes an item level is a claim about this roll ----------
+   The season's end-of-raid rewards are Mythic-only: the same bosses on Heroic pay Myth 1/6 like any
+   other Heroic boss, five upgrade steps under the badge. What survives the difficulty change is the
+   cantrips, which is why the encounter keeps a badge at all. */
+
+/** `makeQEHeroicBoard`, moved onto a boss the season singles out and to a chosen difficulty. */
+function makeSpecialBoard(dropDifficulty) {
+  const sp = SEASON.special;
+  const raid = String(sp.raid);
+  const enc = Number(finalBosses(Number(raid), sp.lastBosses).at(-1));
+  const item = Number(
+    Object.keys(QE_DATA.items).find((id) =>
+      QE_DATA.items[id].s.some((s) => s[0] === Number(raid) && s[1] === enc),
+    ),
+  );
+  const b = makeQEHeroicBoard();
+  b.results = b.results.map((r) => ({ ...r, item, dropDifficulty }));
+  return b;
+}
+
+/** The card for the encounter a board's report is all about. */
+function onlyCard(doc) {
+  const cards = [...doc.querySelectorAll("#sources .card")];
+  return cards.find((c) => c.querySelector(".special")) || cards[0];
+}
+
+test("an end-of-raid boss wears its tier badge where the roll actually pays that tier", () => {
+  const card = onlyCard(renderWith([makeSpecialBoard(3)]));
+  assert.equal(
+    words(card.querySelector(".card-head .special")),
+    SEASON.special.badge,
+  );
+  assert.match(
+    words(card.querySelector(".special-note")),
+    /^Venomcursed 9\/6\./,
+  );
+});
+
+test("on Heroic the same boss is badged for what it still gives you, not for ilvl 344", () => {
+  const card = onlyCard(renderWith([makeSpecialBoard(2)]));
+  const badge = words(card.querySelector(".card-head .special"));
+  assert.equal(badge, SEASON.special.badgeAlt);
+  assert.doesNotMatch(badge, /9\/6/);
+  // Both claims stay on the card; the one that leads is the one this card can act on.
+  const note = words(card.querySelector(".special-note"));
+  assert.match(note, /rolling here on Heroic is the week-to-week play/);
+  assert.match(note, /ilvl 344/, "banking for the Mythic kill is still said");
+  assert.match(note, /^cantrip items\./);
 });
 
 // One of the two places this file asserts wording, and for the same reason as the escaping tests:

@@ -85,7 +85,12 @@
  *   flex world boss, and "the last two bosses" is a true sentence about the first and a meaningless
  *   one about the second. Omit where the season's only raid is the tier raid.
  * @property {number} lastBosses  How many bosses at the end of that raid carry these rewards.
- * @property {string} badge  Short tag for the encounter card.
+ * @property {string} badge  Short tag for the encounter card, naming the top-tier reward.
+ * @property {string} [badgeAlt]  The tag to wear at a difficulty that doesn't pay those rewards.
+ *   `badge` quotes an item level — "Venomcursed 9/6" — and a Heroic roll on the same boss pays Myth
+ *   1/6 like any other Heroic boss, so wearing it there claims five upgrade steps the card can't
+ *   hand over. The encounter is still special at every difficulty, for the reason `heroicNote`
+ *   gives, so the badge changes rather than disappearing.
  * @property {number|null} ilvl  Item level those rewards drop and pay out at.
  * @property {string} note   One line on why the encounter is worth saving a token for.
  * @property {string} [heroicNote]  Why the same encounters are worth rolling at a *lower* difficulty
@@ -307,6 +312,9 @@ export const SEASONS = {
       raid: "1320", // Venomous Abyss — not 1317, the Tidebound Grotto world boss
       lastBosses: 2,
       badge: "Venomcursed 9/6",
+      // What is true of these bosses at every difficulty is the cantrips, not the item level: 9/6 is
+      // the Mythic payout alone, and it's the Heroic roll that guides actually recommend week to week.
+      badgeAlt: "cantrip items",
       ilvl: 344,
       note:
         "Its Mythic items are 9/6 (ilvl 344) with cantrip effects, a tier above anything else in " +

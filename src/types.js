@@ -161,6 +161,13 @@
  * @property {number} nWant
  * @property {import("./season.js").Reward|null} [reward]  Upgrade track a roll here pays out at;
  *   null when the season simply hands you the drop.
+ * @property {string} [diff]  Canonical difficulty this row was priced at ("mythic", "heroic"), from
+ *   `diffKey`. Meaningful for a raid; a dungeon prices off its key level instead. Carried because
+ *   an end-of-raid encounter's top-tier rewards are a Mythic-only claim — see `specialAtTier` in
+ *   src/render.js.
+ * @property {number|null} [scoreIlvl]  Item level this row's scores were simmed at. Equal to the
+ *   payout for a report that sims the drop; the top of the payout's track for a 12.1 QE report,
+ *   which sims the roll as "Upgraded Bonus Rolls". See `scoreIlvlOf` in src/model.js.
  * @property {number} [nBlocked]  Items shown but out of the pool: this loot spec can't receive them.
  * @property {{spec: string, remaining: number, num: number, ev: number, dodges: string[],
  *   gains: string[], loses: string[]}[]} [alts]  Better-EV loot specs for this encounter.

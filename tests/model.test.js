@@ -683,6 +683,47 @@ test("the bonus row wins even when a lower row happens to score higher", () => {
   assert.equal(it.score, 250);
 });
 
+/* ---------- the level the scores belong to ----------
+   QE's `bonus` row is the payout taken to the top of its track, so on any difficulty below Mythic
+   the score and the payout are two different item levels: a Heroic roll hands over Myth 1/6 (318)
+   and the report prices it at 334. The row carries both, because the card shows the score's level
+   beside the score and the payout's everywhere the roll itself is described. */
+
+test("a Heroic 12.1 report's scores belong to a higher item level than the roll pays", () => {
+  state.showAll = false;
+  state.simc = {};
+  const b = makeQE121Board();
+  b.results = b.results.map((r) => ({
+    ...r,
+    dropDifficulty: 2,
+    level: r.dropType === "drop" ? 315 : 334,
+  }));
+  const row = buildGroups(b).rows.find((r) => r.g.type === "raid");
+  assert.equal(row.reward.ilvl, 318, "what a Heroic roll hands over");
+  assert.equal(row.scoreIlvl, 334, "what the scores were simmed at");
+  const it = row.items.find((i) => i.score > 0);
+  assert.equal(it.scoreLvl, 334);
+  assert.equal(it.rollIlvl, 318);
+});
+
+test("a Mythic report's scores and payout are the same level, so the row quotes one number", () => {
+  state.showAll = false;
+  state.simc = {};
+  const row = buildGroups(makeQE121Board()).rows.find(
+    (r) => r.g.type === "raid",
+  );
+  assert.equal(row.scoreIlvl, row.reward.ilvl);
+});
+
+// A Droptimizer sims the drop, so the row's figure is the drop's level — which is what makes it
+// safe for the card to keep showing the payout there instead. Nothing has been taken to a track top.
+test("a Droptimizer's score level is the drop's, not a promoted one", () => {
+  state.showAll = false;
+  state.simc = {};
+  const row = buildGroups(makeBoard()).rows[0];
+  assert.equal(row.scoreIlvl, DROP_ILVL);
+});
+
 test("a report with no dropType still yields the one reading it has", () => {
   state.showAll = false;
   state.simc = {};

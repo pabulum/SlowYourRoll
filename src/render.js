@@ -1246,15 +1246,16 @@ function cardHTML(b, r, i) {
     >
       pays ${r.reward.label}
     </button>`;
+  const sp = SEASON.special;
   const special =
     g.special &&
-    SEASON.special &&
+    sp &&
     html`<button
       class="special"
       data-act="rewards"
-      title="${SEASON.special.note}"
+      title="${specialAtTier(r) ? sp.note : sp.heroicNote || sp.note}"
     >
-      ${SEASON.special.badge}
+      ${specialAtTier(r) ? sp.badge : sp.badgeAlt || sp.badge}
     </button>`;
 
   return html`<div class="${cls}" data-key="${g.key}">
@@ -1320,9 +1321,20 @@ function promoNote(b, r) {
   if (!r.reward?.label) return "";
   if (rollScored(b))
     return html`<div class="swap-note">
-      A roll here pays out at <b>${r.reward.label}</b>, and the scores below are
-      your report's value for exactly that — the payout, taken to the top of its
-      track with crests spent. Not the drop, which is lower.
+      A roll here pays out at <b>${r.reward.label}</b>${
+        r.reward.ilvl ? html` — ilvl ${r.reward.ilvl} —` : html`,`
+      } and the scores below are your QE report's
+      <b>Upgraded Bonus Rolls</b> figures: that payout taken to the top of its
+      track with crests spent${
+        r.scoreIlvl ? html`, ilvl ${r.scoreIlvl}` : ""
+      }. Not the drop, which is lower.${
+        r.scoreIlvl && r.reward.ilvl && r.scoreIlvl !== r.reward.ilvl
+          ? html` Each row below shows both — what the roll hands over, then the
+            item level its score is for, which is the same item after the crests.
+            A Raidbots Droptimizer sims the drop instead, so its numbers for
+            these will be lower.`
+          : ""
+      }
     </div>`;
   const simmed = r.items
     .filter((i) => i.score > 0 && i.scoreLvl)
@@ -1335,9 +1347,9 @@ function promoNote(b, r) {
     </div>`;
   if (pays >= Math.max(...simmed))
     return html`<div class="swap-note">
-      ${lead}, above the ilvl your report simmed each drop at. So the scores
-      below are a floor, and they understate this encounter against one that
-      pays a lower track.
+      ${lead} — ilvl ${pays} — above the ilvl your report simmed each drop at
+      (${Math.max(...simmed)} at the top). So the scores below are a floor, and
+      they understate this encounter against one that pays a lower track.
     </div>`;
   if (pays < Math.min(...simmed))
     return html`<div class="swap-note">
@@ -1481,15 +1493,41 @@ function crestCheckHTML(reward, kind, step, rng) {
 }
 
 /** The end-of-raid encounters worth banking a token for, called out where the ranking can't see it. */
+/**
+ * Is this card being priced at the difficulty the season's end-of-raid rewards actually come from?
+ *
+ * The badge quotes an item level, and an item level is a claim about *this* roll. These bosses carry
+ * their tier at Mythic only: the same encounter on Heroic pays Myth 1/6 like every other Heroic
+ * boss, five upgrade steps below the badge. What survives the difficulty change is the cantrips, and
+ * that is what the alternate badge names — the encounter stays worth singling out, for a reason the
+ * card can state truthfully.
+ *
+ * @param {import("./types.js").Row} r
+ */
+function specialAtTier(r) {
+  return r.g.type === "raid" && r.diff === "mythic";
+}
+
+/**
+ * The end-of-raid note, led by whichever of its two claims applies to the difficulty on screen.
+ *
+ * Both are always true and both stay on the card — one says bank a token for the Mythic kill, the
+ * other says spend it here on Heroic most weeks — but the one the reader can act on today is the one
+ * that matches what they're being ranked at. Leading a Heroic card with an ilvl 344 sentence reads
+ * as a description of the roll it's attached to, which it isn't.
+ */
 function specialNote(r) {
-  if (!r.g.special || !SEASON.special) return "";
+  const sp = SEASON.special;
+  if (!r.g.special || !sp) return "";
+  const bank = html`${sp.note} The EV above prices <em>this week</em> only. It
+  can’t weigh a token banked for kill week against one spent now.`;
+  const atTier = specialAtTier(r) || !sp.heroicNote;
   return html`<div class="swap-note special-note">
-    <b>${SEASON.special.badge}.</b> ${SEASON.special.note} The EV above prices
-    <em>this week</em> only. It can’t weigh a token banked for kill week against
-    one spent now.
+    <b>${atTier ? sp.badge : sp.badgeAlt || sp.badge}.</b>
+    ${atTier ? bank : sp.heroicNote}
     ${
-      SEASON.special.heroicNote &&
-      html`<span class="special-alt">${SEASON.special.heroicNote}</span>`
+      sp.heroicNote &&
+      html`<span class="special-alt">${atTier ? sp.heroicNote : bank}</span>`
     }
   </div>`;
 }
@@ -1510,11 +1548,11 @@ function itemsHTML(b, r) {
     html`<div class="item-group">${label} <span class="n">${n}</span></div>`;
 
   return html`<div class="items">
-      ${upgrades.map((it) => itemRow(b, it))}
+      ${upgrades.map((it) => itemRow(b, r, it))}
       ${
         filler.length > 0 &&
         html` ${group(upgrades.length ? "No upgrade, still dilutes the pool" : "Nothing here is an upgrade", filler.length)}
-        ${filler.map((it) => itemRow(b, it))}`
+        ${filler.map((it) => itemRow(b, r, it))}`
       }
       ${
         /* The blocked tier is reference, not work: it's out of the pool and can't be changed from here,
@@ -1532,7 +1570,7 @@ function itemsHTML(b, r) {
             }
             <span class="n">${blocked.length}</span>
           </div>
-          ${showBlocked && blocked.map((it) => itemRow(b, it))}`
+          ${showBlocked && blocked.map((it) => itemRow(b, r, it))}`
       }
     </div>
     ${altNotes(b, r)}`;
@@ -1563,22 +1601,60 @@ function listOf(names) {
   return names.length > 2 ? html`${head} and ${names.length - 2} more` : head;
 }
 
-/**
- * The item level to show and to build the Wowhead card from: what a roll here would hand you, which
- * in a season that promotes rewards to a vault track is a step or five above what the boss drops.
- * Stats roll from item level, so the card is wrong on the drop's.
- */
-function rollIlvlOf(it) {
+/** What a roll here actually hands over, per item: the promoted payout, or the drop where it isn't. */
+function payoutIlvlOf(it) {
   return it.rollIlvl || it.lvl || 0;
 }
 
-function ilvlCell(it) {
-  const lvl = rollIlvlOf(it);
+/**
+ * The item level to show on a row, and to build the Wowhead card from.
+ *
+ * It has to be the level the *score* beside it was simmed at, because those two numbers are read as
+ * one sentence — "this item, at this level, is worth this much" — and Wowhead rolls an item's stats
+ * from the level we hand it. A 12.1 QE report scores the bonus roll as its "Upgraded Bonus Rolls"
+ * panel does, the payout taken to the top of its track, so a Heroic boss's +11,053 belongs to ilvl
+ * 334 and printing the payout's 318 next to it describes an item nobody is being offered.
+ *
+ * The row's figure rather than the item's own, so the fillers the report never evaluated sit at the
+ * same level as everything above them; a pool listing two item levels for one payout reads as a
+ * difference between the items, which it isn't. Where the report sims the drop instead — a
+ * Droptimizer, or any QE report from before 12.1 — nothing has been taken to the top of a track and
+ * the payout is still the honest number; see `promoNote` for what the scores mean there.
+ */
+function shownIlvl(b, r, it) {
+  if (rollScored(b) && r.scoreIlvl) return r.scoreIlvl;
+  return payoutIlvlOf(it);
+}
+
+/**
+ * The item level, with what it is on the hover — three states, because up to three levels are in
+ * play at once: what the boss drops, what a roll hands over, and what the score was simmed at.
+ */
+function ilvlCell(b, r, it) {
+  const lvl = shownIlvl(b, r, it),
+    pays = payoutIlvlOf(it);
   if (!lvl) return "";
-  if (it.lvl && lvl !== it.lvl) {
+  if (pays && lvl !== pays) {
+    const step = r.reward?.label ? ` (${r.reward.label})` : "";
+    // Both, because both are real and neither is the other's footnote: the game hands you `pays`,
+    // and the score in the next cell is worth `lvl`. Hiding the payout on a hover would make the
+    // row claim the roll pays a fully-upgraded item, which is the mirror of the bug this fixes —
+    // and a hover is not something a phone has.
     return html`<span
       class="promoted"
-      title="Drops at ilvl ${it.lvl}, a bonus roll pays out at ilvl ${lvl}"
+      title="A roll here hands it over at ilvl ${pays}${step}; the score beside it is that item taken to the top of its track with crests spent, ilvl ${lvl} — your report's Upgraded Bonus Rolls value."
+      ><span class="pays">${pays}</span
+      ><span class="to" aria-hidden="true">→</span>${lvl}</span
+    >`;
+  }
+  if (it.lvl && lvl !== it.lvl) {
+    const scored =
+      it.scoreLvl && it.scoreLvl !== lvl
+        ? `, and your report scored it at ilvl ${it.scoreLvl}`
+        : "";
+    return html`<span
+      class="promoted"
+      title="Drops at ilvl ${it.lvl}, a bonus roll pays out at ilvl ${lvl}${scored}"
       >${lvl}</span
     >`;
   }
@@ -1591,7 +1667,11 @@ function haveBadge(it) {
   const why = it.dupe
     ? "You already have this at ilvl " +
       it.ownedIlvl +
-      ", so a roll here would just dupe it"
+      (it.rollIlvl
+        ? "; a roll here hands it over at ilvl " +
+          it.rollIlvl +
+          ", so it would just dupe it"
+        : ", so a roll here would just dupe it")
     : it.rollIlvl
       ? "You have this at ilvl " +
         it.ownedIlvl +
@@ -1606,8 +1686,8 @@ function haveBadge(it) {
   >`;
 }
 
-function itemRow(b, it) {
-  const lvl = rollIlvlOf(it);
+function itemRow(b, r, it) {
+  const lvl = shownIlvl(b, r, it);
   if (it.elig === false) {
     return html`<div class="item blocked" data-id="${it.id}">
       <span
@@ -1621,7 +1701,7 @@ function itemRow(b, it) {
           >${it.why || "not for this spec"}</span
         >
       </div>
-      <div class="ilvl">${ilvlCell(it)}</div>
+      <div class="ilvl">${ilvlCell(b, r, it)}</div>
       <div class="iscore tnum">—</div>
     </div>`;
   }
@@ -1652,7 +1732,7 @@ function itemRow(b, it) {
         it.vr && html`<span class="vr">very rare</span>`
       }${exclusive(it)}${haveBadge(it)}
     </div>
-    <div class="ilvl">${ilvlCell(it)}</div>
+    <div class="ilvl">${ilvlCell(b, r, it)}</div>
     <div class="iscore tnum">${it.score > 0 ? `+${dv(b, it.score)}` : "—"}</div>
   </div>`;
 }
