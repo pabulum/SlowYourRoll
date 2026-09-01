@@ -1569,8 +1569,9 @@ img.icon,
 }
 /* Where the row carries both: the payout the roll hands over, then the level its score is for. The
    payout is stated rather than emphasised — the second number is the one the score and the Wowhead
-   card agree with, so it keeps the cell's colour and the first steps back to the column's own. */
-.ilvl .pays {
+   card agree with, so it keeps the cell's colour and the first steps back to the column's own.
+   Not `.pays`, which is the card-head chip: the two say the same thing and are not the same object. */
+.ilvl .from {
   color: var(--faint);
 }
 .ilvl .to {

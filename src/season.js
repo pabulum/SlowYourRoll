@@ -314,7 +314,7 @@ export const SEASONS = {
       badge: "Venomcursed 9/6",
       // What is true of these bosses at every difficulty is the cantrips, not the item level: 9/6 is
       // the Mythic payout alone, and it's the Heroic roll that guides actually recommend week to week.
-      badgeAlt: "cantrip items",
+      badgeAlt: "Cantrip items",
       ilvl: 344,
       note:
         "Its Mythic items are 9/6 (ilvl 344) with cantrip effects, a tier above anything else in " +

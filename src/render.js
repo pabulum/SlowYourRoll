@@ -1643,7 +1643,7 @@ function ilvlCell(b, r, it) {
     return html`<span
       class="promoted"
       title="A roll here hands it over at ilvl ${pays}${step}; the score beside it is that item taken to the top of its track with crests spent, ilvl ${lvl} — your report's Upgraded Bonus Rolls value."
-      ><span class="pays">${pays}</span
+      ><span class="from">${pays}</span
       ><span class="to" aria-hidden="true">→</span>${lvl}</span
     >`;
   }

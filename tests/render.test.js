@@ -388,7 +388,7 @@ test("a scored row shows the item level its score was simmed at, not the one the
   assert.ok(scored, "the bonus row's value is the one on the card");
   // Both numbers, payout first: the roll hands over 318 and the score beside it is worth 334.
   assert.equal(words(scored.querySelector(".ilvl")), "318→334");
-  assert.equal(words(scored.querySelector(".ilvl .pays")), "318");
+  assert.equal(words(scored.querySelector(".ilvl .from")), "318");
   assert.match(
     scored.querySelector(".ilvl .promoted").getAttribute("title"),
     /hands it over at ilvl 318 \(Myth 1\/6\)/,
@@ -464,7 +464,7 @@ test("on Heroic the same boss is badged for what it still gives you, not for ilv
   const note = words(card.querySelector(".special-note"));
   assert.match(note, /rolling here on Heroic is the week-to-week play/);
   assert.match(note, /ilvl 344/, "banking for the Mythic kill is still said");
-  assert.match(note, /^cantrip items\./);
+  assert.match(note, /^Cantrip items\./, "a sentence, so it opens like one");
 });
 
 // One of the two places this file asserts wording, and for the same reason as the escaping tests:
