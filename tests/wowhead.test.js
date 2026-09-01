@@ -1,7 +1,7 @@
 // Links out to Wowhead, which its widget turns into tooltips.
 
-import { test } from "node:test";
 import assert from "node:assert/strict";
+import { test } from "node:test";
 import { iconHTML, nameHTML } from "../src/wowhead.js";
 
 // The renderers return `Html` fragments, not strings; `String()` is what setHTML does with them.

@@ -1,10 +1,10 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
+import { test } from "node:test";
 import {
-  SEASONS,
   rewardOf,
-  tokenVaultWindow,
+  SEASONS,
   seasonWeek,
+  tokenVaultWindow,
   tokenWeekNow,
 } from "../src/season.js";
 
@@ -146,7 +146,7 @@ test("the M+ ladder climbs, so the quoted figure is a ceiling and not a middle",
   assert.ok(rungs.length > 1, "a one-rung ladder isn't one");
   rungs.forEach((k, i) => {
     assert.ok(k.at, "every rung says which keys pay it");
-    if (i) assert.ok(k.ilvl > rungs[i - 1].ilvl, "rung " + i + " is no higher");
+    if (i) assert.ok(k.ilvl > rungs[i - 1].ilvl, `rung ${i} is no higher`);
   });
 });
 
@@ -162,7 +162,7 @@ test("a named ladder rung agrees with the difficulty that pays the same item lev
     byIlvl[r.ilvl] = r.label;
   });
   named.forEach((k) => {
-    assert.equal(k.label, byIlvl[k.ilvl], k.at + " is labelled off the table");
+    assert.equal(k.label, byIlvl[k.ilvl], `${k.at} is labelled off the table`);
   });
 });
 
@@ -171,14 +171,14 @@ test("a season that buys the token with a vault slot says for how long", () => {
     const s = SEASONS[n];
     const win = tokenVaultWindow(s);
     if (!s.tokenFromVault) {
-      assert.equal(win, null, "Season " + n + " has no trade to describe");
+      assert.equal(win, null, `Season ${n} has no trade to describe`);
       return;
     }
     assert.ok(
       s.tokenVaultWeeks > 0,
-      "Season " + n + " needs the week the trade stops",
+      `Season ${n} needs the week the trade stops`,
     );
-    assert.ok(win.from >= 1 && win.from <= win.to, "Season " + n + " window");
+    assert.ok(win.from >= 1 && win.from <= win.to, `Season ${n} window`);
   });
 });
 
@@ -249,10 +249,10 @@ test("every reward carries a label and an item level slot", () => {
     if (!table) return;
     Object.keys(table).forEach((d) => {
       const r = table[d];
-      assert.ok(r.label, "Season " + n + " " + d + " needs a display label");
+      assert.ok(r.label, `Season ${n} ${d} needs a display label`);
       assert.ok(
         r.ilvl === null || typeof r.ilvl === "number",
-        "Season " + n + " " + d + " ilvl",
+        `Season ${n} ${d} ilvl`,
       );
     });
   });

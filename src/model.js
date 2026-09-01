@@ -4,14 +4,14 @@
 //   EV = ( Σ score of items you still "want" ÷ items still in the pool ) ÷ token cost
 
 import {
+  DIFF_ORDER,
   QE_DATA,
   QE_RAID_DIFFICULTIES,
   QE_RAID_DIFFICULTIES_LEGACY,
-  DIFF_ORDER,
 } from "./data.js";
-import { SEASON, rollReward, lastReset } from "./season.js";
+import { canLoot, classSpecs, specId, specIdInClass } from "./loot.js";
+import { lastReset, rollReward, SEASON } from "./season.js";
 import { state } from "./store.js";
-import { canLoot, specId, classSpecs, specIdInClass } from "./loot.js";
 
 /**
  * Resolve an (instId, encId) pair to a display name and type. instId === -1 is a M+ dungeon.
@@ -47,7 +47,7 @@ export function resolve(instId, encId) {
       };
     return {
       type: "dungeon",
-      name: "Unknown dungeon " + encId,
+      name: `Unknown dungeon ${encId}`,
       current: true,
       unknown: true,
     };
@@ -64,8 +64,8 @@ export function resolve(instId, encId) {
     if ((QE_DATA.ignoredInstances || []).includes(String(instId))) return null;
     return {
       type: "raid",
-      name: "Unknown boss " + encId,
-      instName: "Unknown raid " + instId,
+      name: `Unknown boss ${encId}`,
+      instName: `Unknown raid ${instId}`,
       current: true,
       unknown: true,
     };
@@ -90,7 +90,7 @@ export function resolve(instId, encId) {
 function srcList(b, r) {
   return b.source === "droptimizer"
     ? [[r.inst, r.enc, isVR(r.item, r.inst, r.enc)]]
-    : (QE_DATA.items[r.item] || {}).s || [];
+    : QE_DATA.items[r.item]?.s || [];
 }
 
 /**
@@ -189,7 +189,7 @@ function diffRank(d) {
   d = String(d).toLowerCase();
   if (DIFF_ORDER[d] != null) return DIFF_ORDER[d];
   const n = parseInt(d, 10);
-  return isNaN(n) ? 0 : n;
+  return Number.isNaN(n) ? 0 : n;
 }
 
 /** Distinct raid difficulties present for the given board's current raids, best-first. */
@@ -232,7 +232,7 @@ export function diffLabel(b, d) {
   const slider = qeIsModern(b)
     ? QE_RAID_DIFFICULTIES
     : QE_RAID_DIFFICULTIES_LEGACY;
-  return slider[Number(d)] || "Diff " + d;
+  return slider[Number(d)] || `Diff ${d}`;
 }
 
 /**
@@ -397,10 +397,9 @@ export function isDupe(ownedIlvl, rollIlvl) {
 export function finalBosses(instId, n) {
   const r = QE_DATA.raids[String(instId)];
   if (!r || !n) return [];
-  const order =
-    r.order && r.order.length
-      ? r.order
-      : Object.keys(r.bosses).sort((a, c) => Number(a) - Number(c));
+  const order = r.order?.length
+    ? r.order
+    : Object.keys(r.bosses).sort((a, c) => Number(a) - Number(c));
   return order.slice(-n);
 }
 
@@ -432,8 +431,9 @@ function itemsAt(key) {
     bySource = {};
     Object.keys(QE_DATA.items).forEach((id) => {
       QE_DATA.items[id].s.forEach((s) => {
-        const k = s[0] + ":" + s[1];
-        (bySource[k] || (bySource[k] = [])).push(id);
+        const k = `${s[0]}:${s[1]}`;
+        if (!bySource[k]) bySource[k] = [];
+        bySource[k].push(id);
       });
     });
   }
@@ -470,7 +470,7 @@ function poolItem(id, meta, sp, read) {
       : null;
   return {
     id: Number(id),
-    name: meta.n || "Item " + id,
+    name: meta.n || `Item ${id}`,
     q: meta.q || 3,
     score: read.score,
     lvl: read.lvl,
@@ -479,7 +479,7 @@ function poolItem(id, meta, sp, read) {
     elig: lt.ok,
     why: lt.why || "",
     swap: lt.swap || null,
-    gives: gives && gives.length ? gives : null,
+    gives: gives?.length ? gives : null,
     specs: eligibleSpecs(meta, sp),
   };
 }
@@ -582,17 +582,16 @@ function collectScored(b, sp, diffs, selDiff, unknown) {
       if (!info) return;
       if (!state.showAll && !info.current) return;
       if (info.type === "raid" && diffs.length && rd !== selDiff) return;
-      const key = instId + ":" + encId;
+      const key = `${instId}:${encId}`;
       // Only count unknowns that survive the filters — an unidentified source the user can't
       // see isn't a staleness signal worth interrupting them over.
       if (info.unknown)
         unknown[key] =
           info.type === "dungeon"
             ? info.name
-            : info.instName + " · " + info.name;
-      const g =
-        groups[key] ||
-        (groups[key] = {
+            : `${info.instName} · ${info.name}`;
+      if (!groups[key])
+        groups[key] = {
           key,
           type: info.type,
           name: info.name,
@@ -600,7 +599,8 @@ function collectScored(b, sp, diffs, selDiff, unknown) {
           rows: {},
           items: {},
           special: info.type === "raid" && isSpecial(instId, encId),
-        });
+        };
+      const g = groups[key];
       // A dungeon row's difficulty is the key level the report was run at, which is the one thing
       // that decides what a roll there pays. Only a 12.1 QE report says it: before that the field
       // indexed a different list entirely, and a Droptimizer never carried a key at all.
@@ -633,7 +633,7 @@ function fillTable(groups, sp) {
     itemsAt(key).forEach((id) => {
       if (g.items[id]) return;
       const meta = QE_DATA.items[id];
-      const src = meta.s.find((x) => x[0] + ":" + x[1] === key) || [];
+      const src = meta.s.find((x) => `${x[0]}:${x[1]}` === key) || [];
       g.items[id] = poolItem(id, meta, sp, { score: 0, lvl: 0, vr: src[2] });
     });
   });
@@ -660,7 +660,7 @@ function applyToken(it, idx) {
     if (r && (!best || r.score > best.r.score)) best = { id, r };
   });
   it.givesId = best && best.r.score > 0 ? best.id : it.gives[0];
-  it.givesName = (QE_DATA.items[it.givesId] || {}).n || "";
+  it.givesName = QE_DATA.items[it.givesId]?.n || "";
   if (best && best.r.score > 0) {
     it.score = best.r.score;
     it.scoreLvl = best.r.scoreLvl;
@@ -683,7 +683,7 @@ function priceGroup(b, g, selDiff, ownedMap, sp, takeId) {
       // Left at zero it would sit in the pool as filler — and on a tier boss it is routinely the
       // best thing on the table, so the encounter would be understated by its single largest item.
       if (it.gives) applyToken(it, idx);
-      const ov = b.overlay[g.key + ":" + it.id];
+      const ov = b.overlay[`${g.key}:${it.id}`];
       it.ownedIlvl = ownedMap[it.id] != null ? ownedMap[it.id] : null;
       // A copy you already hold only makes the roll redundant if it's at least as good as what the
       // roll would hand you — and in a season that promotes rewards to a vault track, that is not
@@ -743,7 +743,7 @@ function priceGroup(b, g, selDiff, ownedMap, sp, takeId) {
  * @returns {Record<number, number>}
  */
 function ownedGear(b) {
-  const fromSimc = (state.simc[b.key] || {}).owned || {};
+  const fromSimc = state.simc[b.key]?.owned || {};
   if (!b.equipped) return fromSimc;
   const out = { ...b.equipped };
   Object.keys(fromSimc).forEach((id) => {
@@ -780,7 +780,7 @@ function ownedGear(b) {
  * @returns {number|null} Crests saved, or null where the payout has no step table to reason over.
  */
 export function crestSavingAt(reward, mark) {
-  if (!reward || !reward.crestSteps || !reward.crestPerStep) return null;
+  if (!reward?.crestSteps || !reward.crestPerStep) return null;
   if (reward.crestFrom == null) return null;
   const floor = Math.max(
     mark == null ? -Infinity : mark,
@@ -813,8 +813,8 @@ export function crestSavingAt(reward, mark) {
  *   step table or nothing to save.
  */
 export function crestSavingRange(b, reward) {
-  if (!reward || !reward.crests) return null;
-  const marks = (state.simc[b.key] || {}).watermarks;
+  if (!reward?.crests) return null;
+  const marks = state.simc[b.key]?.watermarks;
   if (!Array.isArray(marks) || !marks.length) return null;
   const each = marks.map((m) => crestSavingAt(reward, m));
   if (each.some((v) => v == null)) return null;
@@ -851,7 +851,7 @@ export function activeLootSpec(b) {
  * @returns {string|null}
  */
 export function simcLootSpec(b) {
-  const raw = (state.simc[b.key] || {}).lootSpec;
+  const raw = state.simc[b.key]?.lootSpec;
   return raw ? specIdInClass(raw, specId(b.spec)) : null;
 }
 
@@ -926,7 +926,7 @@ export function buildGroups(b) {
  */
 export function vaultStatus(b, now) {
   const simc = state.simc[b.key];
-  if (!simc || !simc.vault || !simc.vault.length) return null;
+  if (!simc?.vault?.length) return null;
   const reset = lastReset(SEASON, now);
   const t = simc.at ? Date.parse(simc.at) : NaN;
   const at = Number.isFinite(t) ? new Date(t) : null;
@@ -944,16 +944,16 @@ export function vaultStatus(b, now) {
  */
 export function vaultTakeOf(b, now) {
   const st = vaultStatus(b, now);
-  return st && st.stale ? null : b.vaultTake;
+  return st?.stale ? null : b.vaultTake;
 }
 
 export function vaultChoice(b) {
   const simc = state.simc[b.key];
-  if (!simc || !simc.vault || !simc.vault.length) return null;
+  if (!simc?.vault?.length) return null;
   // An expired vault has no trade in it: the options are gone from the game, so there is nothing to
   // weigh a roll against. The panel says so rather than the app quietly ranking last week's items.
   const st = vaultStatus(b);
-  if (st && st.stale) return null;
+  if (st?.stale) return null;
 
   // Each item's value in the report, and the item level that value was simmed at — which is not the
   // vault's copy of it. The two disagree routinely, and in both directions: a report from before
@@ -967,10 +967,10 @@ export function vaultChoice(b) {
   });
   const options = simc.vault.map((v) => ({
     id: v.id,
-    name: (QE_DATA.items[v.id] || {}).n || v.name,
+    name: QE_DATA.items[v.id]?.n || v.name,
     ilvl: v.ilvl,
-    score: (scored[v.id] || {}).score || 0,
-    scoredIlvl: (scored[v.id] || {}).scoreLvl || 0,
+    score: scored[v.id]?.score || 0,
+    scoredIlvl: scored[v.id]?.scoreLvl || 0,
     // Distinguished from a genuine zero: an item the report never evaluated has no value we can
     // quote, and saying "worth 0" about it would be a claim we haven't earned.
     scored: scored[v.id] != null,

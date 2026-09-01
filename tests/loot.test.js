@@ -6,18 +6,18 @@
 // Light of the Cosmic Crescendo (the healer one). Both were counted in the pool, halving the
 // encounter's EV against reality. Blizzard's own spec list, via Raidbots, is what tells them apart.
 
-import { test } from "node:test";
 import assert from "node:assert/strict";
+import { test } from "node:test";
 import { QE_DATA } from "../src/data.js";
-import { state } from "../src/store.js";
 import {
   canLoot,
   isRollable,
   specId,
-  specInfo,
   specIdInClass,
+  specInfo,
 } from "../src/loot.js";
 import { buildGroups } from "../src/model.js";
+import { state } from "../src/store.js";
 
 const MISTWEAVER = "270";
 const CASTER_TRINKET = 249810; // Shadow of the Empyrean Requiem
@@ -109,7 +109,7 @@ test("armor that rolls either primary stat is lootable by every spec that takes 
     assert.equal(
       canLoot(QE_DATA.items[BRACERS], spec).ok,
       true,
-      specInfo(spec).n + " can win leather",
+      `${specInfo(spec).n} can win leather`,
     );
   }
 });
@@ -337,7 +337,7 @@ test("Season 2's four non-loot entries are still classified that way", () => {
   Object.keys(named).forEach((id) => {
     const m = QE_DATA.items[id];
     if (!m) return; // a later season may not ship them
-    assert.equal(isRollable(m), false, named[id] + " is not roll loot");
+    assert.equal(isRollable(m), false, `${named[id]} is not roll loot`);
   });
   // Tier tokens sit right beside them in the same raid and must survive.
   const token = QE_DATA.items["270927"]; // Venomcured Icon, off Vashnikt

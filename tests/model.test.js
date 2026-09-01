@@ -1,31 +1,31 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
+import { test } from "node:test";
 import { QE_DATA } from "../src/data.js";
-import { SEASON, rollReward, lastReset } from "../src/season.js";
-import { state } from "../src/store.js";
 import { specId } from "../src/loot.js";
 import {
-  resolve,
+  activeLootSpec,
+  baselineOf,
   buildGroups,
-  rollIlvlFor,
+  crestSavingAt,
+  diffKey,
+  diffLabel,
+  dv,
+  finalBosses,
+  fmt,
+  hasPct,
   isDupe,
+  qeIsModern,
+  resolve,
+  rollIlvlFor,
+  rollScored,
+  simcLootSpec,
+  unitOf,
   vaultChoice,
   vaultStatus,
   vaultTakeOf,
-  finalBosses,
-  baselineOf,
-  fmt,
-  hasPct,
-  unitOf,
-  dv,
-  diffLabel,
-  diffKey,
-  activeLootSpec,
-  simcLootSpec,
-  qeIsModern,
-  rollScored,
-  crestSavingAt,
 } from "../src/model.js";
+import { lastReset, rollReward, SEASON } from "../src/season.js";
+import { state } from "../src/store.js";
 
 // A current raid + one of its bosses, pulled from the live database so the test
 // adapts to data changes rather than hard-coding ids.
@@ -113,7 +113,7 @@ test("a Rolled item leaves the pool and stops counting toward EV", () => {
   state.showAll = false;
   state.simc = {};
   const b = makeBoard();
-  b.overlay[RAID_ID + ":" + ENC_ID + ":900002"] = "rolled"; // remove the 20-value item
+  b.overlay[`${RAID_ID}:${ENC_ID}:900002`] = "rolled"; // remove the 20-value item
   const row = buildGroups(b).rows[0];
   assert.equal(row.num, 10);
   assert.equal(row.remaining, POOL - 1);
@@ -124,7 +124,7 @@ test("a per-encounter override beats the season's token cost", () => {
   state.showAll = false;
   state.simc = {};
   const b = makeBoard();
-  b.tokenOverride[RAID_ID + ":" + ENC_ID] = 4;
+  b.tokenOverride[`${RAID_ID}:${ENC_ID}`] = 4;
   const row = buildGroups(b).rows[0];
   assert.equal(row.cost, 4);
   assert.equal(row.ev, 30 / POOL / 4);
@@ -193,7 +193,7 @@ test("the final bosses of a raid are the tail of its pull order", () => {
 // naming the raid rather than only the general rule above.
 test("pull order and encounter-id order disagree, and pull order wins", () => {
   const abyss = QE_DATA.raids["1320"];
-  if (!abyss || !abyss.order) return; // a later season may not ship this raid
+  if (!abyss?.order) return; // a later season may not ship this raid
   const byId = Object.keys(abyss.bosses).sort((a, c) => Number(a) - Number(c));
   assert.notDeepEqual(abyss.order.slice(-2), byId.slice(-2));
   assert.deepEqual(
@@ -212,7 +212,7 @@ test("asking for no final bosses, or for an unknown raid, names none", () => {
 // raid is that boss — so without the gate the world boss wore the Venomcursed badge.
 test("only the season's tier raid carries the end-of-raid badge", () => {
   const sp = SEASON.special;
-  if (!sp || !sp.raid) return; // a season with one raid needs no gate
+  if (!sp?.raid) return; // a season with one raid needs no gate
   const others = QE_DATA.currentRaids.filter((id) => id !== String(sp.raid));
   assert.ok(others.length, "Season 2 ranks more than one raid");
   for (const id of others) {
@@ -220,10 +220,10 @@ test("only the season's tier raid carries the end-of-raid badge", () => {
     for (const enc of bosses) {
       assert.equal(
         buildGroups(makeBoard()).rows.some(
-          (r) => r.g.key === id + ":" + enc && r.g.special,
+          (r) => r.g.key === `${id}:${enc}` && r.g.special,
         ),
         false,
-        QE_DATA.raids[id].name + " is not the tier raid",
+        `${QE_DATA.raids[id].name} is not the tier raid`,
       );
     }
   }
@@ -249,7 +249,7 @@ function withVault(ids) {
     testkey: {
       owned: {},
       at: new Date().toISOString(),
-      vault: ids.map((id) => ({ name: "V" + id, ilvl: 639, id })),
+      vault: ids.map((id) => ({ name: `V${id}`, ilvl: 639, id })),
     },
   };
 }
@@ -403,7 +403,7 @@ test("an item already out of the running drags nothing further", () => {
   state.showAll = false;
   withVault([900002]);
   const b = makeBoard();
-  b.overlay[RAID_ID + ":" + ENC_ID + ":900002"] = "rolled"; // gone from the pool already
+  b.overlay[`${RAID_ID}:${ENC_ID}:900002`] = "rolled"; // gone from the pool already
   assert.equal(vaultChoice(b).drag, null);
 });
 
@@ -451,7 +451,7 @@ test("a filler item's payout follows the season, not a drop level it hasn't got"
 
   const reward = rollReward("raid", "mythic");
   assert.equal(it.rollIlvl, reward ? reward.ilvl : null);
-  assert.equal(it.dupe, Boolean(reward && reward.ilvl));
+  assert.equal(it.dupe, Boolean(reward?.ilvl));
 });
 
 /* ---------- QE reports: which field the value actually lives in ----------
@@ -914,7 +914,7 @@ function makeTokenBoard(score) {
 
 /** The pooled token for Vashnikt, or null when this season doesn't ship it. */
 function pooledToken(b) {
-  const row = buildGroups(b).rows.find((r) => r.g.key === "1320:" + TOKEN.enc);
+  const row = buildGroups(b).rows.find((r) => r.g.key === `1320:${TOKEN.enc}`);
   return row ? row.items.find((i) => i.id === TOKEN.id) || null : null;
 }
 
@@ -938,7 +938,7 @@ test("the token's value reaches the encounter's EV", (t) => {
   if (!QE_DATA.items[TOKEN.id])
     return t.skip("a later season doesn't ship this token");
   const rowOf = (b) =>
-    buildGroups(b).rows.find((r) => r.g.key === "1320:" + TOKEN.enc);
+    buildGroups(b).rows.find((r) => r.g.key === `1320:${TOKEN.enc}`);
   const scored = rowOf(makeTokenBoard(4904));
   const zero = rowOf(makeTokenBoard(0));
   assert.equal(
@@ -964,7 +964,7 @@ test("the piece itself stays out of the pool — only the token drops", (t) => {
   if (!QE_DATA.items[TOKEN.piece])
     return t.skip("a later season doesn't ship this set");
   const row = buildGroups(makeTokenBoard(4904)).rows.find(
-    (r) => r.g.key === "1320:" + TOKEN.enc,
+    (r) => r.g.key === `1320:${TOKEN.enc}`,
   );
   assert.equal(
     row.items.filter((i) => i.id === TOKEN.piece).length,
@@ -995,12 +995,12 @@ test("a watermark under the overlap still prices no more than the maximum", () =
   assert.equal(crestSavingAt(m, 318), 80); // the Mythic drop itself
   assert.equal(crestSavingAt(m, 321), 80); // Hero 6/6 = Myth 2/6, the clamp
   const marks = [0, 100, 250, 308, 311, 315, 318, 321];
-  marks.forEach((k) =>
+  marks.forEach((k) => {
     assert.ok(
       crestSavingAt(m, k) <= m.crests,
-      "mark " + k + " must not exceed the quoted maximum",
-    ),
-  );
+      `mark ${k} must not exceed the quoted maximum`,
+    );
+  });
 });
 
 test("the saving falls a step at a time up the track, to nothing at the top", () => {

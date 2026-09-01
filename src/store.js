@@ -9,13 +9,13 @@ const KEY = "slowyourroll.v2";
 function loadState() {
   try {
     const p = JSON.parse(localStorage.getItem(KEY));
-    if (p && p.boards) {
+    if (p?.boards) {
       if (!p.simc) p.simc = {};
       if (!p.boards.some((b) => b.id === p.activeId))
-        p.activeId = (p.boards[0] || {}).id;
+        p.activeId = p.boards[0]?.id;
       return p;
     }
-  } catch (e) {
+  } catch {
     /* fall through to a fresh state */
   }
   return { boards: [], activeId: null, showAll: false, simc: {} };
@@ -27,7 +27,7 @@ export let state = loadState();
 /** Replace the whole state object (used when importing a backup file). */
 export function replaceState(next) {
   if (!next.boards.some((b) => b.id === next.activeId))
-    next.activeId = (next.boards[0] || {}).id;
+    next.activeId = next.boards[0]?.id;
   state = next;
 }
 
@@ -36,7 +36,7 @@ let storageOK = true;
 export function save() {
   try {
     localStorage.setItem(KEY, JSON.stringify(state));
-  } catch (e) {
+  } catch {
     if (storageOK) {
       storageOK = false;
       toast("Browser storage is blocked. Use Export to keep a backup");
@@ -66,5 +66,5 @@ export function keyOf(name, realm, spec) {
 export function uid() {
   return crypto.randomUUID
     ? crypto.randomUUID()
-    : "b" + Date.now() + Math.random().toString(36).slice(2);
+    : `b${Date.now()}${Math.random().toString(36).slice(2)}`;
 }

@@ -8,9 +8,9 @@
 import { loadQEData } from "./data.js";
 import { setHTML } from "./dom.js";
 import { html } from "./html.js";
-import { initUI } from "./ui.js";
 import { render, renderSeason } from "./render.js";
 import { loadSharedReport } from "./reports.js";
+import { initUI } from "./ui.js";
 
 renderSeason();
 initUI();

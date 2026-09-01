@@ -17,8 +17,8 @@
 // When a season turns over these fixtures stop describing current content and the test skips itself
 // rather than failing, since it has nothing true left to say. Re-read the journal and replace them.
 
-import { test } from "node:test";
 import assert from "node:assert/strict";
+import { test } from "node:test";
 import { QE_DATA } from "../src/data.js";
 import { canLoot, isRollable, specId } from "../src/loot.js";
 
@@ -154,12 +154,12 @@ function sameSet(mine, want, where) {
   assert.deepEqual(
     mine.filter((n) => !wn.has(norm(n))).sort(),
     [],
-    where + ": pooled but not in the journal",
+    `${where}: pooled but not in the journal`,
   );
   assert.deepEqual(
     want.filter((n) => !mn.has(norm(n))).sort(),
     [],
-    where + ": in the journal but not pooled",
+    `${where}: in the journal but not pooled`,
   );
 }
 

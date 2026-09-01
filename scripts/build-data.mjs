@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 // Regenerates data/qe-data.json from a local QuestionablyEpic checkout.
 //
 //   npm run data                          # uses $QE_PATH, else ~/Projects/QuestionablyEpic
@@ -18,12 +19,12 @@
 // Season rollover is entirely a CONSTANTS.ts change upstream: when QE flips currentRaidIDs /
 // currentDungeonIDs to Season 2, rerun this and commit the result. Nothing here is hand-maintained.
 
+import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { stripTypeScriptTypes } from "node:module";
-import { execFileSync } from "node:child_process";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = join(ROOT, "data/qe-data.json");
@@ -39,7 +40,7 @@ const QE = qeArg
 // --items=/--talents= (or $RAIDBOTS_ITEMS/$RAIDBOTS_TALENTS) can point at saved copies offline.
 const RB = "https://www.raidbots.com/static/data/live/";
 const flag = (name, env) => {
-  const a = argv.find((x) => x.startsWith("--" + name + "="));
+  const a = argv.find((x) => x.startsWith(`--${name}=`));
   return a ? a.slice(name.length + 3) : process.env[env] || null;
 };
 const ITEMS_FILE = flag("items", "RAIDBOTS_ITEMS");
@@ -63,7 +64,7 @@ const SOURCE = flag("source", "QE_SOURCE");
 function importSource(src) {
   const js = stripTypeScriptTypes(src, { mode: "strip" });
   return import(
-    "data:text/javascript;base64," + Buffer.from(js, "utf8").toString("base64")
+    `data:text/javascript;base64,${Buffer.from(js, "utf8").toString("base64")}`
   );
 }
 
@@ -90,7 +91,7 @@ function read(...rels) {
 /** Read a Raidbots JSON dump from disk if given a path, else download it. */
 async function raidbots(name, file) {
   if (file) return JSON.parse(readFileSync(file, "utf8"));
-  const res = await fetch(RB + name + ".json");
+  const res = await fetch(`${RB + name}.json`);
   if (!res.ok) {
     console.error(
       `Can't fetch ${RB}${name}.json (HTTP ${res.status}).\nSave a copy and pass --${name}=<path>.`,
@@ -166,7 +167,7 @@ for (const [id, inst] of Object.entries(encounterDB)) {
     .map(String)
     .filter((e) => e in inst.bosses);
   raids[id] = {
-    name: inst.name || instanceDB[id] || "Instance " + id,
+    name: inst.name || instanceDB[id] || `Instance ${id}`,
     bosses: { ...inst.bosses },
     ...(order.length ? { order } : {}),
   };
@@ -198,7 +199,7 @@ const SECONDARY = { 32: "c", 36: "h", 40: "v", 49: "m" };
 /** The set of primary stats an item can roll, as a code string ("ai"), or "" if it has none. */
 function statSet(rb) {
   const seen = {};
-  for (const s of (rb && rb.stats) || [])
+  for (const s of rb?.stats || [])
     for (const ch of PRIMARY[s.id] || "") seen[ch] = 1;
   return ["a", "s", "i"].filter((ch) => seen[ch]).join("");
 }
@@ -211,7 +212,8 @@ for (const it of rbItems) {
   const set = statSet(it);
   if (set.length !== 1) continue;
   for (const id of it.specs) {
-    const v = statVotes[id] || (statVotes[id] = {});
+    if (!statVotes[id]) statVotes[id] = {};
+    const v = statVotes[id];
     v[set] = (v[set] || 0) + 1;
   }
 }
@@ -246,7 +248,7 @@ const rbById = new Map(rbItems.map((x) => [x.id, x]));
 // spec table the app keys everything else on, so a name upstream spells differently resolves to
 // nothing rather than to the wrong spec — and `unnamedRestrictions` below reports it.
 const specByName = new Map(
-  Object.keys(specs).map((id) => [specs[id].n + " " + specs[id].c, Number(id)]),
+  Object.keys(specs).map((id) => [`${specs[id].n} ${specs[id].c}`, Number(id)]),
 );
 const unnamedRestrictions = new Set();
 
@@ -273,7 +275,7 @@ const NON_SPEC_RESTRICTIONS = new Set(["DPS or Tank Spec"]);
  * the reader can see.
  */
 function specsFromQE(qe) {
-  const cr = qe && qe.classRestriction;
+  const cr = qe?.classRestriction;
   if (!Array.isArray(cr) || !cr.length) return null;
   const ids = new Set();
   for (const name of cr) {
@@ -306,13 +308,12 @@ function annotate(e, rb, qe) {
   e.c = rb.itemClass;
   e.u = rb.itemSubClass;
   e.iv = rb.inventoryType;
-  if (rb.specs && rb.specs.length) e.p = rb.specs.slice().sort((a, b) => a - b);
+  if (rb.specs?.length) e.p = rb.specs.slice().sort((a, b) => a - b);
   else if (fromQE) e.p = fromQE;
   // What a tier token is a voucher for: the four class versions of one slot's tier piece. The token
   // is what the boss drops and what a roll can hand you, but every report scores the *piece*, so
   // without this link the pool holds the right item carrying none of its value. See `poolItem`.
-  if (rb.contains && rb.contains.length)
-    e.ct = rb.contains.slice().sort((a, b) => a - b);
+  if (rb.contains?.length) e.ct = rb.contains.slice().sort((a, b) => a - b);
   const st = statSet(rb);
   if (st) e.st = st;
   if (rb.icon) e.ic = rb.icon;
@@ -343,7 +344,7 @@ function annotate(e, rb, qe) {
  */
 const CATALYST = -100;
 const catalystOnly = (rb) =>
-  rb && rb.sources && rb.sources.length
+  rb?.sources?.length
     ? rb.sources.every((x) => x.instanceId === CATALYST)
     : false;
 
@@ -351,7 +352,7 @@ const items = {};
 let annotated = 0;
 let decatalysed = 0;
 for (const it of itemDB) {
-  if (!it.sources || !it.sources.length) continue;
+  if (!it.sources?.length) continue;
   const rbSrc = rbById.get(it.id);
   if (catalystOnly(rbSrc)) {
     if (it.sources.some((x) => x.encounterId > 0)) decatalysed++;
@@ -408,7 +409,7 @@ for (const it of Object.values(items)) {
     } else if (instId > 0 && (encId === 999 || encId < 0)) {
       // A real raid, but not an encounter: 999 is trash/catalyst, negatives are world drops filed
       // against the tier they match. src/model.js drops both; report them so that stays deliberate.
-      sentinelEncounters.add(instId + "/" + encId);
+      sentinelEncounters.add(`${instId}/${encId}`);
     }
   }
 }
@@ -454,19 +455,18 @@ if (!SOURCE) {
 // changes in an unreadable diff. This file is regenerated at a season boundary and reviewed by
 // eyeballing that diff, so a reviewable diff is worth the bytes. It costs ~280KB uncompressed and
 // close to nothing over the wire: it is whitespace, and it is served gzipped.
-const out =
-  JSON.stringify(
-    {
-      _meta: {
-        note: "Generated — do not hand-edit. Regenerate with `npm run data` (scripts/build-data.mjs). Shape: src/types.js QEData.",
-        source: `QuestionablyEpic @ ${qeCommit}`,
-        qeSeasonId: constants.seasonID,
-      },
-      ...data,
+const out = `${JSON.stringify(
+  {
+    _meta: {
+      note: "Generated — do not hand-edit. Regenerate with `npm run data` (scripts/build-data.mjs). Shape: src/types.js QEData.",
+      source: `QuestionablyEpic @ ${qeCommit}`,
+      qeSeasonId: constants.seasonID,
     },
-    null,
-    2,
-  ) + "\n";
+    ...data,
+  },
+  null,
+  2,
+)}\n`;
 
 const counts =
   `${Object.keys(raids).length} instances · ${Object.keys(dungeons).length} dungeons · ` +
@@ -507,7 +507,7 @@ if (ignoredInstances.length) {
 }
 if (sentinelEncounters.size) {
   const named = [...sentinelEncounters]
-    .map((k) => k + ` (${raids[k.split("/")[0]].name})`)
+    .map((k) => `${k} (${raids[k.split("/")[0]].name})`)
     .join(", ");
   console.log(
     `Non-encounter raid sources — trash/catalyst and world drops, filtered at runtime: ${named}`,
@@ -521,10 +521,10 @@ if (unnamedDungeons.length) {
   );
 }
 console.log(
-  `Current raids: ${data.currentRaids.map((id) => id + " " + (raids[id] ? raids[id].name : "?")).join(", ")}`,
+  `Current raids: ${data.currentRaids.map((id) => `${id} ${raids[id] ? raids[id].name : "?"}`).join(", ")}`,
 );
 console.log(
-  `Current dungeons: ${data.currentDungeons.map((id) => id + " " + (dungeons[id] || "?")).join(", ")}`,
+  `Current dungeons: ${data.currentDungeons.map((id) => `${id} ${dungeons[id] || "?"}`).join(", ")}`,
 );
 
 if (CHECK) {

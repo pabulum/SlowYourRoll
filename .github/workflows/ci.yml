@@ -17,8 +17,8 @@ jobs:
         # Floor (package.json engines) / stable / early warning. The floor catches
         # "works on my newer Node"; "current" covers what local dev actually runs.
         # "lts/*" picks up each new LTS on its own — including 26, once it lands.
-        # 20.19 is where the dev toolchain bottoms out: eslint declares it, and
-        # TypeScript 7's extensionless ESM `bin/tsc` won't load on anything older.
+        # 20.19 is where the dev toolchain bottoms out: TypeScript 7's
+        # extensionless ESM `bin/tsc` won't load on anything older.
         node: ["20.19", "lts/*", "current"]
     # "current" is advisory: upstream Node churn shouldn't redden a PR or, since this
     # workflow gates pages.yml, block a deploy for a reason that isn't our code.

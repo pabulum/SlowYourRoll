@@ -6,15 +6,15 @@
 // element in the markup that nothing renders into (dead HTML, or a rename half-done). Both are
 // cheap to catch here and expensive to notice in a browser.
 
-import { test } from "node:test";
 import assert from "node:assert/strict";
+import { test } from "node:test";
 import {
-  IDS,
   $,
-  setHTML,
-  setText,
-  setShown,
+  IDS,
   setDisplayed,
+  setHTML,
+  setShown,
+  setText,
 } from "../src/dom.js";
 import { html } from "../src/html.js";
 import { loadPage } from "./page.js";

@@ -8,40 +8,40 @@
 // Elements are addressed through src/dom.js rather than by raw id, so a rename in index.html is a
 // type error rather than a null.
 
-import { QE_DATA, loadQEData } from "./data.js";
+import { CLASS_COLOR } from "./classes.js";
+import { loadQEData, QE_DATA } from "./data.js";
+import { $, setDisplayed, setHTML, setShown, setText } from "./dom.js";
+import { html, join } from "./html.js";
+import { classSpecs, specId, specInfo } from "./loot.js";
 import {
+  activeLootSpec,
+  buildGroups,
+  crestSavingRange,
+  diffKey,
+  diffLabel,
+  dv,
+  hasPct,
+  priceWith,
+  rawUnitOf,
+  resolve,
+  rollScored,
+  simcLootSpec,
+  unitOf,
+  vaultChoice,
+  vaultStatus,
+} from "./model.js";
+import {
+  REWARD_SEASON,
+  REWARDS_LIVE,
+  rewardOf,
   SEASON,
   SEASON_LABEL,
   seasonDrift,
   seasonName,
-  REWARD_SEASON,
-  REWARDS_LIVE,
-  rewardOf,
   tokenVaultWindow,
   tokenWeekNow,
 } from "./season.js";
-import { state, active } from "./store.js";
-import { $, setHTML, setText, setShown, setDisplayed } from "./dom.js";
-import { html, join } from "./html.js";
-import {
-  buildGroups,
-  resolve,
-  diffLabel,
-  diffKey,
-  unitOf,
-  rawUnitOf,
-  hasPct,
-  activeLootSpec,
-  simcLootSpec,
-  dv,
-  vaultChoice,
-  vaultStatus,
-  priceWith,
-  rollScored,
-  crestSavingRange,
-} from "./model.js";
-import { specId, specInfo, classSpecs } from "./loot.js";
-import { CLASS_COLOR } from "./classes.js";
+import { active, state } from "./store.js";
 import { iconHTML, nameHTML } from "./wowhead.js";
 
 /**
@@ -181,7 +181,7 @@ function rewardRowHTML(table, row, here, keyLevel) {
     ? rewardOf(REWARD_SEASON, "dungeon", null, keyLevel)
     : table[row.key];
   if (!r) return "";
-  const top = r.ladder && r.ladder[r.ladder.length - 1];
+  const top = r.ladder?.[r.ladder.length - 1];
   const mine = dungeon ? keyLevel != null : row.key === here;
   return html`<tr class="${mine ? "here" : ""}">
     <th scope="row">
@@ -283,8 +283,8 @@ export function renderRewards(here, keyLevel) {
     "rewardTitle",
     html`<span class="eyebrow">${seasonName(s)}</span>What a bonus roll pays`,
   );
-  setText("rewardBtn", "S" + s.number + " rewards");
-  $("rewardBtn").title = "What a bonus roll pays in " + seasonName(s);
+  setText("rewardBtn", `S${s.number} rewards`);
+  $("rewardBtn").title = `What a bonus roll pays in ${seasonName(s)}`;
   setHTML(
     "rewardLink",
     REWARDS_LIVE
@@ -310,7 +310,7 @@ export function renderRewards(here, keyLevel) {
     return;
   }
   const win = tokenVaultWindow(s);
-  const mythCrest = (table.mythic && table.mythic.crests) || 0;
+  const mythCrest = table.mythic?.crests || 0;
   const weekNow = weekNowHTML(s, true);
   // The pane documents REWARD_SEASON rather than a board, but the one thing in it that *is* about
   // this character is whether the crest figure has been checked — so it reads the active board for
@@ -320,8 +320,7 @@ export function renderRewards(here, keyLevel) {
   const paneSure = !!paneRange && paneRange.flat;
   // The track the crest figure is the climb across, shown so the number can be re-derived rather
   // than taken on trust. Absent for a season whose steps aren't recorded.
-  const steps =
-    table.mythic && table.mythic.crestPerStep && table.mythic.crestSteps;
+  const steps = table.mythic?.crestPerStep && table.mythic.crestSteps;
 
   setHTML(
     "rewardBody",
@@ -386,8 +385,7 @@ export function renderRewards(here, keyLevel) {
           </p>`
         }
         ${
-          s.special &&
-          s.special.heroicNote &&
+          s.special?.heroicNote &&
           html`<p class="rwd-foot">${s.special.heroicNote}</p>`
         }
       </section>
@@ -550,7 +548,7 @@ function renderDataNote(built) {
     const n = built.unknown.length,
       many = n > 1;
     const list = join(built.unknown.slice(0, 4), ", ");
-    const more = n > 4 ? " and " + (n - 4) + " more" : "";
+    const more = n > 4 ? ` and ${n - 4} more` : "";
     parts.push(
       html`<b
           >${n} encounter${many ? "s in" : " in"} this report
@@ -615,7 +613,7 @@ function renderLootSpec(b) {
     const src = [];
     if (id === own) src.push("report");
     if (id === fromSimc) src.push("in game");
-    return src.length ? " (" + src.join(", ") + ")" : "";
+    return src.length ? ` (${src.join(", ")})` : "";
   };
   setHTML(
     "lootSpecSel",
@@ -649,7 +647,7 @@ function renderLootSpec(b) {
 /** A report's spec as "Frost Mage" — the bare spec name collides across classes. */
 function specText(b) {
   const s = specInfo(specId(b.spec));
-  return s ? s.n + " " + s.c : b.spec || "—";
+  return s ? `${s.n} ${s.c}` : b.spec || "—";
 }
 
 /** The class-coloured dot for a report, or a neutral one when the spec didn't resolve. */
@@ -677,7 +675,7 @@ function shortDate(s) {
   const d = ymd
     ? new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]))
     : new Date(s);
-  return isNaN(d.getTime())
+  return Number.isNaN(d.getTime())
     ? String(s).replace(/\s+/g, " ").trim()
     : d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
@@ -688,7 +686,7 @@ function boardMeta(b) {
   const d = shortDate(b.fetchedAt);
   return (
     (drop ? "Droptimizer" : "QE Live") +
-    (d ? " · " + (drop ? "loaded " : "simmed ") + d : "")
+    (d ? ` · ${drop ? "loaded " : "simmed "}${d}` : "")
   );
 }
 
@@ -711,7 +709,7 @@ function renderBoardPicker(b) {
   // Group by character, in the order they were first loaded.
   const groups = [];
   state.boards.forEach((x) => {
-    const k = (x.player + "·" + x.realm).toLowerCase();
+    const k = `${x.player}·${x.realm}`.toLowerCase();
     let g = groups.find((y) => y.k === k);
     if (!g) {
       g = { k, boards: [] };
@@ -744,7 +742,7 @@ function renderBoardPicker(b) {
 
 function boardOptionHTML(x, on, multi) {
   const lead = multi ? html`${specText(x)}` : html`${x.player}${realmTag(x)}`;
-  const sub = (multi ? "" : specText(x) + " · ") + boardMeta(x);
+  const sub = (multi ? "" : `${specText(x)} · `) + boardMeta(x);
   return html`<button
     class="popt ${on ? "on" : ""}"
     role="menuitemradio"
@@ -938,21 +936,21 @@ function staleVaultHTML(st, n) {
 
 function renderVault(b, built) {
   const simc = state.simc[b.key];
-  if (!simc || !simc.vault || !simc.vault.length) {
+  if (!simc?.vault?.length) {
     setHTML("vaultPanel", "");
     return;
   }
   const st = vaultStatus(b);
-  if (st && st.stale) {
+  if (st?.stale) {
     setHTML("vaultPanel", staleVaultHTML(st, simc.vault.length));
     return;
   }
   const rowByItem = {};
-  built.rows.forEach((r) =>
+  built.rows.forEach((r) => {
     r.items.forEach((it) => {
       rowByItem[it.id] = r;
-    }),
-  );
+    });
+  });
   const vc = vaultChoice(b),
     optByItem = {};
   (vc ? vc.options : []).forEach((o) => {
@@ -1013,12 +1011,12 @@ function vaultOptionHTML(b, v, row, opt) {
       · <b>${dv(b, take.ev)}</b> if you take it`;
   } else {
     const src = meta && resolve(meta.s[0][0], meta.s[0][1]);
-    encTxt = (src && src.name) || "—";
+    encTxt = src?.name || "—";
     couple = "Not in a rollable pool right now";
   }
   return html`<div class="vopt ${taken ? "taken" : ""}">
     <div>
-      <div class="vname">${(meta && meta.n) || v.name}</div>
+      <div class="vname">${meta?.n || v.name}</div>
       <div class="vmeta">
         <span>${encTxt}</span><span>·</span
         ><span>ilvl ${v.ilvl}</span
@@ -1056,7 +1054,7 @@ function vaultOptionHTML(b, v, row, opt) {
  * good, where a roll would have removed one. That asymmetry outlives the week the trade is made in.
  */
 function tradeHTML(b, vc) {
-  if (!vc || !vc.top) return "";
+  if (!vc?.top) return "";
   const unit = unitOf(b),
     keep = vc.keep,
     roll = vc.top;
@@ -1109,7 +1107,7 @@ function tradeHTML(b, vc) {
  * @param {import("./types.js").Row} roll  The top roll — the one the banner is costing.
  */
 function crestEdgeHTML(b, roll) {
-  const c = roll.reward && roll.reward.crests;
+  const c = roll.reward?.crests;
   if (!c) return "";
   const kind = roll.reward.crestKind || "";
   const rng = crestSavingRange(b, roll.reward);
@@ -1214,7 +1212,7 @@ function renderVerdict(built, b) {
 
 /** "3 upgrades" — the count that says whether a pool is worth opening. */
 function upgradeCount(n) {
-  return n ? " · " + n + " upgrade" + (n > 1 ? "s" : "") : "";
+  return n ? ` · ${n} upgrade${n > 1 ? "s" : ""}` : "";
 }
 
 function cardHTML(b, r, i) {
@@ -1230,7 +1228,7 @@ function cardHTML(b, r, i) {
       ? dv(b, r.num) +
         " / " +
         r.remaining +
-        (r.cost !== 1 ? " / " + r.cost : "")
+        (r.cost !== 1 ? ` / ${r.cost}` : "")
       : "pool empty";
   const sub =
     (g.type === "raid" ? g.instName : "M+ dungeon") + upgradeCount(r.nWant);
@@ -1240,8 +1238,7 @@ function cardHTML(b, r, i) {
   // rules rather than from the report, and "pays Myth 6/6" is only meaningful to someone who
   // already knows the tracks. Buttons, so they're reachable without a pointer.
   const pays =
-    r.reward &&
-    r.reward.label &&
+    r.reward?.label &&
     html`<button
       class="pays"
       data-act="rewards"
@@ -1292,7 +1289,7 @@ function cardHTML(b, r, i) {
         </div>
         <span
           >Σ ${dv(b, r.num)} want · ${r.remaining} in
-          pool${r.cost !== 1 ? " · ÷" + r.cost + " tokens" : ""}</span
+          pool${r.cost !== 1 ? ` · ÷${r.cost} tokens` : ""}</span
         >
       </div>
       ${specialNote(r)} ${promoNote(b, r)} ${crestNote(b, r)} ${itemsHTML(b, r)}
@@ -1320,7 +1317,7 @@ function cardHTML(b, r, i) {
  * in the wrong direction. Where the levels straddle the payout, no direction is claimed at all.
  */
 function promoNote(b, r) {
-  if (!r.reward || !r.reward.label) return "";
+  if (!r.reward?.label) return "";
   if (rollScored(b))
     return html`<div class="swap-note">
       A roll here pays out at <b>${r.reward.label}</b>, and the scores below are
@@ -1375,7 +1372,7 @@ function promoNote(b, r) {
  * side is a boolean or an object.
  */
 function crestMeta(b, r) {
-  const c = r.reward && r.reward.crests;
+  const c = r.reward?.crests;
   if (!c) return "";
   const kind = r.reward.crestKind || "";
   const rng = crestSavingRange(b, r.reward);
@@ -1384,7 +1381,7 @@ function crestMeta(b, r) {
     : rng.flat
       ? html`${rng.max} ${kind} crests`
       : html`${rng.min}–${rng.max} ${kind} crests`;
-  return html`<span class="crest-save ${rng && rng.flat ? "sure" : ""}"
+  return html`<span class="crest-save ${rng?.flat ? "sure" : ""}"
     >saves <b>${figure}</b></span
   >`;
 }
@@ -1418,7 +1415,7 @@ function crestMeta(b, r) {
  * would be a guess — so a character whose slots disagree gets the range and the reason for it.
  */
 function crestNote(b, r) {
-  const c = r.reward && r.reward.crests;
+  const c = r.reward?.crests;
   if (!c) return "";
   const kind = r.reward.crestKind || "";
   const step = r.reward.label || html`the top of its track`;
@@ -1656,7 +1653,7 @@ function itemRow(b, it) {
       }${exclusive(it)}${haveBadge(it)}
     </div>
     <div class="ilvl">${ilvlCell(it)}</div>
-    <div class="iscore tnum">${it.score > 0 ? "+" + dv(b, it.score) : "—"}</div>
+    <div class="iscore tnum">${it.score > 0 ? `+${dv(b, it.score)}` : "—"}</div>
   </div>`;
 }
 

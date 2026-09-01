@@ -1,10 +1,10 @@
 // Parsing and linking of the in-game /simc addon export: this week's vault choices,
 // logged bonus rolls, and the items the character already owns.
 
-import { QE_DATA, loadQEData } from "./data.js";
-import { state, save, keyOf } from "./store.js";
+import { loadQEData, QE_DATA } from "./data.js";
 import { $, toast } from "./dom.js";
 import { render } from "./render.js";
+import { keyOf, save, state } from "./store.js";
 
 /**
  * Parse a raw /simc export into
@@ -39,8 +39,7 @@ export function parseSimc(t) {
     // Horizontal whitespace only, anchored per line: the addon separates entries with a bare "#"
     // line, and an `\s*` that can cross a newline swallows it into the next entry's name.
     const re = /^#[ \t]*(.+?)[ \t]*\((\d+)\)[ \t]*\n#[ \t]*\w+=,id=(\d+)/gm;
-    let m;
-    while ((m = re.exec(blk)))
+    for (const m of blk.matchAll(re))
       vault.push({ name: m[1], ilvl: +m[2], id: +m[3] });
   }
 
@@ -64,8 +63,7 @@ export function parseSimc(t) {
   }
   const owned = {},
     ore = /\((\d+)\)\s*\n#?\s*\w+=,id=(\d+)/g;
-  let om;
-  while ((om = ore.exec(ot))) {
+  for (const om of ot.matchAll(ore)) {
     const il = +om[1],
       iid = +om[2];
     if (!owned[iid] || il > owned[iid]) owned[iid] = il;
@@ -177,7 +175,7 @@ export async function readSimc() {
           " vault options, " +
           d.rolledIds.length +
           " logged rolls"
-      : "Saved " + d.name + "'s data. Now load their report",
+      : `Saved ${d.name}'s data. Now load their report`,
   );
 }
 
@@ -194,7 +192,7 @@ export function applySimc(b) {
     const meta = QE_DATA.items[id];
     if (!meta) return;
     meta.s.forEach((s) => {
-      b.overlay[s[0] + ":" + s[1] + ":" + id] = "rolled";
+      b.overlay[`${s[0]}:${s[1]}:${id}`] = "rolled";
     });
   });
 }

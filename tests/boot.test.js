@@ -7,8 +7,8 @@
 //
 // In its own file because importing main.js runs it, and a module runs once per process.
 
-import { test } from "node:test";
 import assert from "node:assert/strict";
+import { test } from "node:test";
 
 // The handful of browser globals outside the document that main.js reaches for on the way up.
 globalThis.location = /** @type {any} */ ({

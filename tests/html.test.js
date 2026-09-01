@@ -2,9 +2,9 @@
 // Live's database, character names from a pasted report — so these are the tests that say the
 // default is safe, and that the one way around it is the one you have to type out.
 
-import { test } from "node:test";
 import assert from "node:assert/strict";
-import { html, raw, join, esc, Html } from "../src/html.js";
+import { test } from "node:test";
+import { esc, Html, html, join, raw } from "../src/html.js";
 
 const s = (v) => String(v);
 

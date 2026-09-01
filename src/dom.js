@@ -74,9 +74,7 @@ export const IDS = /** @type {const} */ ([
 export function $(id) {
   const el = document.getElementById(id);
   if (!el)
-    throw new Error(
-      "No element #" + id + " — src/dom.js and index.html disagree",
-    );
+    throw new Error(`No element #${id} — src/dom.js and index.html disagree`);
   return el;
 }
 

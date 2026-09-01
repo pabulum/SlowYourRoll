@@ -81,6 +81,7 @@
         </div>
         <div class="masthead-tools">
           <button
+            type="button"
             class="btn ghost icon"
             id="themeBtn"
             title="Toggle light / dark"
@@ -108,15 +109,16 @@
           </button>
           <!-- Label and title are filled from src/season.js, so the season is named in one place. -->
           <button
+            type="button"
             class="btn"
             id="rewardBtn"
             aria-haspopup="dialog"
             aria-expanded="false"
           ></button>
-          <button class="btn" id="importBtn" title="Load a backup">
+          <button type="button" class="btn" id="importBtn" title="Load a backup">
             Import
           </button>
-          <button class="btn" id="exportBtn" title="Save a backup">
+          <button type="button" class="btn" id="exportBtn" title="Save a backup">
             Export
           </button>
           <input type="file" id="importFile" accept="application/json" hidden />
@@ -130,7 +132,7 @@
           placeholder="QE Live upgrade report or Raidbots Droptimizer link…"
           spellcheck="false"
         />
-        <button class="btn primary" id="loadBtn">Load report</button>
+        <button type="button" class="btn primary" id="loadBtn">Load report</button>
         <div class="hint">
           <b>Healers:</b> an Upgrade Report from
           <a
@@ -164,7 +166,7 @@
             spellcheck="false"
           ></textarea>
           <div class="simc-actions">
-            <button class="btn primary" id="simcBtn">Read /simc</button>
+            <button type="button" class="btn primary" id="simcBtn">Read /simc</button>
             <span class="hint"
               >Install the
               <a
@@ -184,6 +186,7 @@
         <div class="who">
           <div class="picker" id="boardPicker">
             <button
+              type="button"
               class="picker-btn"
               id="boardBtn"
               aria-haspopup="true"
@@ -197,6 +200,7 @@
            the button changed size and the mark sat off-centre from one browser to the next. These
            are the same 16px grid and stroke weight as the theme toggle above. -->
           <button
+            type="button"
             class="btn icon ghost"
             id="shareBoard"
             title="Copy a link to this report"
@@ -220,6 +224,7 @@
             </svg>
           </button>
           <button
+            type="button"
             class="btn icon ghost danger"
             id="delBoard"
             title="Remove this report"
@@ -366,8 +371,10 @@
         aria-labelledby="rewardTitle"
       >
         <div class="drawer-head">
+          <!-- biome-ignore lint/a11y/useHeadingContent: filled from src/season.js when the drawer opens. -->
           <h2 id="rewardTitle"></h2>
           <button
+            type="button"
             class="btn icon ghost"
             id="rewardClose"
             title="Close"
@@ -399,6 +406,7 @@
      This is the app's only third-party script. Hovering an item tells Wowhead which item you
      hovered; nothing from your report is involved. Blocked or offline, the links stay links. -->
     <script>
+      // biome-ignore lint/correctness/noUnusedVariables: read by name from Wowhead's power.js, not by this app.
       const whTooltips = {
         colorLinks: false,
         iconizeLinks: false,

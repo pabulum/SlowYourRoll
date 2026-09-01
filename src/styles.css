@@ -222,6 +222,7 @@
 /* Anything render() hides stays hidden — a display:flex/grid on the same element would
    otherwise beat the UA's [hidden]{display:none} and show empty chrome on first visit. */
 [hidden] {
+  /* biome-ignore lint/complexity/noImportantStyles: has to beat the UA sheet, per the note above. */
   display: none !important;
 }
 html,
@@ -654,10 +655,7 @@ a {
   justify-content: space-between;
   gap: 12px;
 }
-/* The clear affordance sits in the heading rather than under the options, because it acts on the
-   whole block and not on any one of them. Quiet: it undoes a paste, so it should be findable
-   without ever being the thing your eye lands on first. */
-.vault h3 /* What a tier token becomes. Quiet and inline: it qualifies the name rather than competing with it,
+/* What a tier token becomes. Quiet and inline: it qualifies the name rather than competing with it,
    and it sits where the "very rare" badge does so a row never grows a second line. */
 .item .gives {
   font-size: 11.5px;
@@ -666,6 +664,9 @@ a {
   white-space: nowrap;
 }
 
+/* The clear affordance sits in the heading rather than under the options, because it acts on the
+   whole block and not on any one of them. Quiet: it undoes a paste, so it should be findable
+   without ever being the thing your eye lands on first. */
 .linky {
   font-size: 12px;
   font-weight: 400;
@@ -2176,7 +2177,9 @@ body.drawer-open {
 }
 @media (prefers-reduced-motion: reduce) {
   * {
+    /* biome-ignore lint/complexity/noImportantStyles: a reduced-motion override only works if it wins. */
     transition: none !important;
+    /* biome-ignore lint/complexity/noImportantStyles: a reduced-motion override only works if it wins. */
     animation: none !important;
   }
 }

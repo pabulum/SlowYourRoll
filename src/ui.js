@@ -5,11 +5,11 @@
 // re-renders each panel wholesale on every change, so a listener attached to a row would be
 // thrown away with the row it was attached to — see `on` below.
 
-import { state, save, active, replaceState } from "./store.js";
-import { $, toast, setShown } from "./dom.js";
-import { render, closeBoardMenu } from "./render.js";
+import { $, setShown, toast } from "./dom.js";
+import { closeBoardMenu, render } from "./render.js";
 import { loadReport } from "./reports.js";
 import { readSimc } from "./simc.js";
+import { active, replaceState, save, state } from "./store.js";
 
 /**
  * Delegate an event on a container to the nearest matching element at or above the target.
@@ -38,7 +38,7 @@ function commit() {
  */
 function cycleItem(b, key, itemEl) {
   if (!itemEl) return;
-  const k = key + ":" + itemEl.dataset.id;
+  const k = `${key}:${itemEl.dataset.id}`;
   const next = { want: "own", own: "rolled", rolled: "want" }[
     b.overlay[k] || "want"
   ];
@@ -182,7 +182,7 @@ function initBackup() {
             " report" +
             (p.boards.length === 1 ? "" : "s"),
         );
-      } catch (err) {
+      } catch {
         toast("Couldn't read that file. Is it a Slow Your Roll backup?");
       }
       e.target.value = "";
@@ -277,7 +277,7 @@ export function initUI() {
         toast(
           b.source === "droptimizer"
             ? "Link copied. Raidbots reports expire after ~30 days"
-            : "Link copied. It opens with " + b.player + "'s report loaded",
+            : `Link copied. It opens with ${b.player}'s report loaded`,
         ),
       () => prompt("Copy this link:", url),
     );
@@ -296,7 +296,7 @@ export function initUI() {
     )
       return;
     state.boards = state.boards.filter((x) => x.id !== b.id);
-    state.activeId = (state.boards[0] || {}).id || null;
+    state.activeId = state.boards[0]?.id || null;
     commit();
     toast("Removed");
   });

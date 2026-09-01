@@ -6,18 +6,18 @@
 // thing asserted in detail is escaping, because that is the property the whole rendering layer is
 // built to guarantee.
 
-import { test } from "node:test";
 import assert from "node:assert/strict";
+import { test } from "node:test";
 import { QE_DATA } from "../src/data.js";
-import { state } from "../src/store.js";
 import { render, renderSeason } from "../src/render.js";
 import {
-  SEASON,
   REWARD_SEASON,
   REWARDS_LIVE,
+  SEASON,
   seasonName,
   tokenWeekNow,
 } from "../src/season.js";
+import { state } from "../src/store.js";
 import { loadPage } from "./page.js";
 
 const RAID_ID = Number(QE_DATA.currentRaids[0]);
@@ -92,7 +92,7 @@ test("a loaded report renders one card per encounter, with its EV", () => {
   const doc = renderWith([makeBoard()]);
   const cards = doc.querySelectorAll("#sources .card");
   assert.equal(cards.length, 1);
-  assert.equal(cards[0].getAttribute("data-key"), RAID_ID + ":" + ENC_ID);
+  assert.equal(cards[0].getAttribute("data-key"), `${RAID_ID}:${ENC_ID}`);
   assert.match(
     cards[0].textContent,
     new RegExp(BOSS.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
@@ -142,7 +142,7 @@ test("every item in the pool gets a row, and each row a state button", () => {
 
 test("an item marked Rolled renders in that state", () => {
   const b = makeBoard();
-  b.overlay[RAID_ID + ":" + ENC_ID + ":900002"] = "rolled";
+  b.overlay[`${RAID_ID}:${ENC_ID}:900002`] = "rolled";
   const doc = renderWith([b]);
   const row = doc.querySelector('#sources .item[data-id="900002"]');
   assert.ok(row);
@@ -405,10 +405,7 @@ test("a /simc under the track overlap is still capped at the maximum", () => {
   assert.doesNotMatch(save, /100/, "a roll never rescues a misplay");
   const note = words(doc.querySelector("#sources .card .crest-note"));
   assert.match(note, /Computed from your/);
-  assert.match(
-    note,
-    new RegExp("every one of your " + marks.length + " slots"),
-  );
+  assert.match(note, new RegExp(`every one of your ${marks.length} slots`));
 });
 
 // Hero capped everywhere reaches the same answer by the other route, so these two must agree. If they
@@ -467,21 +464,21 @@ test("every payout in the season's table reaches the pane with its item level", 
   const table = REWARD_SEASON.rollReward || {};
   Object.keys(table).forEach((d) => {
     const r = table[d];
-    if (r.ilvl != null) assert.match(body, new RegExp("\\b" + r.ilvl + "\\b"));
+    if (r.ilvl != null) assert.match(body, new RegExp(`\\b${r.ilvl}\\b`));
     if (r.label) assert.match(body, new RegExp(r.label.replace("/", "/")));
   });
 });
 
 test("the M+ ladder is on screen, since the ranking only ever quotes its top rung", () => {
   const doc = renderWith([]);
-  const mp = (REWARD_SEASON.rollReward || {})["mythic-plus"];
-  const rungs = (mp && mp.ladder) || [];
+  const mp = REWARD_SEASON.rollReward?.["mythic-plus"];
+  const rungs = mp?.ladder || [];
   assert.ok(rungs.length, "the season carries a ladder to render");
   const rows = [...doc.querySelectorAll("#rewardBody .rwd")]
     .map((t) => t.textContent)
     .join(" ");
   rungs.forEach((k) => {
-    assert.match(rows, new RegExp("\\b" + k.ilvl + "\\b"));
+    assert.match(rows, new RegExp(`\\b${k.ilvl}\\b`));
   });
 });
 
@@ -492,9 +489,9 @@ test("the pane leads its crest section with what a roll saves you", () => {
   const doc = renderWith([]);
   const fig = doc.querySelector("#rewardBody .rwd-figure");
   assert.ok(fig, "the saving is a figure in its own right, not a clause");
-  const crests = ((REWARD_SEASON.rollReward || {}).mythic || {}).crests;
+  const crests = REWARD_SEASON.rollReward?.mythic?.crests;
   assert.ok(crests, "the season has a saving to state");
-  assert.match(fig.textContent, new RegExp("\\b" + crests + "\\b"));
+  assert.match(fig.textContent, new RegExp(`\\b${crests}\\b`));
   assert.match(fig.textContent, /saved/);
 });
 
@@ -526,7 +523,7 @@ test("the pane places today against the window it just described", () => {
   assert.ok(line, "the week line renders");
   if (now.state === "before")
     assert.match(line.textContent, new RegExp(seasonName(REWARD_SEASON)));
-  else assert.match(line.textContent, new RegExp("week " + now.week + "\\b"));
+  else assert.match(line.textContent, new RegExp(`week ${now.week}\\b`));
 });
 
 // Every week-by-week guide is keyed to the US reset dates, so a reset has to read the same on the

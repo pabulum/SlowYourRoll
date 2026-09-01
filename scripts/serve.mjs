@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 // Static file server for local development. Zero dependencies — the app is buildless
 // and ships no runtime deps, so serving it shouldn't drag in a toolchain either.
 //
@@ -9,10 +10,10 @@
 // Unlike a stock static server this sends no-cache headers: ES modules are fetched
 // individually and a 304 on a stale module is a confusing way to lose an edit.
 
-import { createServer } from "node:http";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
-import { join, extname, normalize, dirname } from "node:path";
+import { createServer } from "node:http";
+import { dirname, extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -38,7 +39,7 @@ async function resolve(urlPath) {
   const decoded = decodeURIComponent(urlPath.split("?")[0]);
   // normalize() collapses ".." before we join, so a traversal can't climb out of ROOT.
   const full = join(ROOT, normalize(decoded));
-  if (full !== ROOT && !full.startsWith(ROOT + "/")) return null;
+  if (full !== ROOT && !full.startsWith(`${ROOT}/`)) return null;
 
   try {
     const info = await stat(full);

@@ -335,11 +335,11 @@ const ACTIVE = 2;
 export const SEASON = SEASONS[ACTIVE];
 
 /** Masthead / documentation label, e.g. "WoW S1 Midnight". */
-export const SEASON_LABEL = "WoW S" + SEASON.number + " " + SEASON.expansion;
+export const SEASON_LABEL = `WoW S${SEASON.number} ${SEASON.expansion}`;
 
 /** Full name of a season, spelled out — what a panel about it has to be headed with. */
 export function seasonName(s) {
-  return s.expansion + " Season " + s.number;
+  return `${s.expansion} Season ${s.number}`;
 }
 
 /**

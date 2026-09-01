@@ -4,10 +4,10 @@
 // Everything is fetched client-side; nothing is uploaded.
 
 import { loadQEData } from "./data.js";
-import { state, save, keyOf, uid } from "./store.js";
 import { $, toast } from "./dom.js";
-import { parseSimc, applySimc } from "./simc.js";
 import { render } from "./render.js";
+import { applySimc, parseSimc } from "./simc.js";
+import { keyOf, save, state, uid } from "./store.js";
 
 const QE_API =
   "https://questionablyepic.com/api/getUpgradeReport.php?reportID=";
@@ -57,7 +57,7 @@ async function fetchReport(d) {
         ),
       );
   }
-  return fetch(DROPT_URL + encodeURIComponent(d.id) + "/data.json")
+  return fetch(`${DROPT_URL + encodeURIComponent(d.id)}/data.json`)
     .then((r) => {
       if (!r.ok) throw new Error("nf");
       return r.json();
@@ -115,8 +115,8 @@ export function parseDroptimizer(data) {
   const sim = data.sim || {},
     p0 = (sim.players || [])[0] || {},
     sb = data.simbot || {};
-  const baseline = ((p0.collected_data || {}).dps || {}).mean || 0;
-  const results = (sim.profilesets || {}).results || [];
+  const baseline = p0.collected_data?.dps?.mean || 0;
+  const results = sim.profilesets?.results || [];
   const idn = sb.input
     ? parseSimc(sb.input)
     : {
@@ -136,9 +136,9 @@ export function parseDroptimizer(data) {
       diff = f[2] || "",
       item = parseInt(f[3], 10),
       lvl = parseInt(f[4], 10) || 0;
-    if (!item || isNaN(inst) || isNaN(enc)) return;
+    if (!item || Number.isNaN(inst) || Number.isNaN(enc)) return;
     const delta = (r.mean || 0) - baseline,
-      k = inst + ":" + enc + ":" + item,
+      k = `${inst}:${enc}:${item}`,
       ex = byKey[k];
     if (!ex || delta > ex.rawDelta) {
       byKey[k] = {
@@ -172,7 +172,7 @@ function ingestDroptimizer(id, data) {
     b.source = "droptimizer";
     b.spec = d.idn.spec || b.spec;
     b.fetchedAt = new Date().toISOString();
-    toast("Updated " + d.idn.name + " (Droptimizer)");
+    toast(`Updated ${d.idn.name} (Droptimizer)`);
   } else {
     b = {
       id: uid(),
@@ -197,7 +197,7 @@ function ingestDroptimizer(id, data) {
       tokenOverride: {},
     };
     state.boards.push(b);
-    toast("Loaded " + b.player + " (Droptimizer)");
+    toast(`Loaded ${b.player} (Droptimizer)`);
   }
   applySimc(b);
   state.activeId = b.id;
@@ -220,8 +220,8 @@ function ingestDroptimizer(id, data) {
 function equippedMap(data) {
   const owned = {};
   (data.equippedItems || []).forEach((it) => {
-    const id = Number(it && it.id),
-      lvl = Number(it && it.level);
+    const id = Number(it?.id),
+      lvl = Number(it?.level);
     if (!id || !lvl) return;
     if (!owned[id] || lvl > owned[id]) owned[id] = lvl;
   });
@@ -240,7 +240,7 @@ function ingest(code, data) {
     b.contentType = data.contentType;
     b.fetchedAt = data.dateCreated || "";
     b.gameType = data.gameType || "Retail";
-    toast("Updated " + (data.playername || "report") + ", rolled history kept");
+    toast(`Updated ${data.playername || "report"}, rolled history kept`);
   } else {
     b = {
       id: uid(),
@@ -264,7 +264,7 @@ function ingest(code, data) {
       tokenOverride: {},
     };
     state.boards.push(b);
-    toast("Loaded " + b.player + ", " + b.spec);
+    toast(`Loaded ${b.player}, ${b.spec}`);
   }
   applySimc(b);
   state.activeId = b.id;

@@ -13,14 +13,14 @@
 // Anything we can't judge is left lootable. Wrongly hiding an item costs the user a roll they
 // should have made; wrongly showing one only dilutes a number they can see.
 
-import { QE_DATA } from "./data.js";
 import {
-  CLASS_ARMOR,
   ARMOR_NAME,
-  SHIELD_CLASSES,
+  CLASS_ARMOR,
   CLASS_WEAPONS,
+  SHIELD_CLASSES,
   WEAPON_NAME,
 } from "./classes.js";
+import { QE_DATA } from "./data.js";
 
 // An item's `st` is the set of primary stats it can roll, as a code string: "i" is intellect only,
 // "ai" the agility-or-intellect that every leather and mail drop is. A spec takes exactly one.
@@ -34,7 +34,7 @@ export function statLabel(set) {
     .map((ch) => STAT_NAME[ch])
     .filter(Boolean);
   return names.length > 1
-    ? names.slice(0, -1).join(", ") + " or " + names[names.length - 1]
+    ? `${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}`
     : names[0] || "";
 }
 const BACK = 16; // inventoryType: cloaks are filed as cloth but everyone wears them
@@ -126,7 +126,7 @@ export function specId(spec) {
 
 /** The spec record for an id, or null. */
 export function specInfo(id) {
-  return (id && (QE_DATA.specs || {})[id]) || null;
+  return (id && QE_DATA.specs?.[id]) || null;
 }
 
 /**
@@ -179,12 +179,12 @@ export function canLoot(item, spec) {
     .map((k) => specInfo(k).n);
   if (item.p) {
     return others.length
-      ? { ok: false, why: others.join(" / ") + " only", swap: others }
-      : { ok: false, why: "No " + me.c + " spec can loot this" };
+      ? { ok: false, why: `${others.join(" / ")} only`, swap: others }
+      : { ok: false, why: `No ${me.c} spec can loot this` };
   }
   const armor = CLASS_ARMOR[me.c];
   if (item.c === 4 && item.u === 6)
-    return { ok: false, why: me.c + "s can't use shields" };
+    return { ok: false, why: `${me.c}s can't use shields` };
   if (
     item.c === 4 &&
     item.u >= 1 &&
@@ -205,16 +205,16 @@ export function canLoot(item, spec) {
   if (item.c === 2 && !weaponOk(item, me.c)) {
     return {
       ok: false,
-      why: (WEAPON_NAME[item.u] || "Weapon") + " — not a " + me.c + " weapon",
+      why: `${WEAPON_NAME[item.u] || "Weapon"} — not a ${me.c} weapon`,
     };
   }
   return others.length
     ? {
         ok: false,
-        why: statLabel(item.st) + " — " + others.join(" / ") + " only",
+        why: `${statLabel(item.st)} — ${others.join(" / ")} only`,
         swap: others,
       }
-    : { ok: false, why: statLabel(item.st) + " item" };
+    : { ok: false, why: `${statLabel(item.st)} item` };
 }
 
 /**

@@ -1,5 +1,5 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
+import { test } from "node:test";
 import { parseSimc } from "../src/simc.js";
 
 const SAMPLE = `# Foo - Holy Priest

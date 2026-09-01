@@ -1,0 +1,18 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.8/schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+
+  // The generated QE database is huge and not hand-maintained; don't lint or format it.
+  "files": { "includes": ["**", "!data", "!package-lock.json"] },
+
+  // Biome's defaults throughout, except indentation: the source is 2-space indented and
+  // ships to the browser verbatim (buildless), so switching to tabs would rewrite every line.
+  "formatter": { "enabled": true, "indentStyle": "space", "indentWidth": 2 },
+
+  "linter": { "enabled": true, "rules": { "preset": "recommended" } },
+
+  "assist": {
+    "enabled": true,
+    "actions": { "source": { "organizeImports": "on" } }
+  }
+}

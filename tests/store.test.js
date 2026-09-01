@@ -1,5 +1,5 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
+import { test } from "node:test";
 import { keyOf, uid } from "../src/store.js";
 
 test("keyOf normalizes name, realm, and the first word of spec", () => {

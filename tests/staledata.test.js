@@ -6,12 +6,12 @@
 // them. These tests pin the degrade path: unknown-but-plausible sources survive and are flagged;
 // sources that genuinely can't be bonus-rolled stay filtered out.
 
-import { test } from "node:test";
 import assert from "node:assert/strict";
+import { test } from "node:test";
 import { QE_DATA } from "../src/data.js";
+import { buildGroups, resolve } from "../src/model.js";
 import { SEASON } from "../src/season.js";
 import { state } from "../src/store.js";
-import { resolve, buildGroups } from "../src/model.js";
 
 // Ids chosen to be absent from any real database: Blizzard instance ids are ~4 digits.
 const FUTURE_RAID = 999901;

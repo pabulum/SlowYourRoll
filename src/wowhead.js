@@ -29,7 +29,7 @@ function whAttr(id, lvl) {
   return raw(
     'data-wowhead="item=' +
       Number(id) +
-      (lvl ? "&amp;ilvl=" + Number(lvl) : "") +
+      (lvl ? `&amp;ilvl=${Number(lvl)}` : "") +
       '"',
   );
 }
@@ -40,7 +40,7 @@ function whAttr(id, lvl) {
  */
 export function iconHTML(id, lvl) {
   const it = QE_DATA.items[id];
-  if (!it || !it.ic) return html`<span class="icon blank"></span>`;
+  if (!it?.ic) return html`<span class="icon blank"></span>`;
   return html`<a
     class="icon-link"
     href="${WOWHEAD + id}"
@@ -52,7 +52,7 @@ export function iconHTML(id, lvl) {
       class="icon"
       loading="lazy"
       alt=""
-      src="${ICON_CDN + it.ic + ".jpg"}"
+      src="${`${ICON_CDN + it.ic}.jpg`}"
       onerror="this.style.visibility='hidden'"
   /></a>`;
 }

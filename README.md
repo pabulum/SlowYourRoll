@@ -503,17 +503,24 @@ Node is the only thing you need installed. It sends `cache-control: no-store`, b
 
 ## Development
 
-Dev tooling (ESLint, TypeScript, the test runner) lives in `devDependencies` — it never ships
+Dev tooling (Biome, TypeScript, the test runner) lives in `devDependencies` — it never ships
 to the deployed site. TypeScript runs in **checkJs** mode: the source stays plain `.js`,
 type-checked through JSDoc annotations (see [`src/types.js`](src/types.js)), so you get editor
 IntelliSense and CI safety without a compile step.
 
+[Biome](https://biomejs.dev) is the linter *and* the formatter, on its recommended rule set
+([`biome.jsonc`](biome.jsonc)) — one binary covering the `.js`, `.css` and `.html` the site is
+made of, where ESLint only ever saw the JavaScript. Its defaults are taken as they come, bar
+2-space indentation: these files ship to the browser verbatim, so reformatting them to tabs
+would rewrite every line of a buildless site for nothing.
+
 ```sh
 npm install          # one-time: install dev tooling
-npm run lint         # ESLint
+npm run lint         # Biome — lint + format + import order
+npm run fix          # the same, applying every safe fix
 npm run typecheck    # tsc --noEmit (checkJs)
 npm test             # node:test
-npm run check        # all three, as CI runs them
+npm run check        # lint + typecheck + test, as CI runs them
 ```
 
 CI runs `lint` + `typecheck` + `test` on every push and PR (`.github/workflows/ci.yml`).

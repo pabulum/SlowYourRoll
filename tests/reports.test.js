@@ -1,5 +1,5 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
+import { test } from "node:test";
 import { detectSource, parseDroptimizer } from "../src/reports.js";
 
 test("detectSource recognizes Raidbots links and long ids", () => {

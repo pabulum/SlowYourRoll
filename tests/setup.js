@@ -7,8 +7,8 @@
 // page costs a millisecond and can't do that.
 
 import { readFileSync } from "node:fs";
-import { loadPage } from "./page.js";
 import { setQEData } from "../src/data.js";
+import { loadPage } from "./page.js";
 
 // The app fetches the database over HTTP (src/data.js); Node's fetch can't read a file:// URL, and
 // test files read QE_DATA at module scope. `--import` awaits this module before any of them

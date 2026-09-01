@@ -4,17 +4,17 @@
 // to get subtly wrong: bind to a row and it works until the first redraw, then silently stops.
 // Clicking a rendered element and asserting on the state it changed is the only way to see that.
 
-import { test } from "node:test";
 import assert from "node:assert/strict";
+import { test } from "node:test";
 import { QE_DATA } from "../src/data.js";
+import { render } from "../src/render.js";
 import { state } from "../src/store.js";
 import { initUI } from "../src/ui.js";
-import { render } from "../src/render.js";
 import { loadPage } from "./page.js";
 
 const RAID_ID = Number(QE_DATA.currentRaids[0]);
 const ENC_ID = Number(Object.keys(QE_DATA.raids[String(RAID_ID)].bosses)[0]);
-const KEY = RAID_ID + ":" + ENC_ID;
+const KEY = `${RAID_ID}:${ENC_ID}`;
 
 function makeBoard() {
   return {
@@ -62,7 +62,7 @@ function boot(extra = {}) {
 /** Click an element the way a browser would — bubbling up to the delegated listener. */
 function click(doc, selector) {
   const el = doc.querySelector(selector);
-  assert.ok(el, "expected to find " + selector);
+  assert.ok(el, `expected to find ${selector}`);
   el.dispatchEvent(new doc.defaultView.Event("click", { bubbles: true }));
   return el;
 }
@@ -70,7 +70,7 @@ function click(doc, selector) {
 test("tapping an item cycles Want → Own → Rolled → Want", () => {
   const { doc, board } = boot();
   const sel = '#sources .item[data-id="900001"] [data-act="cycle"]';
-  const k = KEY + ":900001";
+  const k = `${KEY}:900001`;
 
   click(doc, sel);
   assert.equal(board.overlay[k], "own");
@@ -88,7 +88,7 @@ test("the cycle survives the re-render it causes", () => {
   // The button just clicked no longer exists — render() replaced it. If listeners were bound to
   // rows rather than to #sources, this second click would do nothing.
   click(doc, sel);
-  assert.equal(board.overlay[KEY + ":900001"], "rolled");
+  assert.equal(board.overlay[`${KEY}:900001`], "rolled");
   assert.match(
     doc.querySelector('#sources .item[data-id="900001"]').getAttribute("class"),
     /st-rolled/,
