@@ -23,7 +23,7 @@ Each item in a pool is in one of three states you can cycle by tapping it:
 
 - **Want** — an upgrade still in the pool; its score counts toward EV.
 - **Own** — you have it (or took it from the vault). It still dilutes the pool but is worth 0
-  to you. Anything you hold at ≥ the item level a roll would pay out auto-marks Own, taken from
+  to you. Anything you hold at ≥ the item level a roll here _ends up at_ auto-marks Own, taken from
   the gear the report was run in and from your `/simc` export if you pasted one.
 - **Rolled** — you already bonus-rolled it; removed from the pool for good.
 
@@ -146,6 +146,15 @@ row shows both, payout first — `318→334`, the arrow being the crests — and
 [`src/model.js`](src/model.js)) is the one figure the whole card uses, so fillers the report never
 scored don't sit at a different item level from the items above them. Where the report sims the drop
 instead, nothing has been taken to a track top and the payout stays the number shown.
+
+**That same level decides what counts as a duplicate** (`rollTopFor`). A Heroic roll hands the item
+over at 318 and ends at 334, so a Hero 6/6 copy at 321 does not dupe it — the copy that roll leads to
+is four steps better — even though 321 clears the hand-over. Measuring against the ceiling is also
+what the rest of the card already assumes: the crest table credits a Heroic roll with **zero** saved
+crests precisely because you pay for that 318→334 climb yourself. It settles the last two Mythic
+bosses too, whose Venomcursed 9/6 payout the season table still records as 334 — the report prices
+them at 344, so a 334 copy of one stays **Want**. Only where the report makes the claim: a
+Droptimizer sims the drop and has taken nothing to a track top, so there the payout stands alone.
 
 ### QE Live computes this too, now
 

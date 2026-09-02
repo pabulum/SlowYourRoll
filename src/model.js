@@ -378,6 +378,37 @@ export function isDupe(ownedIlvl, rollIlvl) {
 }
 
 /**
+ * The item level a copy you already hold has to beat, which is where the roll's payout *ends up*
+ * rather than where it arrives.
+ *
+ * A 12.1 QE report prices the bonus roll as its "Upgraded Bonus Rolls" panel does — the payout taken
+ * to the top of its own track, crests spent — so a Heroic roll's score is the item at ilvl 334 even
+ * though the roll hands it over at 318. Judging the dupe against the 318 while printing the 334's
+ * score beside it is the same item described two ways: someone holding a Hero 6/6 copy at 321 was
+ * told a Heroic roll could only duplicate it, when the copy that roll leads to outclasses theirs by
+ * four upgrade steps. The season's own crest table agrees — it credits a Heroic roll with *zero*
+ * saved crests precisely because you climb 318→334 yourself — so the climb is assumed everywhere
+ * else on the card and has to be assumed here too.
+ *
+ * Only where the report makes that claim. A Droptimizer, and any QE report from before 12.1, sims
+ * the drop and has taken nothing to a track top, so there `scoreIlvl` is not a ceiling and the
+ * payout stands on its own (see `rollScored`).
+ *
+ * Never *below* the payout: a report that simmed low can't make a roll worth less than it hands
+ * over. And a null payout stays null, because "promoted by an unknown amount" has to keep
+ * suppressing the guess rather than quietly resolving to the report's level — see `rollIlvlFor`.
+ *
+ * @param {number|null} [rollIlvl]   What the roll hands over, from `rollIlvlFor`.
+ * @param {number|null} [scoreIlvl]  Where the pool's scores were simmed, or null where the report
+ *   makes no track-top claim.
+ * @returns {number|null}
+ */
+export function rollTopFor(rollIlvl, scoreIlvl) {
+  if (rollIlvl == null) return null;
+  return scoreIlvl ? Math.max(rollIlvl, scoreIlvl) : rollIlvl;
+}
+
+/**
  * The last `n` encounters of a raid, as the encounter ids that end its boss list.
  *
  * Uses the raid's recorded pull order (`order`, upstream's `bossOrder`). It used to sort by
@@ -698,29 +729,37 @@ function priceGroup(b, g, selDiff, ownedMap, sp, takeId) {
   const diff = diffKey(b, selDiff);
   const reward = rollReward(g.type, diff, g.keyLevel);
   const idx = reportIndex(b);
-  const items = Object.values(g.items)
-    .map((it) => {
-      // The token carries the piece's value, because rolling the token *is* getting the piece.
-      // Left at zero it would sit in the pool as filler — and on a tier boss it is routinely the
-      // best thing on the table, so the encounter would be understated by its single largest item.
-      if (it.gives) applyToken(it, idx);
-      const ov = b.overlay[`${g.key}:${it.id}`];
-      it.ownedIlvl = ownedMap[it.id] != null ? ownedMap[it.id] : null;
-      // A copy you already hold only makes the roll redundant if it's at least as good as what the
-      // roll would hand you — and in a season that promotes rewards to a vault track, that is not
-      // the drop. Owning the Heroic version of an item doesn't dupe a roll that pays out on the
-      // Myth track.
-      it.rollIlvl = rollIlvlFor(reward, it.lvl);
-      it.dupe = isDupe(it.ownedIlvl, it.rollIlvl);
-      it.state =
-        ov === "rolled" || ov === "own"
-          ? ov
-          : takeId === it.id || it.dupe
-            ? "own"
-            : "want";
-      return it;
-    })
-    .sort((a, c) => c.score - a.score || a.name.localeCompare(c.name));
+  const items = Object.values(g.items);
+  // The token carries the piece's value, because rolling the token *is* getting the piece. Left at
+  // zero it would sit in the pool as filler — and on a tier boss it is routinely the best thing on
+  // the table, so the encounter would be understated by its single largest item. Done in its own
+  // pass because it rewrites `scoreLvl`, and the next line reads every item's.
+  items.forEach((it) => {
+    if (it.gives) applyToken(it, idx);
+  });
+  // One level for the whole pool, settled before any item's state is, because a dupe is judged
+  // against it. It's a property of the payout rather than of the item — see `scoreIlvlOf` — which
+  // is what lets a filler the report never scored be judged against it alongside everything else.
+  const scoreIlvl = scoreIlvlOf(items);
+  const top = rollScored(b) ? scoreIlvl : null;
+  items.forEach((it) => {
+    const ov = b.overlay[`${g.key}:${it.id}`];
+    it.ownedIlvl = ownedMap[it.id] != null ? ownedMap[it.id] : null;
+    // A copy you already hold only makes the roll redundant if it's at least as good as what the
+    // roll would hand you — and in a season that promotes rewards to a vault track, that is not
+    // the drop. Owning the Heroic version of an item doesn't dupe a roll that pays out on the
+    // Myth track, nor one that pays out lower on that track and climbs past it (`rollTopFor`).
+    it.rollIlvl = rollIlvlFor(reward, it.lvl);
+    it.rollTopIlvl = rollTopFor(it.rollIlvl, top);
+    it.dupe = isDupe(it.ownedIlvl, it.rollTopIlvl);
+    it.state =
+      ov === "rolled" || ov === "own"
+        ? ov
+        : takeId === it.id || it.dupe
+          ? "own"
+          : "want";
+  });
+  items.sort((a, c) => c.score - a.score || a.name.localeCompare(c.name));
 
   // Token cost follows the season unless the user overrode this encounter. The per-board
   // tokenRaid/tokenDungeon fields older saves carry were never user-editable, so they're ignored.
@@ -735,7 +774,7 @@ function priceGroup(b, g, selDiff, ownedMap, sp, takeId) {
     cost,
     diff,
     reward,
-    scoreIlvl: scoreIlvlOf(items),
+    scoreIlvl,
     remaining: p.remaining,
     num: p.num,
     ev: p.ev,

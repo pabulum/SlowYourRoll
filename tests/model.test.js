@@ -18,6 +18,7 @@ import {
   resolve,
   rollIlvlFor,
   rollScored,
+  rollTopFor,
   simcLootSpec,
   unitOf,
   vaultChoice,
@@ -689,21 +690,84 @@ test("the bonus row wins even when a lower row happens to score higher", () => {
    and the report prices it at 334. The row carries both, because the card shows the score's level
    beside the score and the payout's everywhere the roll itself is described. */
 
-test("a Heroic 12.1 report's scores belong to a higher item level than the roll pays", () => {
-  state.showAll = false;
-  state.simc = {};
+/** The same report run on Heroic: the drop is lower, the `bonus` row is still the track's top. */
+function heroic121Board() {
   const b = makeQE121Board();
   b.results = b.results.map((r) => ({
     ...r,
     dropDifficulty: 2,
     level: r.dropType === "drop" ? 315 : 334,
   }));
-  const row = buildGroups(b).rows.find((r) => r.g.type === "raid");
+  return b;
+}
+
+test("a Heroic 12.1 report's scores belong to a higher item level than the roll pays", () => {
+  state.showAll = false;
+  state.simc = {};
+  const row = buildGroups(heroic121Board()).rows.find(
+    (r) => r.g.type === "raid",
+  );
   assert.equal(row.reward.ilvl, 318, "what a Heroic roll hands over");
   assert.equal(row.scoreIlvl, 334, "what the scores were simmed at");
   const it = row.items.find((i) => i.score > 0);
   assert.equal(it.scoreLvl, 334);
   assert.equal(it.rollIlvl, 318);
+});
+
+/* ---------- and which of those two levels a dupe is judged against ----------
+   The score beside a Heroic row is the payout after its track is paid for, so that is the copy the
+   roll actually leads to and the one an item you already hold has to beat. Judging against the 318
+   it arrives at instead marked a Hero 6/6 copy as a dupe of a roll four steps better than it. */
+
+test("a roll's ceiling is the top of its track, never below what it hands over", () => {
+  assert.equal(rollTopFor(318, 334), 334); // Heroic: arrives at 318, ends at 334
+  assert.equal(rollTopFor(334, 334), 334); // Mythic: the two coincide
+  assert.equal(rollTopFor(334, 318), 334); // a report that simmed low can't devalue the payout
+  assert.equal(rollTopFor(318, null), 318); // no track-top claim: the payout stands alone
+  assert.equal(rollTopFor(null, 334), null); // promoted by an unknown amount — still don't guess
+});
+
+test("a copy between a Heroic roll's payout and its track top is not a dupe", () => {
+  state.showAll = false;
+  const b = heroic121Board();
+  const item = b.results[0].item;
+  // Hero 6/6, which is also Myth 2/6: above the 318 the roll hands over, four steps below the 334
+  // the report priced it at.
+  state.simc = { qekey: { owned: { [item]: 321 } } };
+  const it = buildGroups(b)
+    .rows.find((r) => r.g.type === "raid")
+    .items.find((x) => x.id === item);
+  assert.equal(it.rollIlvl, 318, "what the roll hands over");
+  assert.equal(
+    it.rollTopIlvl,
+    334,
+    "where it ends up, which is what the score is for",
+  );
+  assert.equal(it.dupe, false);
+  assert.equal(it.state, "want");
+});
+
+test("a copy at the Heroic roll's track top still dupes it", () => {
+  state.showAll = false;
+  const b = heroic121Board();
+  const item = b.results[0].item;
+  state.simc = { qekey: { owned: { [item]: 334 } } };
+  const it = buildGroups(b)
+    .rows.find((r) => r.g.type === "raid")
+    .items.find((x) => x.id === item);
+  assert.equal(it.dupe, true);
+  assert.equal(it.state, "own");
+});
+
+// A Droptimizer sims the drop, so its score level is no claim about a track top and the payout is
+// still the only honest thing to measure against. The ceiling must not leak across report formats.
+test("a report that sims the drop judges dupes against the payout alone", () => {
+  state.showAll = false;
+  const b = makeBoard();
+  state.simc = { testkey: { owned: { 900002: PAYOUT } } };
+  const it = buildGroups(b).rows[0].items.find((x) => x.id === 900002);
+  assert.equal(it.rollTopIlvl, it.rollIlvl);
+  assert.equal(it.dupe, true);
 });
 
 test("a Mythic report's scores and payout are the same level, so the row quotes one number", () => {

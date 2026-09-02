@@ -137,7 +137,11 @@
  * @property {number|null} [rollIlvl]  Item level a bonus roll would actually hand you. Equal to
  *   `lvl` in a season that pays out at the drop; null when the season promotes the reward to a
  *   vault track whose item level isn't known yet. See src/season.js.
- * @property {boolean} [dupe]  You already hold this at or above `rollIlvl`, so a roll adds nothing.
+ * @property {number|null} [rollTopIlvl]  Item level that payout ends up at once its own track is
+ *   climbed — the figure a copy you hold is measured against. Equal to `rollIlvl` except where the
+ *   report priced the roll at the top of its track. See `rollTopFor` in src/model.js.
+ * @property {boolean} [dupe]  You already hold this at or above `rollTopIlvl`, so a roll adds
+ *   nothing.
  * @property {boolean} vr
  * @property {number|null} [ownedIlvl]
  * @property {"want"|"own"|"rolled"} [state]

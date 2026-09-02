@@ -1661,22 +1661,34 @@ function ilvlCell(b, r, it) {
   return String(lvl);
 }
 
+/**
+ * How the badge names the payout it is judging a copy you hold against.
+ *
+ * Up to two levels are in play: what the roll hands over, and where that copy tops out once its own
+ * track is paid for. The second is what decides the dupe (`rollTopFor`), so it has to be in the
+ * sentence — a badge that quotes only the 318 while calling a 321 copy an upgrade is explaining a
+ * decision the reader can't check against the number in front of them.
+ */
+function payoutPhrase(it) {
+  return it.rollIlvl && it.rollTopIlvl !== it.rollIlvl
+    ? `hands it over at ilvl ${it.rollIlvl} and tops out at ilvl ${it.rollTopIlvl} once its track is paid for`
+    : `pays out at ilvl ${it.rollTopIlvl}`;
+}
+
 /** "have 678" on a copy you already hold, gold when rolling it again would only duplicate it. */
 function haveBadge(it) {
   if (it.ownedIlvl == null) return "";
   const why = it.dupe
     ? "You already have this at ilvl " +
       it.ownedIlvl +
-      (it.rollIlvl
-        ? "; a roll here hands it over at ilvl " +
-          it.rollIlvl +
-          ", so it would just dupe it"
+      (it.rollTopIlvl
+        ? "; a roll here " + payoutPhrase(it) + ", so it would just dupe it"
         : ", so a roll here would just dupe it")
-    : it.rollIlvl
+    : it.rollTopIlvl
       ? "You have this at ilvl " +
         it.ownedIlvl +
-        "; a roll here pays out at ilvl " +
-        it.rollIlvl +
+        "; a roll here " +
+        payoutPhrase(it) +
         ", a real upgrade"
       : "You have this at ilvl " +
         it.ownedIlvl +
