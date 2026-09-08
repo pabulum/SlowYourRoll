@@ -16,6 +16,7 @@ import { classSpecs, specId, specInfo } from "./loot.js";
 import {
   activeLootSpec,
   buildGroups,
+  crestSavingAt,
   crestSavingRange,
   diffKey,
   diffLabel,
@@ -142,18 +143,19 @@ function weekNowHTML(s, long) {
     return long
       ? html`<b>It's week ${w.week}.</b> There's no token in this vault — the
           first one is week ${tokenVaultWindow(s).from}, ${trades}.`
-      : html` It's week ${w.week}: no token in this vault yet, so nothing is
-        being given up for one.`;
+      : html` Week ${w.week}: no token in this vault yet, so nothing is being
+        given up for one.`;
   if (w.state === "free")
     return long
-      ? html`<b>It's week ${w.week}.</b> The token is a free weekly reward now,
-          so you take it and your vault item both.`
-      : html` It's week ${w.week}, so the token is free and you get both.`;
+      ? html`<b>It's week ${w.week}.</b> You're given a token every week now, so
+          your vault item no longer costs you a roll.`
+      : html` Week ${w.week}: you're given a token weekly, so the item costs you
+        no roll.`;
   return long
     ? html`<b>It's week ${w.week}.</b> The token is a Great Vault slot this
         week: take it or take the item, not both.`
-    : html` It's week ${w.week}, so the token <em>is</em> a vault slot — one
-        choice, not two.`;
+    : html` Week ${w.week}: the token <em>is</em> a vault slot, so it's one or
+        the other.`;
 }
 
 /**
@@ -344,7 +346,14 @@ export function renderRewards(here, keyLevel) {
             the token <em>is</em> a Great Vault slot: you take the token or you
             take the item, not both.
             ${win.from > 1 && html`There is no token in the opening vault of the season at all.`}
-            ${win.to && html`From week ${win.to + 1} it's a free weekly reward and you get both.`}
+            ${
+              win.to &&
+              html`From week ${win.to + 1} you're given one every week, so an
+                item no longer costs you your only roll. Whether the vault keeps
+                offering a token as a selection on top of that isn't stated
+                anywhere — if it does, the choice becomes a second roll or the
+                item.`
+            }
           </p>`
         }
         ${weekNow && html`<p class="rwd-now">${weekNow}</p>`}
@@ -992,13 +1001,14 @@ function renderVault(b, built) {
 function vaultOptionHTML(b, v, row, opt) {
   const meta = QE_DATA.items[v.id];
   const taken = b.vaultTake === v.id;
-  // The report scored the item at one level; the vault is handing you its own copy, often a track
-  // step or more apart. Said out loud only where it's load-bearing — the two levels differ and the
-  // number being qualified isn't zero.
-  const offBy =
-    opt && opt.score > 0 && opt.scoredIlvl && opt.scoredIlvl !== v.ilvl
-      ? opt.scoredIlvl
-      : 0;
+  // How much the number beside this option is claiming. A score read straight off a report row needs
+  // no qualifier; one read between two rows, or refused for sitting outside them both, does.
+  const note =
+    opt?.at === "between"
+      ? html`· estimated between the report’s ilvl ${opt.from} and ${opt.to}`
+      : opt?.at === "outside"
+        ? html`· your report never scored it this low`
+        : "";
   let encTxt,
     couple,
     warn = false;
@@ -1020,7 +1030,7 @@ function vaultOptionHTML(b, v, row, opt) {
       <div class="vmeta">
         <span>${encTxt}</span><span>·</span
         ><span>ilvl ${v.ilvl}</span
-        >${offBy > 0 && html`<span>· scored at ilvl ${offBy}</span>`}${
+        >${note && html`<span>${note}</span>`}${
           warn &&
           html`<span class="warn">· also in this roll pool, dupe risk</span>`
         }
@@ -1058,9 +1068,14 @@ function tradeHTML(b, vc) {
   const unit = unitOf(b),
     keep = vc.keep,
     roll = vc.top;
-  const keepTxt = keep.scored
+  // "Priced" is stricter than "scored": an option the report evaluated only above the level the
+  // vault is offering has a number, and it is not a number about the item on the table.
+  const priced = keep.scored && keep.at !== "outside";
+  const keepTxt = priced
     ? html`<b>${dv(b, keep.score)}</b> ${unit} guaranteed from ${keep.name}`
-    : html`${keep.name}, which your report never scored`;
+    : keep.scored
+      ? html`${keep.name}, which your report only scored from ilvl ${keep.from} up`
+      : html`${keep.name}, which your report never scored`;
   const lead = SEASON.tokenFromVault
     ? vc.verdict === "roll"
       ? "Take the token"
@@ -1071,20 +1086,18 @@ function tradeHTML(b, vc) {
   return html`<div class="trade ${vc.verdict}">
     <div class="tlead">${lead}</div>
     <div class="tbody">
-      <b>${dv(b, vc.perRoll)}</b> ${unit} on average from one roll on
-      ${roll.g.name}, against ${keepTxt}.
-      ${keep.scored && html` A gap of ${dv(b, Math.abs(vc.perRoll - keep.score))} ${unit}.`}
+      <b>${dv(b, vc.perRoll)}</b> ${unit} per roll on ${roll.g.name}, against
+      ${keepTxt}.
+      ${priced && html` Gap: <b>${dv(b, Math.abs(vc.perRoll - keep.score))}</b> ${unit}.`}
       ${
-        keep.score > 0 &&
-        keep.scoredIlvl > 0 &&
-        keep.scoredIlvl !== keep.ilvl &&
-        html` That score is the report’s, simmed at ilvl ${keep.scoredIlvl} —
-        your vault offers ilvl ${keep.ilvl}.`
+        keep.at === "between" &&
+        html` That's ilvl ${keep.ilvl}, read between the report’s ${keep.from}
+        and ${keep.to}.`
       }
       ${roll.cost !== 1 && html` That roll costs ${roll.cost} tokens.`}
       ${tokenWeeksHTML()}
     </div>
-    ${crestEdgeHTML(b, roll)} ${vc.drag && dragHTML(b, vc.drag, keep, unit)}
+    ${crestEdgeHTML(b, roll, keep)} ${vc.drag && dragHTML(b, vc.drag, keep, unit)}
   </div>`;
 }
 
@@ -1092,8 +1105,15 @@ function tradeHTML(b, vc) {
  * The crest saving, on the trade banner, as the one thing the verdict above it hasn't priced.
  *
  * Same shape as `tdrag`, the other line here that names a cost living outside the week's arithmetic.
- * It says "on top of that" rather than converting: the whole reason the figure is quoted in crests
- * is that no rate exists to fold it into a score with (see `crestNote`).
+ * It doesn't convert: the whole reason the figure is quoted in crests is that no rate exists to fold
+ * it into a score with (see `crestNote`).
+ *
+ * Measured against the vault item's own level, which is the only thing that makes it a term of *this*
+ * trade. A roll saves crests by arriving further up the track than the alternative, and the
+ * alternative here is not the boss's drop — it's the item in the vault. Where a season hands a vault
+ * slot over already capped, the two arrive at the same step, the roll saves nothing over it, and the
+ * line has to disappear rather than credit the token with a saving both branches get. `crestSavingAt`
+ * takes the level as a floor and returns zero for that case; this renders nothing on a zero.
  *
  * Whether the figure is computed matters more on this line than anywhere else: this is the one place
  * the crests could tip a decision, as the tiebreak on a close margin. A reader leaning on an assumed
@@ -1105,30 +1125,36 @@ function tradeHTML(b, vc) {
  *
  * @param {import("./types.js").Board} b
  * @param {import("./types.js").Row} roll  The top roll — the one the banner is costing.
+ * @param {{name: string, ilvl: number}} keep  The vault item it's being weighed against.
  */
-function crestEdgeHTML(b, roll) {
-  const c = roll.reward?.crests;
-  if (!c) return "";
-  const kind = roll.reward.crestKind || "";
-  const rng = crestSavingRange(b, roll.reward);
+function crestEdgeHTML(b, roll, keep) {
+  const rw = roll.reward;
+  if (!rw?.crests) return "";
+  // Null rather than 0 for an unknown level, so the floor falls back to the drop the season prices
+  // from instead of clamping the saving away.
+  const at = keep && keep.ilvl > 0 ? keep.ilvl : null;
+  const kind = rw.crestKind || "";
+  const rng = crestSavingRange(b, rw, at);
+  const max = rng ? rng.max : crestSavingAt(rw, null, at);
+  if (!max) return "";
   const figure = !rng
-    ? html`up to ${c} ${kind} crests`
+    ? html`up to ${max} ${kind} crests`
     : rng.flat
       ? html`${rng.max} ${kind} crests`
       : html`${rng.min}–${rng.max} ${kind} crests`;
   return html`<div class="tcrest">
-    On top of that, the roll <b>saves ${figure}</b> — what you'd have spent
-    taking that slot to ${roll.reward.label || html`the top of its track`}. Your
-    vault item saves none, and neither number above counts it.
+    The roll also <b>saves ${figure}</b>, counted in neither number above: it
+    arrives at ${rw.label || html`the top of its track`}${
+      at ? html`, ${keep.name} at ilvl ${at}` : ""
+    }.
     ${
       !rng
-        ? html`That figure assumes the slot is capped on the track below; open
-          the encounter for what it turns on.`
+        ? html`Assumed — open the encounter for what it turns on.`
         : rng.flat
-          ? html`Computed from your <code>/simc</code>, where every slot works
-              out the same.`
-          : html`Computed from your <code>/simc</code> — open the encounter for
-              why it's a range.`
+          ? html`From your <code>/simc</code>, where every slot works out the
+              same.`
+          : html`From your <code>/simc</code> — open the encounter for why it's
+              a range.`
     }
   </div>`;
 }
@@ -1147,16 +1173,15 @@ function tokenWeeksHTML() {
   if (now) return now;
   return html` ${win.to ? html`Weeks ${win.from}–${win.to}` : html`From week ${win.from}`}
     the token <em>is</em> a vault slot, so it’s one choice, not two.
-    ${win.to && html`From week ${win.to + 1} the token is free and you get both.`}`;
+    ${win.to && html`From week ${win.to + 1} a token is given weekly instead.`}`;
 }
 
 function dragHTML(b, d, keep, unit) {
   return html`<div class="tdrag">
-    It doesn’t end this week either. Taking ${keep.name} leaves it in
-    ${d.name}’s pool for good, worth nothing to you and still counted, which
-    costs ${d.isTop ? "the encounter above" : "that encounter"}
-    <b>${dv(b, d.amount)}</b> ${unit} on every roll you make there from now on.
-    A roll would have taken it <em>out</em>.
+    And it lasts: taking ${keep.name} leaves it in ${d.name}’s pool as dead
+    weight that still counts, so every later roll
+    ${d.isTop ? "on the encounter above" : "there"} is worth
+    <b>${dv(b, d.amount)}</b> ${unit} less. Rolling would have removed it.
   </div>`;
 }
 

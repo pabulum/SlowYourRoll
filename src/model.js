@@ -837,16 +837,26 @@ function ownedGear(b) {
  *
  * A null mark means "unknown", which lands on the same clamp and so returns the maximum.
  *
+ * `against` is the third floor, and the one that makes this a comparison rather than a boast: the
+ * item level the *alternative* arrives at. A saving is only a saving against something, and the
+ * default something is the boss's drop (`crestFrom`). Where the alternative is a Great Vault slot
+ * the season hands over further up the track — or fully upgraded, which is what a Mythic vault
+ * does — every step at or below its level is one you weren't going to pay for either way, and the
+ * figure falls to zero when it arrives at the payout's own step. Same clamp as the other two, so
+ * an alternative *below* the drop can't inflate the number.
+ *
  * @param {import("./season.js").Reward|null|undefined} reward
  * @param {number|null} [mark]  The slot's high watermark, or null for unknown.
+ * @param {number|null} [against]  Item level the alternative arrives at; defaults to the drop.
  * @returns {number|null} Crests saved, or null where the payout has no step table to reason over.
  */
-export function crestSavingAt(reward, mark) {
+export function crestSavingAt(reward, mark, against) {
   if (!reward?.crestSteps || !reward.crestPerStep) return null;
   if (reward.crestFrom == null) return null;
   const floor = Math.max(
     mark == null ? -Infinity : mark,
     reward.crestFreeTo == null ? -Infinity : reward.crestFreeTo,
+    against == null ? -Infinity : against,
   );
   const paid = reward.crestSteps.filter(
     (s) => s > reward.crestFrom && s > floor,
@@ -870,15 +880,16 @@ export function crestSavingAt(reward, mark) {
  *
  * @param {import("./types.js").Board} b
  * @param {import("./season.js").Reward|null|undefined} reward
+ * @param {number|null} [against]  Item level the alternative arrives at; see `crestSavingAt`.
  * @returns {{min: number, max: number, flat: boolean, slots: number}|null} null when there's nothing
  *   to compute from — no linked `/simc`, a paste too old to carry the marks, or a payout with no
  *   step table or nothing to save.
  */
-export function crestSavingRange(b, reward) {
+export function crestSavingRange(b, reward, against) {
   if (!reward?.crests) return null;
   const marks = state.simc[b.key]?.watermarks;
   if (!Array.isArray(marks) || !marks.length) return null;
-  const each = marks.map((m) => crestSavingAt(reward, m));
+  const each = marks.map((m) => crestSavingAt(reward, m, against));
   if (each.some((v) => v == null)) return null;
   const min = Math.min(...each),
     max = Math.max(...each);
@@ -1009,6 +1020,84 @@ export function vaultTakeOf(b, now) {
   return st?.stale ? null : b.vaultTake;
 }
 
+/**
+ * Every item level a report priced an item at, best score first at each, low to high.
+ *
+ * The pools want one row per item and `mergeRow` gives them that. A vault option wants the opposite:
+ * a 12.1 report scores each item three times — the drop, the drop capped, and the bonus payout
+ * capped — and a vault slot arrives at whichever level the vault decided, which is frequently none
+ * of the three. The curve through those points is the only evidence there is about what the item is
+ * worth at the level actually on offer, so it has to survive as a curve.
+ *
+ * @param {import("./types.js").Board} b
+ * @param {number} id
+ * @returns {[number, number][]} `[itemLevel, score]`, ascending, one entry per level.
+ */
+function scoreCurve(b, id) {
+  const at = new Map();
+  b.results.forEach((r) => {
+    if (r.item !== id) return;
+    const lvl = r.level || 0,
+      sc = scoreOf(r);
+    if (!lvl) return;
+    if (!at.has(lvl) || at.get(lvl) < sc) at.set(lvl, sc);
+  });
+  return [...at.entries()].sort((x, y) => x[0] - y[0]);
+}
+
+/**
+ * What a vault option is worth *at the item level the vault is handing it over at*.
+ *
+ * The bug this exists to kill: ranking vault options by their `bonus` row compares them at a level
+ * three of five slots don't arrive at. A Mythic raid slot pays Myth 6/6 and a M+ slot pays Myth 1/6,
+ * five steps apart, and the `bonus` row is simmed at the cap for both — so a dungeon option can beat
+ * a raid option on a number neither the vault nor the player will ever see. Observed at 6,837 against
+ * 5,085 where the honest comparison was 3,391 against 5,085: the wrong item, by 1,700.
+ *
+ * Three tiers, in descending order of how much they claim:
+ *
+ *   exact    the report scored this item at this very level. Nothing is computed; the right row is
+ *            simply picked instead of the wrong one. Every capped slot lands here.
+ *   between  the offered level falls between two levels the report scored, so the value is read off
+ *            the line joining them. This is interpolation and it is the only tier that invents
+ *            anything — but it invents it *between* two measurements ten item levels apart, where a
+ *            quadratic through all three points differs from the chord by well under a percent.
+ *   outside  the offered level sits beyond every level the report scored. That is extrapolation, and
+ *            it is refused: the option carries no value and cannot become the item the banner argues
+ *            against. A raid slot awarded below its own Mythic drop level lands here.
+ *
+ * The README's "interpolating one would be inventing it" is narrowed by this, not overruled — the
+ * claim it was really guarding against is a number pulled from outside the report's own range, and
+ * that is exactly what `outside` still refuses.
+ *
+ * @param {[number, number][]} curve  From `scoreCurve`, ascending.
+ * @param {number} ilvl  The level the vault is offering.
+ * @returns {{score: number, at: "exact"|"between"|"outside", from: number, to: number}|null}
+ *   null where the report never scored the item at all.
+ */
+function valueAt(curve, ilvl) {
+  if (!curve.length) return null;
+  const exact = curve.find(([l]) => l === ilvl);
+  if (exact) return { score: exact[1], at: "exact", from: ilvl, to: ilvl };
+  for (let i = 0; i < curve.length - 1; i++) {
+    const [lo, slo] = curve[i],
+      [hi, shi] = curve[i + 1];
+    if (ilvl > lo && ilvl < hi)
+      return {
+        score: slo + ((ilvl - lo) / (hi - lo)) * (shi - slo),
+        at: "between",
+        from: lo,
+        to: hi,
+      };
+  }
+  return {
+    score: 0,
+    at: "outside",
+    from: curve[0][0],
+    to: curve[curve.length - 1][0],
+  };
+}
+
 export function vaultChoice(b) {
   const simc = state.simc[b.key];
   if (!simc?.vault?.length) return null;
@@ -1017,27 +1106,32 @@ export function vaultChoice(b) {
   const st = vaultStatus(b);
   if (st?.stale) return null;
 
-  // Each item's value in the report, and the item level that value was simmed at — which is not the
-  // vault's copy of it. The two disagree routinely, and in both directions: a report from before
-  // 12.1 sims the boss's drop, one after it sims the bonus roll's payout at the top of its track. So
-  // the level is carried alongside the number rather than quietly folded into it; `vaultOptionHTML`
-  // says so where they differ. Folded with the same `mergeRow` the pools use, because a vault option
-  // priced off a different row of the report than the ranking is a comparison of two things.
-  const scored = {};
-  b.results.forEach((r) => {
-    scored[r.item] = mergeRow(scored[r.item], r, false);
+  // Each option priced at the level its own vault slot is offering, which is the only level any of
+  // this is a decision about. Not `mergeRow` — that keeps the bonus row alone, which is right for a
+  // roll and wrong here for every slot the vault doesn't hand over capped. See `valueAt`.
+  const options = simc.vault.map((v) => {
+    const val = valueAt(scoreCurve(b, v.id), v.ilvl);
+    return {
+      id: v.id,
+      name: QE_DATA.items[v.id]?.n || v.name,
+      ilvl: v.ilvl,
+      score: val?.score || 0,
+      // How much the number above is claiming: read off, interpolated, or refused. Null where the
+      // report never evaluated the item — distinguished from a genuine zero, since "worth 0" about
+      // an item nobody simmed is a claim we haven't earned.
+      at: val?.at || null,
+      from: val?.from || 0,
+      to: val?.to || 0,
+      scored: val != null,
+    };
   });
-  const options = simc.vault.map((v) => ({
-    id: v.id,
-    name: QE_DATA.items[v.id]?.n || v.name,
-    ilvl: v.ilvl,
-    score: scored[v.id]?.score || 0,
-    scoredIlvl: scored[v.id]?.scoreLvl || 0,
-    // Distinguished from a genuine zero: an item the report never evaluated has no value we can
-    // quote, and saying "worth 0" about it would be a claim we haven't earned.
-    scored: scored[v.id] != null,
-  }));
-  const keep = options.slice().sort((a, c) => c.score - a.score)[0];
+  // An option we can't place can't be the thing the banner argues against — it would be arguing
+  // against a number that isn't there. Only where nothing places at all does the best of them stand
+  // in, so the panel still has something to head itself with.
+  const placeable = options.filter((o) => o.at && o.at !== "outside");
+  const keep = (placeable.length ? placeable : options)
+    .slice()
+    .sort((a, c) => c.score - a.score)[0];
 
   const rows = buildGroups(Object.assign({}, b, { vaultTake: null })).rows;
   const top = rows.find((r) => r.ev > 0) || null;

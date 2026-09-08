@@ -120,7 +120,9 @@
  * @property {number} [tokenVaultFrom]  First week of the season in which the token can be taken at
  *   all. Defaults to week 1; Season 2 withholds it from the opening vault. Wording only, as above.
  * @property {number} [tokenVaultWeeks]  Last week of the season in which that's true; from the week
- *   after, the token is a free weekly reward and the trade disappears. Wording only, as above.
+ *   after, a token is handed out every week, so an item stops costing you your only roll. Whether
+ *   the vault keeps offering one as a selection past this week is unsourced; see the Season 2 note.
+ *   Wording only, as above.
  * @property {string} [week1]  ISO instant of the weekly reset that opens week 1 — the anchor every
  *   week number on the page is counted from. Absent where a season's calendar isn't published,
  *   which leaves those week numbers abstract rather than wrong.
@@ -161,7 +163,17 @@ export const SEASONS = {
     tokenNote:
       "1 token for everything in Season 2, raid bosses and M+ dungeons alike. (Season 1 charged 2 per raid boss, which is why older notes halve raid EV.)",
     // Weeks 2–7 the token comes out of a Great Vault slot, so a roll is bought with the item you'd
-    // otherwise have taken. From week 8 it's a free weekly reward again and the trade disappears.
+    // otherwise have taken. From week 8 Blizzard hands one out every week — Larias: "they will
+    // return as a regular reward, getting 1 per week starting on Week 8 again" — so the item stops
+    // costing you your only roll.
+    //
+    // What no source states is whether the vault *also* keeps offering a Voidcore as a selection
+    // past week 7. Blizzard's post introduces it as one ("can be selected by anyone who has unlocked
+    // at least 3 panes") and never dates its removal, so the page used to say "you get both" and the
+    // trade disappears on an inference nobody published. If the selection stays, week 8 onward is
+    // not "no trade" but a smaller one: a *second* roll against the item. The copy now says only
+    // what's sourced and names the gap. Wording only either way — `tokenVaultWeeks` never touches
+    // the arithmetic.
     //
     // The window opens in week 2, not week 1: Blizzard's 2026-07-31 season post says a Voidcore is
     // not offered in the opening vault of Season 2 and first appears on August 25. Guides written
@@ -462,7 +474,8 @@ export function lastReset(season, now) {
  * @param {Date} [now]
  * @returns {{week: number, opens: Date, trades: Date, state: "before"|"early"|"trade"|"free"}|null}
  *   `before` — the season hasn't opened. `early` — in season, but the token isn't in the vault yet.
- *   `trade` — inside the window, so the token costs you the item. `free` — past it, you get both.
+ *   `trade` — inside the window, so the token costs you the item. `free` — past it, one is handed
+ *   out weekly, so the item no longer costs a roll.
  *   `trades` is the reset the window opens on, which is the date worth naming in the first two.
  */
 export function tokenWeekNow(season, now) {

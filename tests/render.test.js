@@ -223,10 +223,10 @@ test("the vault panel prices the choice both ways and offers to take it", () => 
   );
 });
 
-// A vault reward and the boss's drop are rarely the same item level, and the score on screen is the
-// report's, which only ever simmed the drop. Real case: a QE report simmed at ilvl 289 beside a
-// vault offering 279 of the same item.
-test("the vault names the item level its score was simmed at when it isn't the one on offer", () => {
+// A vault reward and the level a report scored it at are rarely the same, and a score from outside
+// the report's range is not a number about the item on the table. Real case: a Heroic 9-boss vault
+// slot paying Myth 1/6 (318) for an item the report only scored from its Mythic drop (324) up.
+test("a vault option the report never priced at the offered level isn't given a number", () => {
   const doc = renderWith([makeBoard()], {
     simc: {
       testkey: {
@@ -237,8 +237,49 @@ test("the vault names the item level its score was simmed at when it isn't the o
     },
   });
   const panel = doc.getElementById("vaultPanel").textContent;
-  assert.match(panel, /scored at ilvl 639/);
-  assert.match(panel, /your vault offers ilvl 652/);
+  assert.match(panel, /never scored it this low/);
+  assert.match(panel, /only scored from ilvl 639 up/);
+  assert.doesNotMatch(
+    panel,
+    /20 DPS guaranteed/,
+    "the bonus row must not stand in for it",
+  );
+});
+
+// The tier that does the work. A vault slot lands between two levels the report actually simmed, so
+// the value is read off the line joining them rather than off a row for a different item level.
+test("a vault option between two scored levels is read between them", () => {
+  const b = makeBoard();
+  b.results = [
+    {
+      item: 900002,
+      inst: RAID_ID,
+      enc: ENC_ID,
+      diff: "mythic",
+      level: 311,
+      score: 10,
+    },
+    {
+      item: 900002,
+      inst: RAID_ID,
+      enc: ENC_ID,
+      diff: "mythic",
+      level: 321,
+      score: 20,
+    },
+  ];
+  const doc = renderWith([b], {
+    simc: {
+      testkey: {
+        owned: {},
+        at: new Date().toISOString(),
+        vault: [{ id: 900002, ilvl: 318, name: "V900002" }],
+      },
+    },
+  });
+  const panel = doc.getElementById("vaultPanel").textContent;
+  assert.match(panel, /17 DPS guaranteed/, "10 + 0.7 x (20 - 10)");
+  assert.match(panel, /read between the report’s 311\s+and 321/);
 });
 
 test("a vault item scored at the level it's offered at is quoted without qualification", () => {
@@ -252,7 +293,7 @@ test("a vault item scored at the level it's offered at is quoted without qualifi
     },
   });
   const panel = doc.getElementById("vaultPanel").textContent;
-  assert.doesNotMatch(panel, /scored at ilvl/);
+  assert.doesNotMatch(panel, /estimated between|never scored it/);
   // And the suppressed branch leaves nothing behind: a bare 0 is a value the templating renders.
   assert.match(panel, /ilvl 639(?!\d)/);
 });

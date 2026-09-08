@@ -251,14 +251,29 @@ loots as a DPS spec to shed intellect trinkets it is not the report's spec. `act
 [`src/model.js`](src/model.js) prefers an explicit choice in the dropdown, then `/simc`, then the
 report's own spec, and ignores a loot spec belonging to another class.
 
-**A vault option's score is the report's score for the _boss's_ drop.** The vault hands you its own
-copy of the item, and the two item levels routinely differ — a vault reward arrives at the top of
-its track, while the report simmed whatever that boss drops (unless it was imported with **Upgrade
-ALL to Max Level**, which brings them back together). Nothing rescales the number, because the
-report is the only source of values there is and interpolating one would be inventing it. Instead
-the panel names the level the score was earned at whenever it isn't the level on offer, so a figure
-quoted against a different item is visibly quoted against a different item. It follows that the
-vault verdict is at its sharpest on a report imported with **Upgrade ALL** on.
+**A vault option is priced at the item level its own slot is offering.** Each Great Vault slot pays
+out at the level the activity behind it earned, and they differ within one vault: a Mythic raid slot
+hands over Myth 6/6 (334), a Heroic one and every M+ slot hand over Myth 1/6 (318). A 12.1 report
+scores each item at three levels — the drop, the drop capped, the bonus payout capped — and ranking
+options by the last of those compares them all at a cap most slots never reach. `valueAt` in
+[`src/model.js`](src/model.js) places each option on that curve instead, in three tiers:
+
+| Tier      | When                                          | What it claims                          |
+| --------- | --------------------------------------------- | --------------------------------------- |
+| `exact`   | the report scored the item at that very level | nothing — the right row is picked       |
+| `between` | the level falls between two scored levels     | the value on the line joining them      |
+| `outside` | the level sits beyond every scored level      | nothing; the option carries no value    |
+
+Only `between` computes anything, and it computes it between two measurements ten item levels apart
+— a quadratic through all three points differs from the chord by well under a percent. `outside` is
+the tier that keeps the old rule honest: a number from beyond the report's own range would be
+invention, so the option is left unpriced and cannot become the item the banner argues against.
+
+> **Worth the space because the old behaviour was wrong by more than interpolation ever risks.** On
+> a real vault — two Mythic raid slots at 334, a Heroic slot and two M+ slots at 318 — the banner
+> named Breeches of Deft Deals at 6,837 HPS, its value at a cap that slot doesn't pay. At the 318 it
+> actually offers it is worth about 3,391, which loses to the roll. The right answer was Soulcoiler
+> Ritual Vessel at 5,085, a number the report states outright.
 
 **QE's `dateCreated` is `"2026 - 7 - 29"`** — spaced separators and a one-digit month, which `Date`
 refuses outright. `shortDate` in [`src/render.js`](src/render.js) reads the three numbers out and
@@ -375,8 +390,11 @@ The wording is load-bearing rather than stylistic. No roll pays crests _out_; de
 a reader goes looking for a currency drop that never arrives, or counts it a second time against the
 crests they're already farming that week. So every surface says _saves_: the collapsed encounter card
 (`crestMeta`, set off by an accent rule because it's the one thing beside the EV column the EV can't
-account for), the expanded card's note (`crestNote`), the vault trade banner (`crestEdgeHTML` — the
-only term of that trade sitting wholly on one side of it, since a vault item saves nothing), and the
+account for), the expanded card's note (`crestNote`), the vault trade banner (`crestEdgeHTML` — where the
+figure is measured against the vault item's own item level, not the boss's drop, because a saving is
+only a saving against the branch you'd otherwise take: a vault slot the season hands over already
+capped costs the same nothing to finish, so the roll saves nothing over it and the line is dropped
+rather than claiming a term both branches get), and the
 reward pane, which leads its section with the figure. Two of those are pinned by tests in
 [`tests/render.test.js`](tests/render.test.js), which is otherwise deliberately shallow on wording.
 
@@ -473,7 +491,10 @@ token for the Mythic kill, and spend one here on Heroic most weeks are both true
 leads is decided by what the reader is being ranked at (`specialAtTier` in `src/render.js`).
 
 In Season 2 the roll token is itself a Great Vault reward for weeks 2–7, so taking it costs you the
-item you'd otherwise have picked; from week 8 it's free again and you get both. That window is a
+item you'd otherwise have picked; from week 8 one is handed out every week, so the item stops
+costing you your only roll. (Whether the vault *also* keeps offering a token as a selection past
+week 7 is stated nowhere — Blizzard introduces the Voidcore as a vault selection and never dates its
+removal — so the copy says only what's sourced rather than promising the trade disappears.) That window is a
 rule stated in week numbers, which is only useful next to which week it is now — so the season also
 carries `week1`, the reset that opens week 1 (August 18, off Larias' week-by-week dates), and both
 places that describe the window answer it for today: the reward pane and the vault trade banner.

@@ -736,8 +736,8 @@ a {
   color: var(--danger);
   font-weight: 650;
 }
-/* The crests the roll saves and the vault item doesn't — the one term of this trade that sits
-   wholly on one side of it and wholly outside both numbers above. Same footnote shape as .tdrag,
+/* What the roll saves in crests over the vault item, which is a real term of this trade wherever
+   the two arrive on different steps, and outside both numbers above. Same footnote shape as .tdrag,
    ink rather than danger red: that line is what taking the item costs you, this one is what rolling
    gets you, and the two must not read as the same kind of warning. */
 .trade .tcrest {

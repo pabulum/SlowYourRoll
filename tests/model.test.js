@@ -414,15 +414,15 @@ test("a vault item that no live pool contains has nothing to drag", () => {
   assert.equal(vaultChoice(makeBoard()).drag, null);
 });
 
-// The score belongs to the boss's drop, the item belongs to the vault, and the two are routinely a
-// track step apart — so the level the number was earned at travels with it.
-test("a vault option carries the item level its score was simmed at", () => {
+// A vault option is priced at the level its own slot is offering, and how much that number claims
+// travels with it — here the report scored the item at exactly that level, so nothing is computed.
+test("a vault option scored at the level on offer is read straight off the report", () => {
   state.showAll = false;
   withVault([900002]);
   const opt = vaultChoice(makeBoard()).options[0];
   assert.equal(opt.score, 20);
-  assert.equal(opt.scoredIlvl, 639, "the report's level, not the vault's");
   assert.equal(opt.ilvl, 639);
+  assert.equal(opt.at, "exact", "the right row picked, not a number derived");
 });
 
 test("the best vault option is the one the trade is measured against", () => {
@@ -1126,4 +1126,36 @@ test("the per-slot figure agrees with the guide's whole-character total", () => 
 test("a payout with no step table yields no figure rather than a wrong one", () => {
   assert.equal(crestSavingAt(rollReward("dungeon"), 300), null);
   assert.equal(crestSavingAt(null, 300), null);
+});
+
+// The vault trade's version of the same question. A saving is against something, and on that banner
+// the something is the item in the vault rather than the boss's drop — a vault slot handed over at
+// Myth 6/6 costs the same nothing to finish, so the roll saves nothing over it.
+test("the saving is measured against the item the alternative arrives at", () => {
+  const m = rollReward("raid", "mythic");
+  assert.equal(
+    crestSavingAt(m, null, 318),
+    80,
+    "a vault item at the drop's step changes nothing",
+  );
+  assert.equal(
+    crestSavingAt(m, null, 328),
+    40,
+    "one part-way up the track saves the rest",
+  );
+  assert.equal(
+    crestSavingAt(m, null, 334),
+    0,
+    "and one already capped leaves the roll nothing to save",
+  );
+  assert.equal(
+    crestSavingAt(m, null, 0),
+    80,
+    "an alternative below the drop cannot inflate it",
+  );
+  assert.equal(
+    crestSavingAt(m, 331, 318),
+    20,
+    "the watermark still binds where it is the higher floor",
+  );
 });
