@@ -43,7 +43,7 @@ import {
   tokenWeekNow,
 } from "./season.js";
 import { active, state } from "./store.js";
-import { iconHTML, nameHTML } from "./wowhead.js";
+import { iconHTML, linkHTML, nameHTML } from "./wowhead.js";
 
 /**
  * The app's mark, drawn rather than set as 🎲 — an emoji is a different object on every platform and
@@ -1760,10 +1760,12 @@ function itemRow(b, r, it) {
         /* A tier token is not the thing you wear, and its own name says nothing about what it is
            worth. The score on this row is the piece's, so the row has to name the piece. */
         it.givesName &&
-        html`<span
-          class="gives"
-          title="Trade the token for this — the score is its value"
-          >→ ${it.givesName}</span
+        html`<span class="gives"
+          ><span
+            class="gives-to"
+            title="Trade the token for this — the score is its value"
+            >→</span
+          >${linkHTML(it.givesId, it.givesName, lvl, "gives-link")}</span
         >`
       }${
         it.vr && html`<span class="vr">very rare</span>`

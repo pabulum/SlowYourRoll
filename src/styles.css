@@ -655,14 +655,6 @@ a {
   justify-content: space-between;
   gap: 12px;
 }
-/* What a tier token becomes. Quiet and inline: it qualifies the name rather than competing with it,
-   and it sits where the "very rare" badge does so a row never grows a second line. */
-.item .gives {
-  font-size: 11.5px;
-  color: var(--muted);
-  margin-left: 7px;
-  white-space: nowrap;
-}
 
 /* The clear affordance sits in the heading rather than under the options, because it acts on the
    whole block and not on any one of them. Quiet: it undoes a paste, so it should be findable
@@ -1517,6 +1509,30 @@ img.icon,
 .iname .q5 {
   color: var(--q-legend);
 }
+/* What a tier token becomes. Quiet and inline: it qualifies the name rather than competing with it,
+   and it sits where the "very rare" badge does so a row never grows a second line. */
+.item .gives {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-left: 7px;
+  white-space: nowrap;
+}
+/* The arrow carries the explanation, not the name: the name is a Wowhead link, and a native
+   tooltip over it would fight the card the widget opens there. */
+.gives-to {
+  margin-right: 3px;
+  opacity: 0.5;
+}
+/* Linked, but still an annotation — it borrows the quality colours of the name above it rather
+   than restating them, so the row reads as one item with a note and not as two items. Underline on
+   hover is the affordance, the same one every other name in the pool uses. */
+.gives-link {
+  color: inherit;
+  text-decoration: none;
+}
+.gives-link:hover {
+  text-decoration: underline;
+}
 /* The row's inline annotations, all cut from one pattern: tiny, tracked, ruled — never filled, so a
    name carrying three of them still reads as a name with notes rather than a row of buttons. */
 .vr,
@@ -1981,14 +1997,6 @@ img.icon,
   color: var(--faint);
 }
 /* A button that reads as a link, for the two places prose has to open the pane. */
-/* What a tier token becomes. Quiet and inline: it qualifies the name rather than competing with it,
-   and it sits where the "very rare" badge does so a row never grows a second line. */
-.item .gives {
-  font-size: 11.5px;
-  color: var(--muted);
-  margin-left: 7px;
-  white-space: nowrap;
-}
 
 .linky {
   background: none;

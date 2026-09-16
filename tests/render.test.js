@@ -508,6 +508,56 @@ test("on Heroic the same boss is badged for what it still gives you, not for ilv
   assert.match(note, /^Cantrip items\./, "a sentence, so it opens like one");
 });
 
+/* Vashnikt, its chest token, the Monk chest it is a voucher for, and one ordinary drop off the same
+   boss so the encounter has a row at all — the same fixture tests/model.test.js reasons about. */
+const TOKEN = { enc: 2882, id: 270927, piece: 271522, alsoDrops: 268205 };
+
+/** A QE board that scored the tier piece, so the pool carries the token in its place. */
+function makeTokenBoard() {
+  const drop = (item, score) => ({
+    item,
+    dropType: "bonus",
+    dropDifficulty: 3,
+    level: 334,
+    score,
+    rawDiff: score,
+    percDiff: 1,
+  });
+  return {
+    id: "tk",
+    key: "tkkey",
+    reportId: "r",
+    player: "Heals",
+    realm: "area-52",
+    spec: "Mistweaver Monk",
+    source: "qe",
+    metric: "raw",
+    results: [drop(TOKEN.piece, 4904), drop(TOKEN.alsoDrops, 100)],
+    overlay: {},
+    tokenOverride: {},
+    vaultTake: null,
+    raidDiff: null,
+  };
+}
+
+// The token's own name says nothing about what you'd wear, so the row names the piece — and a name
+// you can't hover is a name you have to go and look up somewhere else. It links to the piece, not to
+// the token beside it, and at the level the score was simmed at, so the card and the score agree.
+test("the piece a tier token becomes is a link to that piece, not to the token", (t) => {
+  if (!QE_DATA.items[TOKEN.id] || !QE_DATA.items[TOKEN.piece])
+    return t.skip("a later season doesn't ship this token");
+  const doc = renderWith([makeTokenBoard()]);
+  const row = doc.querySelector(`.item[data-id="${TOKEN.id}"]`);
+  assert.ok(row, "the token is in the rendered pool");
+  const link = row.querySelector(".gives-link");
+  assert.ok(link, "the piece it becomes is a link");
+  assert.equal(link.textContent, QE_DATA.items[TOKEN.piece].n);
+  assert.match(link.getAttribute("href"), new RegExp(`item=${TOKEN.piece}$`));
+  assert.match(link.getAttribute("data-wowhead"), /&ilvl=\d+$/);
+  // ui.js treats a click in a row as a state change unless the link is marked as a way out.
+  assert.equal(link.getAttribute("data-act"), "wowhead");
+});
+
 // One of the two places this file asserts wording, and for the same reason as the escaping tests:
 // the verb is the claim, not the decoration. No bonus roll pays crests out — it hands the item over
 // already upgraded, so the figure is crests you never spend. Quoted as a yield instead, a reader

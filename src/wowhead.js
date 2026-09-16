@@ -61,13 +61,24 @@ export function iconHTML(id, lvl) {
 
 /** The item's name as a Wowhead link, coloured by quality. */
 export function nameHTML(id, name, q, lvl) {
+  return linkHTML(id, name, lvl, `iname-link q${q || 3}`);
+}
+
+/**
+ * The same link under a class of the caller's choosing, for the one name a row shows that isn't
+ * the row's own item: the piece a tier token is traded for. That one is an annotation on the name
+ * above it rather than a name in its own right, so it keeps the annotation's colour instead of the
+ * quality colours `nameHTML` applies — the link still has to reach Wowhead's card, because the
+ * card is the whole reason to want it.
+ */
+export function linkHTML(id, text, lvl, cls) {
   return html`<a
-    class="iname-link q${q || 3}"
+    class="${cls}"
     href="${WOWHEAD + id}"
     target="_blank"
     rel="noopener"
     ${whAttr(id, lvl)}
     data-act="wowhead"
-    >${name}</a
+    >${text}</a
   >`;
 }
