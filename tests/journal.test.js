@@ -65,16 +65,17 @@ const MISTWEAVER = {
     "Vile Vial of Volatile Venom",
   ],
   "-1:1313": [
-    // Voidscar Arena. Mindpiercer's Sigil is here, and QE Live's database can't see it at all.
+    // Voidscar Arena. Mindpiercer's Sigil was here until Blizzard cut its loot specs to caster DPS
+    // (journal rechecked 2026-09-22); QE Live's database can't see it at all, so only Raidbots
+    // knows it drops here — and who it drops for.
     "Graft of the Domanaar",
     "Somber Spaulders",
     "Hide of Pestilence",
     "Gravitic Girdle",
     "Sickening Signet of Atroxus",
-    "Mindpiercer's Sigil",
   ],
   "-1:1309": [
-    // The Blinding Vale. Same for Sapling of the Dawnroot.
+    // The Blinding Vale. Same for Sapling of the Dawnroot, which Blizzard narrowed to DPS specs.
     "Luminescent Sprout",
     "Bloodthorn Burnous",
     "Rootwarden Wraps",
@@ -82,7 +83,6 @@ const MISTWEAVER = {
     "Lightspore Leggings",
     "Lightwarden's Bind",
     "Lightspire Core",
-    "Sapling of the Dawnroot",
     "Seed of Radiant Hope",
   ],
 };
