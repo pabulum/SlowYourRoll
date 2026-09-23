@@ -30,8 +30,8 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v5
+      - uses: actions/checkout@v7
+      - uses: actions/configure-pages@v6
 
       # There's no build step — "building" is copying the files the browser actually
       # loads. Everything else (tests, scripts, tooling config) stays off the site.
@@ -41,8 +41,8 @@ jobs:
           cp index.html LICENSE og.png _site/
           cp -r src data _site/
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: _site
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
