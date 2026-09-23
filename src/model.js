@@ -11,7 +11,7 @@ import {
 } from "./data.js";
 import { canLoot, classSpecs, specId, specIdInClass } from "./loot.js";
 import { lastReset, rollReward, SEASON } from "./season.js";
-import { state } from "./store.js";
+import { simcOf, state } from "./store.js";
 
 /**
  * Resolve an (instId, encId) pair to a display name and type. instId === -1 is a M+ dungeon.
@@ -805,7 +805,7 @@ function priceGroup(b, g, selDiff, ownedMap, sp, takeId) {
  * @returns {Record<number, number>}
  */
 function ownedGear(b) {
-  const fromSimc = state.simc[b.key]?.owned || {};
+  const fromSimc = simcOf(b)?.owned || {};
   if (!b.equipped) return fromSimc;
   const out = { ...b.equipped };
   Object.keys(fromSimc).forEach((id) => {
@@ -887,7 +887,7 @@ export function crestSavingAt(reward, mark, against) {
  */
 export function crestSavingRange(b, reward, against) {
   if (!reward?.crests) return null;
-  const marks = state.simc[b.key]?.watermarks;
+  const marks = simcOf(b)?.watermarks;
   if (!Array.isArray(marks) || !marks.length) return null;
   const each = marks.map((m) => crestSavingAt(reward, m, against));
   if (each.some((v) => v == null)) return null;
@@ -924,7 +924,7 @@ export function activeLootSpec(b) {
  * @returns {string|null}
  */
 export function simcLootSpec(b) {
-  const raw = state.simc[b.key]?.lootSpec;
+  const raw = simcOf(b)?.lootSpec;
   return raw ? specIdInClass(raw, specId(b.spec)) : null;
 }
 
@@ -998,7 +998,7 @@ export function buildGroups(b) {
  *   have a state — no linked `/simc`, or one whose export held no Weekly Reward Choices block.
  */
 export function vaultStatus(b, now) {
-  const simc = state.simc[b.key];
+  const simc = simcOf(b);
   if (!simc?.vault?.length) return null;
   const reset = lastReset(SEASON, now);
   const t = simc.at ? Date.parse(simc.at) : NaN;
@@ -1099,7 +1099,7 @@ function valueAt(curve, ilvl) {
 }
 
 export function vaultChoice(b) {
-  const simc = state.simc[b.key];
+  const simc = simcOf(b);
   if (!simc?.vault?.length) return null;
   // An expired vault has no trade in it: the options are gone from the game, so there is nothing to
   // weigh a roll against. The panel says so rather than the app quietly ranking last week's items.

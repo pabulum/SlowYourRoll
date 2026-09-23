@@ -8,7 +8,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { QE_DATA } from "../src/data.js";
 import { render } from "../src/render.js";
-import { state } from "../src/store.js";
+import { readSimc } from "../src/simc.js";
+import { simcOf, state } from "../src/store.js";
 import { initUI } from "../src/ui.js";
 import { loadPage } from "./page.js";
 
@@ -128,7 +129,7 @@ test("a token cost override is clamped to at least one token", () => {
 test("taking a vault item toggles, and toggles back off", () => {
   const { doc, board } = boot({
     simc: {
-      testkey: {
+      "foo~area52~": {
         owned: {},
         at: new Date().toISOString(),
         vault: [{ id: 900001, ilvl: 639, name: "V" }],
@@ -144,7 +145,7 @@ test("taking a vault item toggles, and toggles back off", () => {
 test("clearing the vault empties it and drops any pick made from it", () => {
   const { doc, board } = boot({
     simc: {
-      testkey: {
+      "foo~area52~": {
         owned: { 900001: 1 },
         rolledIds: [900001],
         at: new Date().toISOString(),
@@ -155,15 +156,15 @@ test("clearing the vault empties it and drops any pick made from it", () => {
   click(doc, '#vaultPanel [data-vault="900001"]');
   assert.equal(board.vaultTake, 900001);
   click(doc, '#vaultPanel [data-act="clearvault"]');
-  assert.deepEqual(state.simc.testkey.vault, []);
+  assert.deepEqual(state.simc["foo~area52~"].vault, []);
   assert.equal(
     board.vaultTake,
     null,
     "the pick went with the vault it came from",
   );
   // Only the weekly half is disowned; the paste's other halves outlive a reset.
-  assert.deepEqual(state.simc.testkey.owned, { 900001: 1 });
-  assert.deepEqual(state.simc.testkey.rolledIds, [900001]);
+  assert.deepEqual(state.simc["foo~area52~"].owned, { 900001: 1 });
+  assert.deepEqual(state.simc["foo~area52~"].rolledIds, [900001]);
   assert.equal(doc.getElementById("vaultPanel").innerHTML, "");
 });
 
@@ -258,4 +259,28 @@ test("an encounter card's reward chip opens the pane rather than expanding the c
   chip.dispatchEvent(new doc.defaultView.Event("click", { bubbles: true }));
   assert.equal(doc.getElementById("rewardPane").hasAttribute("hidden"), false);
   assert.equal(board._open, open, "the card underneath didn't toggle");
+});
+
+test("a /simc links to every spec of its character, and to no one else", async () => {
+  const foo = (id, spec, region) => ({ ...makeBoard(), id, spec, region });
+  const holy = foo("t", "holy", "us");
+  const disc = foo("t2", "discipline", "us");
+  const eu = foo("t3", "holy", "eu");
+  const other = { ...foo("t4", "holy", "us"), player: "Bar" };
+  const { doc } = boot({ boards: [holy, disc, eu, other] });
+  doc.getElementById("simcInput").value =
+    'priest="Foo"\nserver=area52\nregion=us\nspec=discipline\n';
+  await readSimc(); // what the Link button runs, called direct so the test can await it
+  assert.ok(simcOf(holy), "the Holy board sees a paste taken as Discipline");
+  assert.equal(simcOf(holy), simcOf(disc));
+  assert.equal(
+    simcOf(eu),
+    undefined,
+    "the same name in another region is untouched",
+  );
+  assert.equal(
+    simcOf(other),
+    undefined,
+    "and so is another character on the realm",
+  );
 });

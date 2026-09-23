@@ -4,7 +4,7 @@
 import { loadQEData, QE_DATA } from "./data.js";
 import { $, toast } from "./dom.js";
 import { render } from "./render.js";
-import { keyOf, save, state } from "./store.js";
+import { charKeyOf, save, simcOf, state } from "./store.js";
 
 /**
  * Parse a raw /simc export into
@@ -139,7 +139,8 @@ export async function readSimc() {
     );
     return;
   }
-  const k = keyOf(d.name, d.realm, d.spec);
+  // Filed per character, not per spec: see `charKeyOf`.
+  const k = charKeyOf(d.name, d.realm, d.region);
   state.simc[k] = {
     vault: d.vault,
     rolledIds: d.rolledIds,
@@ -147,6 +148,7 @@ export async function readSimc() {
     watermarks: d.watermarks,
     name: d.name,
     realm: d.realm,
+    region: d.region,
     spec: d.spec,
     lootSpec: d.lootSpec,
     // When this was read, which only the vault half of it needs. Owned gear and logged rolls stay
@@ -157,7 +159,7 @@ export async function readSimc() {
   };
   let applied = false;
   state.boards.forEach((b) => {
-    if (b.key === k) {
+    if (charKeyOf(b.player, b.realm, b.region) === k) {
       applySimc(b);
       applied = true;
     }
@@ -181,7 +183,7 @@ export async function readSimc() {
 
 /** Mark logged bonus-rolls as Rolled (only for items actually in this report's pools). */
 export function applySimc(b) {
-  const simc = state.simc[b.key];
+  const simc = simcOf(b);
   if (!simc) return;
   const repIds = {};
   b.results.forEach((r) => {

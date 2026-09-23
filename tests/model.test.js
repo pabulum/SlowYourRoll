@@ -154,7 +154,7 @@ test("a copy you hold only dupes a roll it matches or beats", () => {
 test("holding a copy at the roll's item level marks it Own and drops it from the numerator", () => {
   state.showAll = false;
   const b = makeBoard();
-  state.simc = { testkey: { owned: { 900002: PAYOUT } } };
+  state.simc = { "foo~area52~": { owned: { 900002: PAYOUT } } };
   const row = buildGroups(b).rows[0];
   const it = row.items.filter((x) => x.id === 900002)[0];
   assert.equal(
@@ -171,7 +171,7 @@ test("holding a copy at the roll's item level marks it Own and drops it from the
 test("holding a weaker copy leaves the item Want, tagged with what you hold", () => {
   state.showAll = false;
   const b = makeBoard();
-  state.simc = { testkey: { owned: { 900002: PAYOUT - 9 } } };
+  state.simc = { "foo~area52~": { owned: { 900002: PAYOUT - 9 } } };
   const it = buildGroups(b).rows[0].items.filter((x) => x.id === 900002)[0];
   assert.equal(it.ownedIlvl, PAYOUT - 9);
   assert.equal(it.dupe, false);
@@ -247,7 +247,7 @@ test("a raid with fewer bosses than asked for yields all of them", () => {
  */
 function withVault(ids) {
   state.simc = {
-    testkey: {
+    "foo~area52~": {
       owned: {},
       at: new Date().toISOString(),
       vault: ids.map((id) => ({ name: `V${id}`, ilvl: 639, id })),
@@ -266,8 +266,8 @@ const WEEK = 7 * 24 * 60 * 60 * 1000;
 /** Put `ids` in a vault last read at `at` — omit `at` for a paste from before the app dated them. */
 function withVaultAt(ids, at) {
   withVault(ids);
-  if (at) state.simc.testkey.at = at.toISOString();
-  else delete state.simc.testkey.at;
+  if (at) state.simc["foo~area52~"].at = at.toISOString();
+  else delete state.simc["foo~area52~"].at;
 }
 
 test("a vault read since the last reset is still this week's", () => {
@@ -332,7 +332,7 @@ test("an expired vault's pick stops being folded into the pools", () => {
 test("expiry is scoped to the vault, not to the rest of the paste", () => {
   state.showAll = false;
   withVaultAt([900002], new Date(lastReset(SEASON).getTime() - WEEK));
-  state.simc.testkey.owned = { 900002: PAYOUT };
+  state.simc["foo~area52~"].owned = { 900002: PAYOUT };
   const it = buildGroups(makeBoard()).rows[0].items.filter(
     (x) => x.id === 900002,
   )[0];
@@ -444,7 +444,7 @@ test("a filler item's payout follows the season, not a drop level it hasn't got"
   const filler = Object.keys(QE_DATA.items).filter((id) =>
     QE_DATA.items[id].s.some((s) => s[0] === RAID_ID && s[1] === ENC_ID),
   )[0];
-  state.simc = { testkey: { owned: { [filler]: 9999 } } };
+  state.simc = { "foo~area52~": { owned: { [filler]: 9999 } } };
   const it = buildGroups(b).rows[0].items.filter(
     (x) => String(x.id) === filler,
   )[0];
@@ -733,7 +733,7 @@ test("a copy between a Heroic roll's payout and its track top is not a dupe", ()
   const item = b.results[0].item;
   // Hero 6/6, which is also Myth 2/6: above the 318 the roll hands over, four steps below the 334
   // the report priced it at.
-  state.simc = { qekey: { owned: { [item]: 321 } } };
+  state.simc = { "heals~area52~": { owned: { [item]: 321 } } };
   const it = buildGroups(b)
     .rows.find((r) => r.g.type === "raid")
     .items.find((x) => x.id === item);
@@ -751,7 +751,7 @@ test("a copy at the Heroic roll's track top still dupes it", () => {
   state.showAll = false;
   const b = heroic121Board();
   const item = b.results[0].item;
-  state.simc = { qekey: { owned: { [item]: 334 } } };
+  state.simc = { "heals~area52~": { owned: { [item]: 334 } } };
   const it = buildGroups(b)
     .rows.find((r) => r.g.type === "raid")
     .items.find((x) => x.id === item);
@@ -764,7 +764,7 @@ test("a copy at the Heroic roll's track top still dupes it", () => {
 test("a report that sims the drop judges dupes against the payout alone", () => {
   state.showAll = false;
   const b = makeBoard();
-  state.simc = { testkey: { owned: { 900002: PAYOUT } } };
+  state.simc = { "foo~area52~": { owned: { 900002: PAYOUT } } };
   const it = buildGroups(b).rows[0].items.find((x) => x.id === 900002);
   assert.equal(it.rollTopIlvl, it.rollIlvl);
   assert.equal(it.dupe, true);
@@ -884,7 +884,7 @@ test("where both sources know an item, the better copy wins", () => {
   const b = makeQEBoard();
   const id = b.results[0].item;
   b.equipped = { [id]: 260 };
-  state.simc = { qekey: { owned: { [id]: 285 } } }; // a bag copy the report never saw
+  state.simc = { "heals~area52~": { owned: { [id]: 285 } } }; // a bag copy the report never saw
   const it = buildGroups(b).rows[0].items.find((x) => x.id === id);
   assert.equal(it.ownedIlvl, 285);
   state.simc = {};
@@ -901,7 +901,7 @@ test("a linked /simc's loot spec outranks the spec the report was simmed as", ()
     spec: "Mistweaver Monk",
     lootSpec: null,
   };
-  state.simc = { lskey: { lootSpec: "windwalker", owned: {} } };
+  state.simc = { "heals~area52~": { lootSpec: "windwalker", owned: {} } };
   assert.equal(activeLootSpec(b), specId("windwalker"));
   state.simc = {};
   assert.equal(
@@ -913,7 +913,7 @@ test("a linked /simc's loot spec outranks the spec the report was simmed as", ()
 
 test("an explicit choice in the dropdown outranks both", () => {
   const b = { ...makeQEBoard(), key: "lskey", spec: "Mistweaver Monk" };
-  state.simc = { lskey: { lootSpec: "windwalker", owned: {} } };
+  state.simc = { "heals~area52~": { lootSpec: "windwalker", owned: {} } };
   b.lootSpec = specId("brewmaster");
   assert.equal(activeLootSpec(b), specId("brewmaster"));
   state.simc = {};
@@ -928,7 +928,7 @@ test("a loot spec from another class is ignored", () => {
     spec: "Mistweaver Monk",
     lootSpec: null,
   };
-  state.simc = { lskey: { lootSpec: "frost", owned: {} } };
+  state.simc = { "heals~area52~": { lootSpec: "frost", owned: {} } };
   assert.equal(activeLootSpec(b), specId("mistweaver"));
   state.simc = {};
 });
@@ -943,7 +943,7 @@ test("an ambiguous /simc loot spec still resolves inside the report's class", ()
     spec: "Holy Paladin",
     lootSpec: null,
   };
-  state.simc = { amb: { lootSpec: "holy", owned: {} } };
+  state.simc = { "heals~area52~": { lootSpec: "holy", owned: {} } };
   assert.equal(simcLootSpec(b), specId("Holy Paladin"));
   assert.equal(activeLootSpec(b), specId("Holy Paladin"));
   state.simc = {};
@@ -956,7 +956,7 @@ test("a /simc loot spec naming a different spec of the same class is honoured", 
     spec: "Holy Paladin",
     lootSpec: null,
   };
-  state.simc = { amb: { lootSpec: "retribution", owned: {} } };
+  state.simc = { "heals~area52~": { lootSpec: "retribution", owned: {} } };
   assert.equal(activeLootSpec(b), specId("Retribution Paladin"));
   state.simc = {};
 });

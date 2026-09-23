@@ -7,9 +7,9 @@
 
 import { $, setShown, toast } from "./dom.js";
 import { closeBoardMenu, render } from "./render.js";
-import { loadReport } from "./reports.js";
+import { loadReport, shareUrl } from "./reports.js";
 import { readSimc } from "./simc.js";
-import { active, replaceState, save, state } from "./store.js";
+import { active, replaceState, save, simcOf, state } from "./store.js";
 
 /**
  * Delegate an event on a container to the nearest matching element at or above the target.
@@ -248,7 +248,7 @@ export function initUI() {
   // owned gear and logged rolls don't expire at a reset, so they aren't what's being cleared.
   on("vaultPanel", "click", '[data-act="clearvault"]', () => {
     const b = active(),
-      simc = state.simc[b.key];
+      simc = simcOf(b);
     if (simc) simc.vault = [];
     b.vaultTake = null;
     commit();
@@ -264,14 +264,12 @@ export function initUI() {
     commit();
   });
 
-  // Share the active report as a ?report= link. What travels is the report id alone —
-  // the recipient fetches the same scores fresh; rolled history and overrides stay local.
+  // Share the active report as a ?report= link. The recipient fetches the same scores fresh; what
+  // travels besides the report id is the Rolled/Own marks, so their pools match ours (`shareUrl`).
+  // Token overrides and the vault stay local.
   $("shareBoard").addEventListener("click", () => {
     const b = active();
-    const url =
-      location.href.replace(/[?#].*$/, "") +
-      "?report=" +
-      encodeURIComponent(b.reportId);
+    const url = shareUrl(b, location.href.replace(/[?#].*$/, ""));
     navigator.clipboard.writeText(url).then(
       () =>
         toast(

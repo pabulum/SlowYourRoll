@@ -110,8 +110,10 @@
  * @property {{ name: string, ilvl: number, id: number }[]} vault
  * @property {number[]} rolledIds
  * @property {Object<number, number>} owned  itemId -> highest ilvl held.
+ * @property {number[]|null} [watermarks]  Per-slot highest ilvl held; see `parseWatermarks`.
  * @property {string} [name]
  * @property {string} [realm]
+ * @property {string} [region]
  * @property {string} [spec]
  * @property {string|null} [lootSpec]  The loot spec set in game, which is what a bonus roll is
  *   actually awarded against. Often not the spec the report was simmed as.

@@ -42,7 +42,7 @@ import {
   tokenVaultWindow,
   tokenWeekNow,
 } from "./season.js";
-import { active, state } from "./store.js";
+import { active, simcOf, state } from "./store.js";
 import { iconHTML, linkHTML, nameHTML } from "./wowhead.js";
 
 /**
@@ -893,7 +893,7 @@ export function render() {
  * — which is indistinguishable from "you haven't rolled yet" unless we say so.
  */
 function renderSimcNote(b) {
-  const simc = state.simc[b.key];
+  const simc = simcOf(b);
   const silent = !!simc && !(simc.rolledIds || []).length;
   setShown("simcNote", silent);
   if (!silent) return;
@@ -944,7 +944,7 @@ function staleVaultHTML(st, n) {
 }
 
 function renderVault(b, built) {
-  const simc = state.simc[b.key];
+  const simc = simcOf(b);
   if (!simc?.vault?.length) {
     setHTML("vaultPanel", "");
     return;

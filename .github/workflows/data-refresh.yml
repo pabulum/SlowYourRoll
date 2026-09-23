@@ -1,0 +1,133 @@
+name: Refresh QE data
+
+# Rebuilds data/qe-data.json from upstream QuestionablyEpic and, when it changed, opens (or updates)
+# a single PR for review. Nothing here touches main: a data change reaches the site only when the
+# PR is merged, and pages.yml gates that deploy on CI like any other push.
+#
+# The PR says whether the checks passed on the new data. A failure is usually not a bug — it is the
+# journal fixtures (tests/journal.test.js) disagreeing with a Blizzard loot change, which needs
+# someone to look at the in-game journal before the fixture is edited to match.
+
+on:
+  schedule:
+    - cron: "17 14 * * 1" # Mondays, before the Tuesday reset
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: QuestionablyEpic branch or commit to build from
+        default: master
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: data-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # master is what questionablyepic.com runs, and so what produced the reports people paste;
+      # dev is merged into it within the day, so building from dev only buys a few hours' preview.
+      - uses: actions/checkout@v4
+        with:
+          repository: Voulk/QuestionablyEpic
+          ref: ${{ inputs.ref || 'master' }}
+          path: _qe
+          sparse-checkout: |
+            src/General/Engine
+            src/Databases
+
+      # build-data.mjs uses node:module's stripTypeScriptTypes, which the engines floor lacks.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+      - run: npm ci
+
+      - name: Compare against a fresh build
+        id: drift
+        run: |
+          set +e
+          npm run --silent data:check -- --qe=_qe > drift.txt 2>&1
+          code=$?
+          set -e
+          cat drift.txt
+          if grep -q "is up to date" drift.txt; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          elif [ "$code" -eq 1 ] && grep -q "differs from a fresh build" drift.txt; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::data:check failed before comparing — see the log above"
+            exit 1
+          fi
+          # A new raid list is the season boundary: ACTIVE in src/season.js needs bumping by hand.
+          if grep -q "^  currentRaids:" drift.txt; then
+            echo "season=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "season=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Rebuild
+        if: steps.drift.outputs.changed == 'true'
+        run: |
+          npm run data -- --qe=_qe
+          npx --yes prettier@3 --write data/qe-data.json
+
+      - name: Check the new data
+        id: check
+        if: steps.drift.outputs.changed == 'true'
+        run: |
+          set +e
+          npm run check > check.txt 2>&1
+          code=$?
+          set -e
+          cat check.txt
+          echo "ok=$([ "$code" -eq 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - name: Write the PR body
+        if: steps.drift.outputs.changed == 'true'
+        run: |
+          {
+            echo "Automated rebuild of \`data/qe-data.json\` from [Voulk/QuestionablyEpic](https://github.com/Voulk/QuestionablyEpic) \`${{ inputs.ref || 'master' }}\` ($(git -C _qe rev-parse --short HEAD))."
+            echo
+            if [ "${{ steps.drift.outputs.season }}" = "true" ]; then
+              echo "> [!IMPORTANT]"
+              echo "> **The raid list changed — this is a season rollover.** Bump \`ACTIVE\` in \`src/season.js\` in this PR before merging."
+              echo
+            fi
+            if [ "${{ steps.check.outputs.ok }}" = "true" ]; then
+              echo "✅ lint, typecheck and tests pass on the new data."
+            else
+              echo "❌ **Checks fail on the new data.** If it's \`tests/journal.test.js\`, compare the named encounter against the in-game journal before editing the fixture."
+              echo
+              echo '<details><summary>Failures</summary>'
+              echo
+              echo '```'
+              grep -E "✖|AssertionError|error" check.txt | head -60
+              echo '```'
+              echo '</details>'
+            fi
+            echo
+            echo '### Drift'
+            echo
+            echo '```'
+            sed -n '/differs from a fresh build/,$p' drift.txt
+            echo '```'
+          } > pr-body.md
+
+      - name: Open or update the PR
+        if: steps.drift.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: data/qe-refresh
+          add-paths: data/qe-data.json
+          commit-message: Refresh QE data
+          title: >-
+            ${{ steps.drift.outputs.season == 'true' && 'New season: ' || '' }}Refresh QE data${{ steps.check.outputs.ok != 'true' && ' (checks failing)' || '' }}
+          body-path: pr-body.md
+          delete-branch: true

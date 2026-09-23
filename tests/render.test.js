@@ -156,7 +156,7 @@ test("a hostile item name renders as text, not as markup", () => {
   const b = makeBoard();
   const doc = renderWith([b], {
     simc: {
-      testkey: {
+      "foo~area52~": {
         owned: {},
         at: new Date().toISOString(),
         vault: [
@@ -187,7 +187,7 @@ test("a hostile character name renders as text in the report picker", () => {
 test("an expired vault is a notice rather than a list of things to take", () => {
   const doc = renderWith([makeBoard()], {
     simc: {
-      testkey: {
+      "foo~area52~": {
         owned: {},
         at: "2026-01-01T00:00:00Z",
         vault: [{ id: 900002, ilvl: 639, name: "V900002" }],
@@ -207,7 +207,7 @@ test("an expired vault is a notice rather than a list of things to take", () => 
 test("the vault panel prices the choice both ways and offers to take it", () => {
   const doc = renderWith([makeBoard()], {
     simc: {
-      testkey: {
+      "foo~area52~": {
         owned: {},
         at: new Date().toISOString(),
         vault: [{ id: 900002, ilvl: 639, name: "V900002" }],
@@ -229,7 +229,7 @@ test("the vault panel prices the choice both ways and offers to take it", () => 
 test("a vault option the report never priced at the offered level isn't given a number", () => {
   const doc = renderWith([makeBoard()], {
     simc: {
-      testkey: {
+      "foo~area52~": {
         owned: {},
         at: new Date().toISOString(),
         vault: [{ id: 900002, ilvl: 652, name: "V900002" }],
@@ -270,7 +270,7 @@ test("a vault option between two scored levels is read between them", () => {
   ];
   const doc = renderWith([b], {
     simc: {
-      testkey: {
+      "foo~area52~": {
         owned: {},
         at: new Date().toISOString(),
         vault: [{ id: 900002, ilvl: 318, name: "V900002" }],
@@ -285,7 +285,7 @@ test("a vault option between two scored levels is read between them", () => {
 test("a vault item scored at the level it's offered at is quoted without qualification", () => {
   const doc = renderWith([makeBoard()], {
     simc: {
-      testkey: {
+      "foo~area52~": {
         owned: {},
         at: new Date().toISOString(),
         vault: [{ id: 900002, ilvl: 639, name: "V900002" }],
@@ -590,7 +590,7 @@ function words(el) {
 function withMarks(marks) {
   return {
     simc: {
-      testkey: {
+      "foo~area52~": {
         owned: {},
         watermarks: marks,
         at: new Date().toISOString(),

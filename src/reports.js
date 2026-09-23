@@ -84,14 +84,64 @@ export function loadReport() {
   });
 }
 
+/** An overlay key, "instId:encId:itemId" — the only shape a share link's marks may take. */
+const MARK_KEY = /^-?\d+:\d+:\d+$/;
+
+/**
+ * The share link for a board: the report id, plus the items marked Rolled or Own. The report alone
+ * reproduces the scores, but not the pool — an item already rolled is out of it, and without the
+ * marks the recipient sees EVs for rolls the sharer can't make any more. Marks come from the
+ * overlay, which already holds both what was clicked and what a /simc logged (`applySimc`).
+ * Separators are left unencoded, so a link stays readable when pasted into chat.
+ *
+ * @param {import("./types.js").Board} b
+ * @param {string} base  The page's own URL, without query or hash.
+ */
+export function shareUrl(b, base) {
+  const byState = { rolled: [], own: [] };
+  Object.keys(b.overlay || {}).forEach((k) => {
+    const s = b.overlay[k];
+    if (byState[s] && MARK_KEY.test(k)) byState[s].push(k);
+  });
+  let url = `${base}?report=${encodeURIComponent(b.reportId)}`;
+  if (byState.rolled.length)
+    url += `&rolled=${byState.rolled.sort().join(",")}`;
+  if (byState.own.length) url += `&own=${byState.own.sort().join(",")}`;
+  return url;
+}
+
+/**
+ * The marks a share link carries, as overlay entries. Anything that isn't a well-formed key is
+ * dropped: the link is someone else's input, and the overlay is persisted.
+ *
+ * @param {URLSearchParams} params
+ * @returns {Record<string, "own"|"rolled">}
+ */
+export function parseMarks(params) {
+  /** @type {Record<string, "own"|"rolled">} */
+  const out = {};
+  for (const s of /** @type {const} */ (["own", "rolled"]))
+    (params.get(s) || "")
+      .split(",")
+      .filter((k) => MARK_KEY.test(k))
+      .forEach((k) => {
+        out[k] = s;
+      });
+  return out;
+}
+
 /**
  * A shared link (?report=…) loads its report on arrival, so the URL a guild officer is handed
- * needs no paste step. Runs once at startup. The param is stripped right away: it's a one-shot
- * instruction, and leaving it would make every later reload re-assert that report over whatever
+ * needs no paste step. Runs once at startup. The params are stripped right away: they're a one-shot
+ * instruction, and leaving them would make every later reload re-assert that report over whatever
  * the person has since switched to.
+ *
+ * The link's marks are merged into the board rather than replacing its overlay: a mark the
+ * recipient made themselves is kept, and where both speak about an item the link wins.
  */
 export function loadSharedReport() {
-  const v = new URLSearchParams(location.search).get("report");
+  const params = new URLSearchParams(location.search);
+  const v = params.get("report");
   if (!v) return;
   history.replaceState(null, "", location.pathname + location.hash);
   const d = detectSource(v);
@@ -99,14 +149,17 @@ export function loadSharedReport() {
     toast("That share link's report code wasn't recognised");
     return;
   }
-  const existing = state.boards.find((b) => b.reportId === d.id);
-  if (existing) {
-    state.activeId = existing.id;
+  const marks = parseMarks(params);
+  const settle = () => {
+    const b = state.boards.find((x) => x.reportId === d.id);
+    if (!b) return;
+    Object.assign(b.overlay, marks);
+    state.activeId = b.id;
     save();
     render();
-    return;
-  }
-  fetchReport(d);
+  };
+  if (state.boards.some((b) => b.reportId === d.id)) settle();
+  else fetchReport(d).then(settle);
 }
 
 /* ---------- Raidbots Droptimizer ----------
@@ -163,7 +216,7 @@ function ingestDroptimizer(id, data) {
     );
     return;
   }
-  const k = keyOf(d.idn.name, d.idn.realm, d.idn.spec);
+  const k = keyOf(d.idn.name, d.idn.realm, d.idn.spec, d.idn.region);
   let b = state.boards.find((x) => x.key === k);
   if (b) {
     b.reportId = id;
@@ -230,7 +283,7 @@ function equippedMap(data) {
 
 function ingest(code, data) {
   // Update the existing board for the same character (name+realm+spec), else create one.
-  const k = keyOf(data.playername, data.realm, data.spec);
+  const k = keyOf(data.playername, data.realm, data.spec, data.region);
   let b = state.boards.find((x) => x.key === k);
   if (b) {
     b.reportId = code;
