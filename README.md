@@ -61,7 +61,10 @@ not discounted. That's intentional: the roll is the one place a very rare item c
 common filler, which is usually a reason to chase it rather than shy off it.
 
 Optionally paste your in-game `/simc` addon export to fold in this week's Great Vault choices,
-auto-mark owned gear, and import your logged bonus-roll history.
+auto-mark owned gear, and import your logged bonus-roll history. Each vault option is priced as it
+comes and finished at the top of its track, with the crests finishing it costs in that slot, and the
+trade against your best roll says when the answer turns on those crests rather than inventing a rate
+to settle it.
 
 **The vault half of that paste expires at the weekly reset**, and only that half. Three options
 appear at reset and are gone at the next one, so a `/simc` read before the last reset has no live
@@ -192,7 +195,8 @@ upstream would have found:
   while the report's 4,904 for the Monk chest went nowhere. Raidbots' `contains` names the four class
   pieces a token can be traded for; `applyToken` in [`src/model.js`](src/model.js) resolves the one
   this loot spec would be handed and takes its value. The pool still holds one item — the token — and
-  the row names the piece it becomes.
+  the row names the piece it becomes. For the same reason a copy you already hold is looked up by
+  the piece: nobody holds a token, and holding the Myth 6/6 legs makes the legs token a dupe.
 
 With all of that in place the two tools agree on **15 of 17** encounters, to three decimals. Both
 survivors are items QE's database can't see, and the journal lists them:
@@ -214,7 +218,14 @@ report that genuinely doesn't say.
 
 **A QE report also ships the gear it was run in**, as `equippedItems`. Reduced at ingest to
 `{ itemId: ilvl }` and merged with any `/simc` data by taking the higher item level, so a healer who
-pastes nothing but a report link still gets dupe detection.
+pastes nothing but a report link still gets dupe detection. Each copy's bonus ids (`bonusIDS`, one
+colon-separated string) are kept beside it, as the `/simc` item lines' are, because they're the only
+thing that says which track a held copy is on: a 321 is Hero 6/6 or Myth 2/6, and a Myth 1/6 at 318
+is the lower number and the better item against the first of those. Without them the level names the
+track only where one track has that level (334 is Myth 6/6 and nothing else); in the overlap both
+candidates are shown, never one picked. Boards saved before the ids were kept re-read their report
+once at load for its gear alone (`backfillEquipped`) — a QE report is fixed once written, so nothing
+else on the board moves.
 
 Those item levels are whatever QE's import dialog produced, and it has two checkboxes that change
 them (`SimCraftDialog.js`, applied in `SimCImportEngine.ts`):
@@ -274,6 +285,44 @@ invention, so the option is left unpriced and cannot become the item the banner 
 > named Breeches of Deft Deals at 6,837 HPS, its value at a cap that slot doesn't pay. At the 318 it
 > actually offers it is worth about 3,391, which loses to the roll. The right answer was Soulcoiler
 > Ritual Vessel at 5,085, a number the report states outright.
+
+**And each option is priced a second time, finished.** The capped figure wasn't wrong, only unpaid
+for: those breeches really are 6,837 once 80 Myth crests take them to Myth 6/6. Dropping it entirely
+was its own blind spot, found on a week-7 vault offering Alluring Bubbleband at 318 to a Mistweaver
+already wearing it at 321 — worth nothing as it comes, so the panel gave no sign it was worth +2,129
+finished. Every option now reads both ways, and the second reading carries its price:
+
+```
+Worth 0 HPS as it comes — you hold one at 321 · 2,129 at Myth 6/6 for 80 Myth crests
+```
+
+The track comes off the option's own bonus ids, which the `/simc` vault block carries — 318 is Hero
+5/6 and Myth 1/6 at once, and they top out five steps apart (`trackStep` in
+[`src/season.js`](src/season.js), over the Midnight tracks read off QE's `BonusIDs.ts`). The price is
+the same climb arithmetic as every other crest figure (`climbCost`), against the watermark of the
+slot the item goes in — see [below](#how-far-that-figure-is-checked-against-your-gear) for how those
+are matched. The crests the paste says you hold ride along as context, never as an input.
+
+Track steps on the panel — the option's, the finished one, and the copy you already hold — are
+printed in the item-quality colours a character sheet paints item levels with (Myth legendary, Hero
+epic, Champion rare, Veteran uncommon, Adventurer common), so a Myth 1/6 at 318 and the Hero 6/6 at
+321 it would replace read as different things before you read the numbers. The same colours mark
+the held copy's item level in each pool's `have` badge and the reward table's payouts, and nowhere
+else: nearly every roll this season pays Myth, so colouring every mention would say nothing.
+
+The trade banner then weighs the roll against both readings **without converting crests into
+score** — there is no rate between them that doesn't depend on what else you'd spend the crests on.
+The roll is already a finished figure (a 12.1 report sims it at the top of its track), and a roll
+that hands its item over short of that — a Heroic boss, a +10 dungeon — carries the crests to finish
+it too (`rollFinish`). `vaultChoice` takes the best answer at the smallest crest outlay and the best
+on value alone; where they agree that's the verdict, where both are items it's "take the item" and
+the crests only decide which, and otherwise the lead says **It turns on 80 Myth crests** and gives
+both numbers.
+
+This replaced a line that credited the roll with the crests it "saves" over the vault item while
+pricing that item unfinished. That counted one 80 twice, in the roll's favour both times — the item
+kept at its unfinished value, and the roll handed a bonus for not needing finishing — and the
+finished value, the one number someone weighing an upgrade needs, appeared nowhere.
 
 **QE's `dateCreated` is `"2026 - 7 - 29"`** — spaced separators and a one-digit month, which `Date`
 refuses outright. `shortDate` in [`src/render.js`](src/render.js) reads the three numbers out and
@@ -390,13 +439,14 @@ The wording is load-bearing rather than stylistic. No roll pays crests _out_; de
 a reader goes looking for a currency drop that never arrives, or counts it a second time against the
 crests they're already farming that week. So every surface says _saves_: the collapsed encounter card
 (`crestMeta`, set off by an accent rule because it's the one thing beside the EV column the EV can't
-account for), the expanded card's note (`crestNote`), the vault trade banner (`crestEdgeHTML` — where the
-figure is measured against the vault item's own item level, not the boss's drop, because a saving is
-only a saving against the branch you'd otherwise take: a vault slot the season hands over already
-capped costs the same nothing to finish, so the roll saves nothing over it and the line is dropped
-rather than claiming a term both branches get), and the
-reward pane, which leads its section with the figure. Two of those are pinned by tests in
-[`tests/render.test.js`](tests/render.test.js), which is otherwise deliberately shallow on wording.
+account for), the expanded card's note (`crestNote`), and the reward pane, which leads its section
+with the figure. Two of those are pinned by tests in [`tests/render.test.js`](tests/render.test.js),
+which is otherwise deliberately shallow on wording.
+
+The vault trade banner is the one place it does _not_ appear. A saving is measured against the drop,
+and the alternative on that banner isn't a drop you'd have climbed — it's the vault item, whose own
+finishing cost is what differs between the two branches. So the banner prices that instead (see the
+vault section above), and never quotes the saving on top of it.
 
 The figure stays quoted in crests everywhere, and out of the EV. Folding it in would need a
 crests-to-score rate, and that rate depends on which item you'd have spent them on — precisely the
@@ -420,30 +470,41 @@ that file: TWW charged Valorstones alongside crests at `"scaling": 0.5`, and **V
 in Midnight**, where a step costs crests only (plus gold, which QE doesn't model). TWW also varied
 cost by slot mask, where Midnight has one price for every slot.
 
-Each entry is `slot:a:b` and the pair is not always equal — QE's own sample export carries `14:0:89` —
-which reads as a character mark and an account mark, the same split `accountWide` draws. Which is which
-isn't established, so `parseWatermarks` takes the **higher**: a higher mark means more of the climb
-already covered and therefore a _smaller_ saving claimed, so a wrong guess undersells a roll rather
-than overselling it.
+Each entry is `slot:character:account` — the two values `C_ItemUpgrade.GetHighWatermarkForSlot`
+returns, in that order. The pair is not always equal — QE's own sample export carries `14:0:89` — and
+that pair settles the order: an account's mark is the best across its characters, so it can never sit
+below one of them, and the 0 has to be this character's. That is the mark a crest step is discounted
+by (`accountWide: false`), so `parseWatermarks` keeps it. (It used to take the higher of the two, on
+the theory that a higher mark could only undersell a roll. Once the same marks price a vault item's
+finishing cost that stops being true — a higher mark makes the item look cheaper to finish — so the
+guess had to become the answer.)
 
-**What is deliberately not done is saying _which_ slot.** The indices look like SimC's slot enum and
-do not survive contact with a real character's gear. Checked against a 12.1 export: two marks (308, 305) are high enough that only the waist and back slots can claim them, which leaves six marks at 298
-for seven slots that demonstrably held a 298 item — over-subscribed by one. Something (crafted gear,
-old-world drops with `content_tuning`, some other exclusion) isn't counting the way a naive reading
-assumes. Attributing a mark to a slot would be a guess under a figure people spend tokens on. A range
-over the slots needs no attribution and is exactly as true as the line it reads.
+**The index is the slot, and it is Blizzard's list, not SimC's.** Seventeen entries is
+`Enum.ItemRedundancySlot`:
 
-So a per-_encounter_ figure — as opposed to a per-character one — needs one thing still missing:
+```
+0 Head · 1 Neck · 2 Shoulder · 3 Chest · 4 Waist · 5 Legs · 6 Feet · 7 Wrist · 8 Hand
+9 Finger · 10 Trinket · 11 Cloak · 12 Twohand · 13 MainhandWeapon · 14 OnehandWeapon
+15 OnehandWeaponSecond · 16 Offhand
+```
 
-| Needed                       | Status                                                                                                         |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| Slot per item                | **Have it.** Every row of `data/qe-data.json` carries `iv`, Raidbots' `inventoryType`, set in `build-data.mjs` |
-| Per-step ilvls, crest costs  | **Have it.** `crestSteps` / `crestPerStep` in `season.js`, off QE's `seasonId: 37` upgrade data                |
-| Which slot a mark belongs to | **Missing.** Usable as a set of marks, not per slot, until the indices are pinned                              |
+This used to be read as SimC's slot order, which never fitted: marks landed under items held in the
+same slot, and counting seventeen as one per equipment slot left a 12.1 export "over-subscribed by one"
+— a puzzle this section used to end on. Read as the enum above, two independent exports (the user's,
+and QE Live's `SimCSampleDB`) fit on every armor, jewelry and cloak index, with each mark at or above
+the item held in that slot, where SimC's order puts a 308 mark under a 321 chest. `WATERMARK_SLOT` in
+[`src/classes.js`](src/classes.js) maps an item's inventory type (`iv`) to its entry.
 
-Pinning the indices needs a second real export whose gear constrains them differently — ideally one
-with a slot obviously capped and others obviously not. With that, a roll could be priced against the
-slots its own pool can actually fill instead of against all of them.
+Only what those exports pin down is mapped. Two-handers and held-in-off-hand items check out; shields
+share the latter's entry by name. One-handers and main-hand-only weapons don't: neither export's
+three weapon marks line up with the one-handers held clearly enough to say which is which. A slot
+the app can't name is priced at the season's assumption, and the copy says so rather than calling the
+whole figure computed.
+
+With the slots named, an encounter's figure is read over **the slots its own pool can land in**
+(`poolSlots`), not the whole character: a boss whose one live item is a pair of legs saves exactly
+what the legs slot does, and the card names it. The reward pane still asks the character-wide question
+and ranges over every slot.
 
 #### Double slots, and two-handers
 
@@ -452,19 +513,19 @@ halves anything. It doesn't change the app's figure, for a slightly boring reaso
 per _roll_, a roll hands you one item, and that item lands in one slot. Whether the other ring slot is
 capped has no bearing on what this ring saves you.
 
-The marks confirm paired slots are tracked separately — a real export carries 17, which is one per
-equipment slot with `finger1`/`finger2` and `trinket1`/`trinket2` counted apart, not 15 with the pairs
-merged. So capping one ring slot does not discount the other, and each is its own 100-crest climb.
+Paired slots share one mark, though — this section used to claim the opposite, off the misread
+count above. `Finger` and `Trinket` are single entries, and QE's sample holds trinkets at 334 and 344
+while reporting 334: the lower of the pair. So capping one ring does not discount the other, because
+the mark both are discounted by is the worse of the two you wear. Replacing that worse ring with a
+new one is the common case, and it's exactly the one a vault ring is priced for.
 
 **A two-hander doesn't cost double, and doesn't save double either.** Every Midnight upgrade step
 carries a single cost block at `mask_inv_type: 0`, so a two-hander climbs its track at the same 20 a
 step as a ring — there is no per-slot rate to make a two-hander's climb worth 200. The intuition that
 it might comes from the other half of the mechanic: a two-hander occupies main hand _and_ off hand, so
 if obtaining one raised both slots' marks it would unlock two slots' worth of free upgrades at once.
-Whether it does is **not established here** — nothing in the upgrade data speaks to it, and it can't
-be read off a single export. If it turns out to be true it would be the first thing that makes the
-crest saving vary _within_ a pool, which would contradict a property the copy currently asserts
-("same for every item here"), so it's worth settling before anyone leans on it.
+The enum answers that as far as the marks go: `Twohand` is an entry of its own, beside the main-hand,
+one-hand and off-hand ones, so a two-hander is discounted by — and raises — its own mark only.
 
 **The last two bosses of the tier raid are a class apart** — Venomcursed 9/6 items with cantrip
 effects — so those encounter cards carry a badge and a note the EV can't express: it prices this

@@ -8,7 +8,7 @@
 // Elements are addressed through src/dom.js rather than by raw id, so a rename in index.html is a
 // type error rather than a null.
 
-import { CLASS_COLOR } from "./classes.js";
+import { CLASS_COLOR, WATERMARK_NAME } from "./classes.js";
 import { loadQEData, QE_DATA } from "./data.js";
 import { $, setDisplayed, setHTML, setShown, setText } from "./dom.js";
 import { html, join } from "./html.js";
@@ -16,7 +16,6 @@ import { classSpecs, specId, specInfo } from "./loot.js";
 import {
   activeLootSpec,
   buildGroups,
-  crestSavingAt,
   crestSavingRange,
   diffKey,
   diffLabel,
@@ -159,6 +158,26 @@ function weekNowHTML(s, long) {
 }
 
 /**
+ * A track step — "Myth 1/6" — in its track's colour: the game's item-quality ladder, which is how a
+ * character sheet paints item levels (Myth legendary, Hero epic, Champion rare, Veteran uncommon,
+ * Adventurer common). Anything that isn't a known track reads as plain text. See `.trk` in styles.css
+ * for where it's spent and where it deliberately isn't.
+ *
+ * @param {string|null|undefined} label
+ * @param {string|number} [text]  What to print in that colour, where it isn't the label itself — an
+ *   item level, say, the way the character sheet prints one.
+ */
+function trackTag(label, text) {
+  if (!label) return text == null ? "" : String(text);
+  const name = label.split(" ")[0].toLowerCase();
+  const shown = text == null ? label : text;
+  return TRACK_NAMES.includes(name)
+    ? html`<span class="trk t-${name}">${shown}</span>`
+    : String(shown);
+}
+const TRACK_NAMES = ["myth", "hero", "champion", "veteran", "adventurer"];
+
+/**
  * "up to 80 Myth" — crests the payout saves you, or an em dash where it saves none.
  *
  * "Up to" rather than "≈": the figure is a ceiling, not a rounding, and the two signal different
@@ -192,7 +211,7 @@ function rewardRowHTML(table, row, here, keyLevel) {
         html`<span class="mine">your ${dungeon ? "key" : "raid diff"}</span>`
       }
     </th>
-    <td>${r.label || "—"}</td>
+    <td>${trackTag(r.label) || "—"}</td>
     <td class="tnum">${r.ilvl == null ? "—" : r.ilvl}</td>
     <td>${crestCell(r)}</td>
   </tr>`;
@@ -244,7 +263,7 @@ function ladderHTML(r, keyLevel) {
               <th scope="row">
                 ${k.at}${k === mine && html`<span class="mine">your key</span>`}
               </th>
-              <td>${k.label || ""}</td>
+              <td>${trackTag(k.label)}</td>
               <td class="tnum">${k.ilvl}</td>
             </tr>`,
         )}
@@ -495,9 +514,8 @@ export function renderRewards(here, keyLevel) {
                   ${paneRange.min} to ${paneRange.max}: the further a slot has
                   climbed, the less is left to save.`
           }
-          What no <code>/simc</code> pins down reliably is <em>which</em> mark
-          belongs to which slot — those indices don't survive being checked
-          against real gear — so a roll's slot is never named.
+          Each encounter card narrows this to the slots its own pool can land
+          in, so a boss with one item left saves exactly what that slot does.
         </p>
       </section>
 
@@ -518,9 +536,16 @@ export function renderRewards(here, keyLevel) {
             <b>Want</b>, because the roll still upgrades it.
           </li>
           <li>
-            Scores are your report's, simmed at the level each boss
-            <em>drops</em> at, so wherever a roll promotes they're a floor — and
-            they understate that encounter against one paying a lower track.
+            ${
+              b && rollScored(b)
+                ? html`Scores are your QE report's <b>Upgraded Bonus Rolls</b>
+                    figures: the roll's payout taken to the top of its track,
+                    crests spent — not the drop.`
+                : html`Scores are your report's, simmed at the level each boss
+                    <em>drops</em> at, so wherever a roll promotes they're a
+                    floor — and they understate that encounter against one
+                    paying a lower track.`
+            }
           </li>
           <li>
             The crests a roll saves you are quoted on each encounter card and
@@ -997,6 +1022,11 @@ function renderVault(b, built) {
  * One vault choice, priced both ways. The two EVs are counterfactuals computed from the row as it
  * stands, independent of what the board currently has marked as taken — the point is to show the
  * consequence of the toggle before it's flipped, not after.
+ *
+ * And the option's own worth, twice: as it comes, and finished at the top of its track for the crests
+ * that takes. Both matter and neither stands in for the other. A 318 copy of a ring already worn at 321
+ * is worth nothing as it comes, and without the second figure the panel gave no sign it was worth
+ * thousands once finished — the item simply wasn't there to see.
  */
 function vaultOptionHTML(b, v, row, opt) {
   const meta = QE_DATA.items[v.id];
@@ -1028,13 +1058,14 @@ function vaultOptionHTML(b, v, row, opt) {
     <div>
       <div class="vname">${meta?.n || v.name}</div>
       <div class="vmeta">
-        <span>${encTxt}</span><span>·</span
-        ><span>ilvl ${v.ilvl}</span
-        >${note && html`<span>${note}</span>`}${
+        <span>${encTxt}</span><span>·</span>${
+          opt?.step && html`<span>${trackTag(opt.step)}</span><span>·</span>`
+        }<span>ilvl ${v.ilvl}</span>${note && html`<span>${note}</span>`}${
           warn &&
           html`<span class="warn">· also in this roll pool, dupe risk</span>`
         }
       </div>
+      ${worthHTML(b, opt)}
       <div class="couple">${couple}</div>
     </div>
     <button class="btn tiny ${taken ? "primary" : ""}" data-vault="${v.id}">
@@ -1044,21 +1075,89 @@ function vaultOptionHTML(b, v, row, opt) {
 }
 
 /**
+ * "Worth 0 HPS as it comes — you hold one at 321 · 2,129 at Myth 6/6 for 80 Myth crests".
+ *
+ * The as-it-comes half is left out where the report can't place it — the note in the line above
+ * already says why — and the finished half where the option is already at the top of its track or the
+ * report never scored it up there. An option with neither says nothing rather than print a zero it
+ * hasn't earned.
+ */
+function worthHTML(b, opt) {
+  if (!opt) return "";
+  const unit = unitOf(b),
+    t = opt.top;
+  const now =
+    opt.scored &&
+    opt.at !== "outside" &&
+    html`Worth <b>${dv(b, opt.score)}</b> ${unit} as it comes${
+      opt.held && opt.held >= opt.ilvl
+        ? html` — you hold one at ${heldText(opt)}`
+        : ""
+    }`;
+  const done =
+    t?.at &&
+    t.at !== "outside" &&
+    html`<b>${dv(b, t.score)}</b> at ${trackTag(t.label)}${
+      t.at === "between" ? html` (estimated)` : ""
+    } for <b>${crestCostText(t)}</b>`;
+  if (!now && !done) return "";
+  return html`<div class="vworth">
+    ${now}${now && done && html` · `}${done}
+  </div>`;
+}
+
+/**
+ * What finishing a vault option costs, in words: "80 Myth crests", "up to 80 Myth crests" where the
+ * slot's mark is unknown and the figure is the season's assumption, "no crests" where the mark already
+ * covers the climb.
+ */
+function crestCostText(t) {
+  if (!t.crests) return "no crests";
+  return `${t.mark == null ? "up to " : ""}${t.crests} ${t.kind} crests`;
+}
+
+/**
+ * The copy you already hold, track first — "Hero 6/6 (321)". The track is the half that matters beside
+ * a vault option: a Myth 1/6 at 318 under a Hero 6/6 at 321 is the lower number and the better item.
+ *
+ * Where neither source sent bonus ids and the level sits in the overlap between two tracks, both are
+ * named — "Hero 6/6 or Myth 2/6 (321)" — with how to settle it on the hover, rather than one picked.
+ */
+function heldText(opt) {
+  if (opt.heldStep) return html`${trackTag(opt.heldStep)} (${opt.held})`;
+  if (opt.heldMaybe)
+    return html`<span title="${UNPINNED}"
+      >${join(
+        opt.heldMaybe.map((l) => trackTag(l)),
+        " or ",
+      )} (${opt.held})</span
+    >`;
+  return html`${opt.held}`;
+}
+
+/** Why a held copy's track is a pair of candidates, and how to get the one it is. */
+const UNPINNED =
+  "Neither your report nor your /simc said which track this copy is on, and this item level " +
+  "exists on both. Reload the report or paste a fresh /simc and it'll name the one.";
+
+/**
  * The one comparison the encounter ranking can't make: a guaranteed item against a gamble.
  *
  * Both numbers are already on screen elsewhere; what's missing is that they're alternatives. Where
  * the season pays the roll token out of a vault slot they're strictly exclusive, and the wording
  * says so — otherwise this is a sanity check on whether spending a token is worth it at all.
  *
- * The recommendation is deliberately narrow: it compares this week's expected score and nothing
- * else. A roll also saves crests and can unlock free upgrades in its slot, and a guaranteed item
- * can't miss — neither is priced here, so the margin is stated rather than rounded to a verdict.
+ * The recommendation compares this week's expected score, with every figure on the same footing: the
+ * value of an item once finished, next to the crests finishing it takes. The roll is priced that way
+ * already — a 12.1 report sims it at the top of its track — so the vault option is too, whenever its
+ * finished reading changes the answer (`vaultChoice`). The crests are never converted into score. Where
+ * the answer turns on them, the lead says so and both numbers are given, rather than a verdict resting
+ * on an exchange rate nobody has.
  *
- * The crest saving is the one unpriced term named out loud, because it's the only one that lands
- * entirely on one side of this trade. Taking the vault item saves nothing: it arrives at the level
- * it arrives at. So where the top roll saves crests, a verdict of "take the item" is being reached
- * *despite* a real cost the numbers above it don't carry, and a reader deciding on the margin should
- * be told so on the banner rather than after expanding the card the figure sits on.
+ * This replaced a line that credited the roll with the crests it "saves" over the vault item while
+ * pricing that item unfinished. That counted the same crests twice — once by leaving the item's value
+ * at the level it arrives at, and again as a bonus for the roll — and it hid the item's finished value
+ * entirely, which is exactly the number someone weighing an upgrade needs.
  *
  * The one lasting effect that *is* named is the drag: taking the item leaves it in its pool for
  * good, where a roll would have removed one. That asymmetry outlives the week the trade is made in.
@@ -1067,27 +1166,38 @@ function tradeHTML(b, vc) {
   if (!vc?.top) return "";
   const unit = unitOf(b),
     keep = vc.keep,
-    roll = vc.top;
+    roll = vc.top,
+    fin = vc.rollFinish;
   // "Priced" is stricter than "scored": an option the report evaluated only above the level the
   // vault is offering has a number, and it is not a number about the item on the table.
   const priced = keep.scored && keep.at !== "outside";
   const keepTxt = priced
-    ? html`<b>${dv(b, keep.score)}</b> ${unit} guaranteed from ${keep.name}`
+    ? html`<b>${dv(b, keep.score)}</b> ${unit} guaranteed from
+        ${keep.name}${
+          keep.held && keep.held >= keep.ilvl
+            ? html` — you hold one at ${heldText(keep)}`
+            : ""
+        }`
     : keep.scored
       ? html`${keep.name}, which your report only scored from ilvl ${keep.from} up`
       : html`${keep.name}, which your report never scored`;
-  const lead = SEASON.tokenFromVault
-    ? vc.verdict === "roll"
-      ? "Take the token"
-      : "Take the item"
-    : vc.verdict === "roll"
-      ? "The roll is worth it"
-      : "Your vault beats your best roll";
+  const turn = turnsOn(vc);
+  const lead =
+    vc.verdict === "crests"
+      ? html`It turns on ${turn}`
+      : SEASON.tokenFromVault
+        ? vc.verdict === "roll"
+          ? "Take the token"
+          : "Take the item"
+        : vc.verdict === "roll"
+          ? "The roll is worth it"
+          : "Your vault beats your best roll";
   return html`<div class="trade ${vc.verdict}">
     <div class="tlead">${lead}</div>
     <div class="tbody">
-      <b>${dv(b, vc.perRoll)}</b> ${unit} per roll on ${roll.g.name}, against
-      ${keepTxt}.
+      <b>${dv(b, vc.perRoll)}</b> ${unit} per roll on
+      ${roll.g.name}${fin && html`, once you spend ${finText(fin)} finishing what it hands over`},
+      against ${keepTxt}.
       ${priced && html` Gap: <b>${dv(b, Math.abs(vc.perRoll - keep.score))}</b> ${unit}.`}
       ${
         keep.at === "between" &&
@@ -1097,65 +1207,95 @@ function tradeHTML(b, vc) {
       ${roll.cost !== 1 && html` That roll costs ${roll.cost} tokens.`}
       ${tokenWeeksHTML()}
     </div>
-    ${crestEdgeHTML(b, roll, keep)} ${vc.drag && dragHTML(b, vc.drag, keep, unit)}
+    ${finishedHTML(b, vc, unit, turn)}
+    ${vc.drag && dragHTML(b, vc.drag, vc.item, unit)}
   </div>`;
 }
 
+/** "80 Myth crests", "up to 80 Myth crests" or "40–80 Myth crests" for the roll's own climb. */
+function finText(fin) {
+  const n = fin.min === fin.max ? `${fin.max}` : `${fin.min}–${fin.max}`;
+  return `${fin.known ? "" : "up to "}${n} ${fin.kind} crests`;
+}
+
 /**
- * The crest saving, on the trade banner, as the one thing the verdict above it hasn't priced.
- *
- * Same shape as `tdrag`, the other line here that names a cost living outside the week's arithmetic.
- * It doesn't convert: the whole reason the figure is quoted in crests is that no rate exists to fold
- * it into a score with (see `crestNote`).
- *
- * Measured against the vault item's own level, which is the only thing that makes it a term of *this*
- * trade. A roll saves crests by arriving further up the track than the alternative, and the
- * alternative here is not the boss's drop — it's the item in the vault. Where a season hands a vault
- * slot over already capped, the two arrive at the same step, the roll saves nothing over it, and the
- * line has to disappear rather than credit the token with a saving both branches get. `crestSavingAt`
- * takes the level as a floor and returns zero for that case; this renders nothing on a zero.
- *
- * Whether the figure is computed matters more on this line than anywhere else: this is the one place
- * the crests could tip a decision, as the tiebreak on a close margin. A reader leaning on an assumed
- * number deserves to know it rests on an assumption about their gear, and one leaning on a computed
- * number deserves not to be told to discount it. `crestSavingRange` settles which — and a banner gets
- * the verdict only, with the encounter card carrying the working.
- *
- * Always reads off the same `/simc` as the vault options beside it, since both come off `b`.
- *
- * @param {import("./types.js").Board} b
- * @param {import("./types.js").Row} roll  The top roll — the one the banner is costing.
- * @param {{name: string, ilvl: number}} keep  The vault item it's being weighed against.
+ * What the trade turns on where the best answer costs crests the free one doesn't — "80 Myth
+ * crests" — or null where the best answer is also the free one and crests settle nothing. The lead
+ * of a "crests" verdict and the finished line share it, so they can't name different amounts.
  */
-function crestEdgeHTML(b, roll, keep) {
-  const rw = roll.reward;
-  if (!rw?.crests) return "";
-  // Null rather than 0 for an unknown level, so the floor falls back to the drop the season prices
-  // from instead of clamping the saving away.
-  const at = keep && keep.ilvl > 0 ? keep.ilvl : null;
-  const kind = rw.crestKind || "";
-  const rng = crestSavingRange(b, rw, at);
-  const max = rng ? rng.max : crestSavingAt(rw, null, at);
-  if (!max) return "";
-  const figure = !rng
-    ? html`up to ${max} ${kind} crests`
-    : rng.flat
-      ? html`${rng.max} ${kind} crests`
-      : html`${rng.min}–${rng.max} ${kind} crests`;
-  return html`<div class="tcrest">
-    The roll also <b>saves ${figure}</b>, counted in neither number above: it
-    arrives at ${rw.label || html`the top of its track`}${
-      at ? html`, ${keep.name} at ilvl ${at}` : ""
-    }.
-    ${
-      !rng
-        ? html`Assumed — open the encounter for what it turns on.`
-        : rng.flat
-          ? html`From your <code>/simc</code>, where every slot works out the
-              same.`
-          : html`From your <code>/simc</code> — open the encounter for why it's
-              a range.`
+function turnsOn(vc) {
+  if (!vc.best || !vc.free || vc.best === vc.free) return null;
+  const costly = vc.best.crests >= vc.free.crests ? vc.best : vc.free;
+  const kind =
+    costly.kind === "roll" ? vc.rollFinish?.kind : costly.o?.top?.kind;
+  return `${Math.abs(vc.best.crests - vc.free.crests)} ${kind || ""} crests`;
+}
+
+/**
+ * The best vault option finished, where that reading changes what the banner is weighing.
+ *
+ * It says what the item is worth at the top of its track, what that climb costs in this slot (and
+ * whether the slot's mark was read or assumed), and where that leaves it against what you'd take with
+ * the crests left out — a roll, or another item as it comes. Ahead of that is a trade the reader has
+ * to price themselves; behind it settles the question. Same footnote shape as the drag line under it.
+ */
+function finishedHTML(b, vc, unit, turn) {
+  const s = vc.stretch;
+  if (!s) return "";
+  const t = s.top,
+    fin = vc.rollFinish,
+    vs = vc.free;
+  const slot = t.slot != null ? WATERMARK_NAME[t.slot] : "slot";
+  // Why the figure is what it is, which is the part a reader checking it against "five steps at 20"
+  // needs: how much of the climb their own mark has already paid for, or that it's assumed.
+  const why =
+    t.mark == null
+      ? html` — the most it can cost, assuming that slot is capped on the
+          track below`
+      : t.covered >= t.steps
+        ? html` — your ${slot} watermark (${t.mark}) already covers the whole
+            climb`
+        : t.covered
+          ? html` — your ${slot} watermark (${t.mark}) already covers
+              ${t.covered === 1 ? "the first" : `the first ${t.covered}`} of its
+              ${t.steps} steps`
+          : t.clamped
+            ? html` — your ${slot} watermark is only ${t.mark}, so that assumes
+                you cap the slot on the track below first`
+            : "";
+  // Only where this item's crests are what the trade turns on; a roll that needs crests of its own
+  // is the lead's business, not this line's.
+  const price =
+    turn && vc.best?.finished && vc.best.o === s
+      ? html` — so it comes down to what ${turn} are worth to you, which is a
+          rate no report gives.`
+      : html`.`;
+  let cmp;
+  // Measured against what you'd take with the crests left out: a roll, or an item as it comes. Where
+  // that is this very item finished — its slot's mark covers the climb — the roll is the comparison.
+  if (!vs || vs.kind === "roll" || vs.finished) {
+    const gap = t.score - vc.perRoll;
+    const roll = fin
+      ? html`, which needs ${finText(fin)} of its own`
+      : html`, which arrives finished`;
+    cmp =
+      gap > 0
+        ? html`That's <b>${dv(b, gap)}</b> ${unit} more than a roll on
+            ${vc.top.g.name}${roll}${price}`
+        : html`Still <b>${dv(b, -gap)}</b> ${unit} short of a roll on
+            ${vc.top.g.name}${roll}.`;
+  } else
+    cmp = html`That's <b>${dv(b, t.score - vs.value)}</b> ${unit} more than
+      taking ${vs.o === s ? "it" : vs.o.name} as it comes${price}`;
+  return html`<div class="tfin">
+    Finished at ${trackTag(t.label)}, <b>${s.name}</b> is worth
+    <b>${dv(b, t.score)}</b>
+    ${unit}, for <b>${crestCostText(t)}</b>${why}.${
+      t.have != null &&
+      html` You had ${t.have} ${t.kind} crests when you pasted your
+      <code>/simc</code>.`
     }
+    ${cmp}
   </div>`;
 }
 
@@ -1176,9 +1316,9 @@ function tokenWeeksHTML() {
     ${win.to && html`From week ${win.to + 1} a token is given weekly instead.`}`;
 }
 
-function dragHTML(b, d, keep, unit) {
+function dragHTML(b, d, item, unit) {
   return html`<div class="tdrag">
-    And it lasts: taking ${keep.name} leaves it in ${d.name}’s pool as dead
+    And it lasts: taking ${item.name} leaves it in ${d.name}’s pool as dead
     weight that still counts, so every later roll
     ${d.isTop ? "on the encounter above" : "there"} is worth
     <b>${dv(b, d.amount)}</b> ${unit} less. Rolling would have removed it.
@@ -1401,8 +1541,11 @@ function promoNote(b, r) {
  * Three shapes, because the figure is a computed one and how much is known about it varies. With a
  * linked `/simc` whose slots all agree it's a plain number; where they disagree it's a range, since a
  * roll lands in one slot and which one isn't knowable; with nothing linked it's the season's baseline
- * figure, hedged with "about" because that baseline is an assumption about the character's gear
+ * figure, hedged with "up to" because that baseline is an assumption about the character's gear
  * rather than a bound on it. See `crestSavingRange`, and `Reward.crestFreeTo` for the baseline.
+ *
+ * The slots are this pool's, not the whole character's: a boss whose one live item is a pair of legs
+ * saves what your legs slot saves, and nothing your capped helm says bears on it.
  *
  * Guarded with an `if` rather than `c && html\`…\``: most payouts save *zero* crests, and zero is a
  * number the tag would faithfully render as "0". The `&&` shorthand is only safe where the left
@@ -1412,13 +1555,14 @@ function crestMeta(b, r) {
   const c = r.reward?.crests;
   if (!c) return "";
   const kind = r.reward.crestKind || "";
-  const rng = crestSavingRange(b, r.reward);
+  const rng = crestSavingRange(b, r.reward, r.slots);
   const figure = !rng
     ? html`up to ${c} ${kind} crests`
     : rng.flat
       ? html`${rng.max} ${kind} crests`
       : html`${rng.min}–${rng.max} ${kind} crests`;
-  return html`<span class="crest-save ${rng?.flat ? "sure" : ""}"
+  return html`<span
+    class="crest-save ${rng?.flat && !rng.assumed ? "sure" : ""}"
     >saves <b>${figure}</b></span
   >`;
 }
@@ -1448,15 +1592,15 @@ function crestMeta(b, r) {
  * 80 rather than the 100 a naive five-step count gives; `crestSavingAt` carries the arithmetic.
  *
  * Where a `/simc` is linked none of that has to be assumed: the marks give a real figure per slot, and
- * the note quotes it. It still won't say *which* slot is which — see `crestSavingRange` for why that
- * would be a guess — so a character whose slots disagree gets the range and the reason for it.
+ * the note quotes it over the slots this pool can land in. Where those disagree it's a range, and the
+ * note says why rather than pick one.
  */
 function crestNote(b, r) {
   const c = r.reward?.crests;
   if (!c) return "";
   const kind = r.reward.crestKind || "";
   const step = r.reward.label || html`the top of its track`;
-  const rng = crestSavingRange(b, r.reward);
+  const rng = crestSavingRange(b, r.reward, r.slots);
   const lead = !rng
     ? html`up to ${c} ${kind} crests`
     : rng.flat
@@ -1468,7 +1612,7 @@ function crestNote(b, r) {
     want arrives already upgraded; one you don’t still unlocks that slot, so the
     piece you actually wear upgrades free. Same for every item here, so it can’t
     change <em>which</em> item you want, only whether this encounter beats
-    another. ${crestCheckHTML(r.reward, kind, step, rng)}
+    another. ${crestCheckHTML(r.reward, kind, step, rng, r.slots)}
     <span class="crest-caveat"
       >Not in the EV above either: folding it in needs a crests-to-${unitOf(b)}
       rate that depends on what you’d have spent them on, which no report
@@ -1484,12 +1628,15 @@ function crestNote(b, r) {
  * Linked and unanimous, so it's simply the number. Linked and mixed, so it's a range, with the reason
  * it can't be narrowed further stated rather than left as vagueness.
  *
+ * A slot the app can't match to a watermark — a one-handed weapon, so far; see `WATERMARK_SLOT` — is
+ * priced at the assumption, and the note owns up to it rather than call the whole figure computed.
+ *
  * The first case names the overlap and the play it implies, because that is the one sentence making
  * the figure re-derivable: without it a reader comparing against a guide can't tell whether the two
  * disagree or are answering different questions. It says *do this* rather than *this is assumed* —
  * capping the slot's lower track is a thing the reader controls, and cheaply.
  */
-function crestCheckHTML(reward, kind, step, rng) {
+function crestCheckHTML(reward, kind, step, rng, slots) {
   const mark = reward.crestFreeTo;
   if (!rng)
     return html`<span class="crest-caveat"
@@ -1502,18 +1649,27 @@ function crestCheckHTML(reward, kind, step, rng) {
       ${kind} saves less than this, down to nothing at ${step}. Paste your
       <code>/simc</code> and it's computed instead of assumed.</span
     >`;
+  const only = slots?.length === 1 && slots[0] != null;
+  const where = only
+    ? `your ${WATERMARK_NAME[slots[0]]} slot, the only one this pool can land in,`
+    : rng.slots === 1
+      ? "the one slot this pool can land in"
+      : `the ${rng.slots} slots this pool can land in`;
+  const guess =
+    rng.assumed > 0 &&
+    html` ${rng.assumed === 1 ? "One of those is" : `${rng.assumed} of those are`}
+    a slot the app can’t match to your marks yet (one-handed weapons, so far),
+    taken at the most it can save.`;
   if (rng.flat)
-    return html`<span class="crest-caveat checked"
-      >Computed from your <code>/simc</code>, not assumed: every one of your
-      ${rng.slots} slots works out at ${rng.max}, so that's what this saves
-      wherever it lands.</span
+    return html`<span class="crest-caveat ${rng.assumed ? "" : "checked"}"
+      >Computed from your <code>/simc</code>${rng.assumed ? "" : ", not assumed"}:
+      ${rng.slots === 1 ? where : `every one of ${where}`} works out at
+      ${rng.max}, so that's what this saves.${guess}</span
     >`;
   return html`<span class="crest-caveat"
-    >Computed from your <code>/simc</code>: across your ${rng.slots} slots this
-    works out between <b>${rng.min} and ${rng.max}</b>, depending which one the
-    roll lands in — the further a slot has already climbed, the less is left to
-    save. Which mark belongs to which slot isn’t something a
-    <code>/simc</code> pins down reliably, so it stays a range.</span
+    >Computed from your <code>/simc</code>: across ${where} this works out
+    between <b>${rng.min} and ${rng.max}</b>, depending which one the roll lands
+    in — the further a slot has already climbed, the less is left to save.${guess}</span
   >`;
 }
 
@@ -1700,26 +1856,29 @@ function payoutPhrase(it) {
     : `pays out at ilvl ${it.rollTopIlvl}`;
 }
 
-/** "have 678" on a copy you already hold, gold when rolling it again would only duplicate it. */
+/**
+ * "have 678" on a copy you already hold, gold-ruled when rolling it again would only duplicate it.
+ *
+ * The number is printed in its track's colour where the copy's bonus ids said which track, the way a
+ * character sheet prints it — so a Hero 6/6 you wear reads differently at a glance from the Myth
+ * payout the card is about, even where its item level is the higher of the two. The hover spells the
+ * track out, since a colour alone isn't something everyone can read.
+ */
 function haveBadge(it) {
   if (it.ownedIlvl == null) return "";
+  const step = it.ownedStep || it.ownedMaybe?.join(" or ");
+  const at = `ilvl ${it.ownedIlvl}${step ? ` (${step})` : ""}`;
   const why = it.dupe
-    ? "You already have this at ilvl " +
-      it.ownedIlvl +
-      (it.rollTopIlvl
-        ? "; a roll here " + payoutPhrase(it) + ", so it would just dupe it"
-        : ", so a roll here would just dupe it")
+    ? `You already have this at ${at}${
+        it.rollTopIlvl
+          ? `; a roll here ${payoutPhrase(it)}, so it would just dupe it`
+          : ", so a roll here would just dupe it"
+      }`
     : it.rollTopIlvl
-      ? "You have this at ilvl " +
-        it.ownedIlvl +
-        "; a roll here " +
-        payoutPhrase(it) +
-        ", a real upgrade"
-      : "You have this at ilvl " +
-        it.ownedIlvl +
-        ", but a roll here pays out on a higher track, so probably still an upgrade";
+      ? `You have this at ${at}; a roll here ${payoutPhrase(it)}, a real upgrade`
+      : `You have this at ${at}, but a roll here pays out on a higher track, so probably still an upgrade`;
   return html`<span class="have ${it.dupe ? "dupe" : ""}" title="${why}"
-    >have ${it.ownedIlvl}</span
+    >have ${trackTag(it.ownedStep, it.ownedIlvl)}</span
   >`;
 }
 

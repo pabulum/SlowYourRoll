@@ -72,6 +72,64 @@
  */
 
 /**
+ * One upgrade track, as the game's own upgrade data describes it.
+ *
+ * @typedef {Object} Track
+ * @property {string} name     "Myth" — the track and the crest that pays for it share the name.
+ * @property {number[]} steps  Item level of each step, 1/6 first.
+ * @property {number} perStep  Crests one step costs. Flat for every slot in Midnight.
+ * @property {number} bonusFrom  Bonus id of the 1/6 step. The rest follow on consecutively, which
+ *   is how an item string in a `/simc` says where on which track an item sits.
+ * @property {number} currency  Currency id of the crest, as a `/simc`'s `upgrade_currencies` line
+ *   writes the character's balance of it.
+ */
+
+/**
+ * Midnight's upgrade tracks, off QE's `src/Retail/Engine/BonusIDs.ts` (`seasonId: 37`): every step
+ * with its item level, bonus id and price. Each track starts four steps above the one below, so they
+ * overlap by two — the fact the whole crest model turns on.
+ *
+ * @type {Record<string, Track>}
+ */
+const MIDNIGHT_TRACKS = {
+  Adventurer: {
+    name: "Adventurer",
+    steps: [266, 269, 272, 276, 279, 282],
+    perStep: 20,
+    bonusFrom: 12817,
+    currency: 3442,
+  },
+  Veteran: {
+    name: "Veteran",
+    steps: [279, 282, 285, 289, 292, 295],
+    perStep: 20,
+    bonusFrom: 12825,
+    currency: 3443,
+  },
+  Champion: {
+    name: "Champion",
+    steps: [292, 295, 298, 302, 305, 308],
+    perStep: 20,
+    bonusFrom: 12833,
+    currency: 3444,
+  },
+  Hero: {
+    name: "Hero",
+    steps: [305, 308, 311, 315, 318, 321],
+    perStep: 20,
+    bonusFrom: 12841,
+    currency: 3445,
+  },
+  Myth: {
+    name: "Myth",
+    steps: [318, 321, 324, 328, 331, 334],
+    perStep: 20,
+    bonusFrom: 12849,
+    currency: 3446,
+  },
+};
+
+/**
  * Encounters at the end of a raid whose rewards are a class apart, and worth holding a token for.
  *
  * `lastBosses` counts back from the end of the raid rather than naming encounter ids, which keeps
@@ -131,6 +189,9 @@
  *   hands you the drop, at the drop's own item level — the Season 1 behaviour.
  * @property {Special|null} special  End-of-raid encounters worth holding a token for; null when the
  *   season has no such tier.
+ * @property {Record<string, Track>} [tracks]  The season's upgrade tracks, keyed by name. What a
+ *   Great Vault option is worth once finished, and what finishing it costs, are both read off these.
+ *   Absent for a season nobody has recorded them for, which leaves every option priced as it comes.
  * @property {{name: string, url: string}} [source]  Where the figures above were read off, for the
  *   reward pane to cite. A pre-launch table is somebody's datamining until it isn't, and a reader
  *   deciding whether to trust a number needs to know whose.
@@ -256,6 +317,7 @@ export const SEASONS = {
     // Cost does not vary by slot. Every Midnight step carries a single cost block at
     // `mask_inv_type: 0` — one price for every inventory type — so a two-hander, a ring and a helm
     // all climb at 20 a step. See "double slots" in the README for what that does and doesn't mean.
+    tracks: MIDNIGHT_TRACKS,
     rollReward: {
       mythic: {
         label: "Myth 6/6",
@@ -263,8 +325,8 @@ export const SEASONS = {
         crests: 80,
         crestKind: "Myth",
         crestFrom: 318,
-        crestPerStep: 20,
-        crestSteps: [318, 321, 324, 328, 331, 334],
+        crestPerStep: MIDNIGHT_TRACKS.Myth.perStep,
+        crestSteps: MIDNIGHT_TRACKS.Myth.steps,
         crestFreeTo: 321, // Hero 6/6, which is also Myth 2/6
       },
       heroic: { label: "Myth 1/6", ilvl: 318, crests: 0, crestKind: "Myth" },
@@ -533,6 +595,69 @@ export function rewardOf(season, type, diffKey, keyLevel) {
     return rung ? { ...rung, label: rung.label || "", ladder: mp.ladder } : mp;
   }
   return table[String(diffKey)] || { label: "", ilvl: null };
+}
+
+/**
+ * Where on which upgrade track an item sits: from its bonus ids, or failing those its item level.
+ *
+ * The bonus ids are the game's own answer. Every step of every track has one, consecutive within a
+ * track, and an item carries exactly one of them; a `/simc` writes them on every item line, so a Great
+ * Vault option read from one says outright that it is Myth 1/6 and not Hero 5/6. An item carrying
+ * bonus ids but none of those is on no track at all — a crafted piece, or a Venomcursed 9/6 one — and
+ * is finished as it comes.
+ *
+ * Item level alone can't settle it, because the tracks overlap by two steps: 318 is both of the above.
+ * The fallback takes the *higher* track, which is the vault's own rule this season — LFR, Normal and
+ * Heroic slots each jump to the first step of the next track up — and which holds for every rung of
+ * the M+ ladder as well. It exists for vault options saved before this app read bonus ids.
+ *
+ * @param {Season} season
+ * @param {number[]|null} [bonus]  The item's bonus ids; absent where they were never read.
+ * @param {number} [ilvl]
+ * @returns {{track: Track, rank: number, label: string, top: number, topLabel: string}|null}
+ */
+export function trackStep(season, bonus, ilvl) {
+  const tracks = Object.values(season.tracks || {});
+  const at = (t, i) => {
+    const n = t.steps.length;
+    return {
+      track: t,
+      rank: i + 1,
+      label: `${t.name} ${i + 1}/${n}`,
+      top: t.steps[n - 1],
+      topLabel: `${t.name} ${n}/${n}`,
+    };
+  };
+  if (bonus?.length) {
+    for (const id of bonus)
+      for (const t of tracks) {
+        const i = id - t.bonusFrom;
+        if (i >= 0 && i < t.steps.length) return at(t, i);
+      }
+    return null;
+  }
+  const t = tracks
+    .filter((x) => x.steps.includes(ilvl))
+    .sort((x, y) => y.steps[0] - x.steps[0])[0];
+  return t ? at(t, t.steps.indexOf(ilvl)) : null;
+}
+
+/**
+ * Every track step an item level could be, higher track first — "Myth 2/6" and "Hero 6/6" for 321.
+ *
+ * For a copy you already hold, where `trackStep`'s tie-break doesn't apply: the vault rule says a
+ * *vault* item at 318 is Myth 1/6, but nothing says which a copy in your bags is. One candidate is an
+ * answer — only one track has a 334 — and two is the honest "one of these" until the bonus ids say.
+ *
+ * @param {Season} season
+ * @param {number} ilvl
+ * @returns {string[]}
+ */
+export function stepsAt(season, ilvl) {
+  return Object.values(season.tracks || {})
+    .filter((t) => t.steps.includes(ilvl))
+    .sort((x, y) => y.steps[0] - x.steps[0])
+    .map((t) => `${t.name} ${t.steps.indexOf(ilvl) + 1}/${t.steps.length}`);
 }
 
 /** `rewardOf` against the season this build targets. */

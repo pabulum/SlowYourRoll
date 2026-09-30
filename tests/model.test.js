@@ -6,7 +6,9 @@ import {
   activeLootSpec,
   baselineOf,
   buildGroups,
+  climbCost,
   crestSavingAt,
+  crestSavingRange,
   diffKey,
   diffLabel,
   dv,
@@ -14,6 +16,7 @@ import {
   fmt,
   hasPct,
   isDupe,
+  markSlotOf,
   qeIsModern,
   resolve,
   rollIlvlFor,
@@ -25,7 +28,7 @@ import {
   vaultStatus,
   vaultTakeOf,
 } from "../src/model.js";
-import { lastReset, rollReward, SEASON } from "../src/season.js";
+import { lastReset, rollReward, SEASON, SEASONS } from "../src/season.js";
 import { state } from "../src/store.js";
 
 // A current raid + one of its bosses, pulled from the live database so the test
@@ -890,6 +893,52 @@ test("where both sources know an item, the better copy wins", () => {
   state.simc = {};
 });
 
+// The copy's track comes off its bonus ids — from the report, or a /simc. The level alone only
+// decides it where one track has that level: 321 is Hero 6/6 or Myth 2/6, and which it is decides
+// whether a Myth roll is the better item.
+test("a held copy's track is named from its bonus ids", () => {
+  state.showAll = false;
+  state.simc = {};
+  const b = makeQEBoard();
+  const id = b.results[0].item;
+  b.equipped = { [id]: 260 };
+  b.equippedBonus = { [id]: [6652, 12846] };
+  let it = buildGroups(b).rows[0].items.find((x) => x.id === id);
+  assert.equal(it.ownedStep, "Hero 6/6");
+
+  delete b.equippedBonus;
+  it = buildGroups(b).rows[0].items.find((x) => x.id === id);
+  assert.equal(
+    it.ownedStep,
+    null,
+    "no bonus ids and on no track: nothing to say",
+  );
+
+  state.simc = {
+    "heals~area52~": { owned: { [id]: 285 }, ownedBonus: { [id]: [12852] } },
+  };
+  it = buildGroups(b).rows[0].items.find((x) => x.id === id);
+  assert.equal(it.ownedIlvl, 285, "the better copy wins");
+  assert.equal(it.ownedStep, "Myth 4/6", "and brings its track with it");
+  state.simc = {};
+});
+
+test("without bonus ids a level only one track has is named, and an overlap names both", () => {
+  state.showAll = false;
+  state.simc = {};
+  const b = makeQEBoard();
+  const id = b.results[0].item;
+  b.equipped = { [id]: 334 };
+  let it = buildGroups(b).rows[0].items.find((x) => x.id === id);
+  assert.equal(it.ownedStep, "Myth 6/6", "only Myth has a 334");
+  assert.equal(it.ownedMaybe, null);
+
+  b.equipped = { [id]: 321 };
+  it = buildGroups(b).rows[0].items.find((x) => x.id === id);
+  assert.equal(it.ownedStep, null, "not picked");
+  assert.deepEqual(it.ownedMaybe, ["Myth 2/6", "Hero 6/6"], "both named");
+});
+
 /* ---------- which spec the game would actually loot you as ----------
    The report only knows the spec it was simmed as. A /simc knows the loot spec, and for a healer
    who loots as a DPS spec to dodge intellect trinkets the two differ — which changes the pool. */
@@ -1063,6 +1112,31 @@ test("the token's value reaches the encounter's EV", (t) => {
   );
 });
 
+// Nobody holds a tier token; they hold the piece it became. So the piece is what a copy you already
+// have is looked up by — holding the Myth 6/6 legs makes the legs token a dupe, and a Hero 6/6 pair
+// is named on the token's row as the copy the roll would replace.
+test("a tier token is judged against the piece you hold, not the token", (t) => {
+  if (!QE_DATA.items[TOKEN.id] || !QE_DATA.items[TOKEN.piece])
+    return t.skip("a later season doesn't ship this token");
+  state.showAll = false;
+  state.simc = {};
+  const b = makeTokenBoard(4904);
+  b.equipped = { [TOKEN.piece]: 321 };
+  b.equippedBonus = { [TOKEN.piece]: [12846] };
+  let token = pooledToken(b);
+  assert.equal(token.ownedIlvl, 321);
+  assert.equal(token.ownedStep, "Hero 6/6");
+  assert.equal(
+    token.state,
+    "want",
+    "a Hero 6/6 piece doesn't dupe a Myth 6/6 roll",
+  );
+
+  b.equipped = { [TOKEN.piece]: 334 };
+  token = pooledToken(b);
+  assert.equal(token.state, "own", "the Myth 6/6 piece does");
+});
+
 test("the piece itself stays out of the pool — only the token drops", (t) => {
   state.showAll = false;
   state.simc = {};
@@ -1128,34 +1202,307 @@ test("a payout with no step table yields no figure rather than a wrong one", () 
   assert.equal(crestSavingAt(null, 300), null);
 });
 
-// The vault trade's version of the same question. A saving is against something, and on that banner
-// the something is the item in the vault rather than the boss's drop — a vault slot handed over at
-// Myth 6/6 costs the same nothing to finish, so the roll saves nothing over it.
-test("the saving is measured against the item the alternative arrives at", () => {
-  const m = rollReward("raid", "mythic");
+/* ---------- one climb under every crest figure ----------
+   A saving (a roll arriving further up its track than the drop) and a cost (a vault option arriving
+   short of the top) are the same arithmetic from opposite ends, so they come through one function. */
+
+test("a climb pays for each step above both the slot's mark and the track below's top", () => {
+  const myth = SEASONS[2].tracks.Myth;
   assert.equal(
-    crestSavingAt(m, null, 318),
+    climbCost(myth, 318, 334, null),
     80,
-    "a vault item at the drop's step changes nothing",
+    "the first step is Hero 6/6's",
   );
+  assert.equal(climbCost(myth, 318, 334, 321), 80);
+  assert.equal(climbCost(myth, 318, 334, 328), 40);
+  assert.equal(climbCost(myth, 318, 334, 334), 0, "a capped slot pays nothing");
   assert.equal(
-    crestSavingAt(m, null, 328),
+    climbCost(myth, 328, 334, null),
     40,
-    "one part-way up the track saves the rest",
+    "an item part-way up pays the rest",
   );
   assert.equal(
-    crestSavingAt(m, null, 334),
+    climbCost(SEASONS[2].tracks.Hero, 315, 321, null),
+    40,
+    "and a Hero item climbs its own track",
+  );
+});
+
+/* ---------- which of your slots a figure is about ----------
+   The watermark line is Blizzard's ItemRedundancySlot list: one entry per kind of slot, rings and
+   trinkets each sharing one. With that settled a roll's saving is read over the slots its own pool can
+   land in, not the whole character, and a boss with one live item saves exactly what that slot does. */
+
+test("an item's watermark slot follows its inventory type, and a token follows its piece", (t) => {
+  assert.equal(
+    markSlotOf(268266),
+    9,
+    "Alluring Bubbleband: rings share index 9",
+  );
+  const token = Object.keys(QE_DATA.items).find(
+    (id) => QE_DATA.items[id].ct?.length,
+  );
+  if (!token) return t.skip("no tier tokens in this database");
+  const piece = QE_DATA.items[token].ct[0];
+  assert.equal(markSlotOf(Number(token)), markSlotOf(piece));
+  assert.notEqual(markSlotOf(Number(token)), null);
+});
+
+test("a one-hander isn't matched to a slot the exports can't pin down", () => {
+  const oneHand = Object.keys(QE_DATA.items).find(
+    (id) => QE_DATA.items[id].iv === 13,
+  );
+  assert.equal(markSlotOf(Number(oneHand)), null);
+});
+
+/** 17 marks in ItemRedundancySlot order, every slot at `base` but the ones given. */
+function marksWith(base, over) {
+  const m = Array(17).fill(base);
+  Object.entries(over).forEach(([i, v]) => {
+    m[Number(i)] = v;
+  });
+  return m;
+}
+
+test("a roll's saving is read over the slots its pool can land in", () => {
+  const m = rollReward("raid", "mythic");
+  state.simc = {
+    "foo~area52~": { owned: {}, watermarks: marksWith(334, { 5: 321 }) },
+  };
+  const b = makeBoard();
+  assert.deepEqual(
+    crestSavingRange(b, m, [5]),
+    { min: 80, max: 80, flat: true, slots: 1, assumed: 0 },
+    "legs at 321: the whole saving",
+  );
+  assert.equal(
+    crestSavingRange(b, m, [0]).max,
     0,
-    "and one already capped leaves the roll nothing to save",
+    "a capped head saves nothing",
+  );
+  const both = crestSavingRange(b, m, [0, 5]);
+  assert.equal(both.min, 0);
+  assert.equal(both.max, 80);
+  assert.equal(
+    crestSavingRange(b, m, [null]).assumed,
+    1,
+    "a slot it can't name is priced at the assumption, and says so",
   );
   assert.equal(
-    crestSavingAt(m, null, 0),
-    80,
-    "an alternative below the drop cannot inflate it",
+    crestSavingRange(b, m).slots,
+    17,
+    "without a pool, the whole character",
   );
+});
+
+test("a pool's slots are the items it can still hand you, once each", () => {
+  state.showAll = false;
+  state.simc = {};
+  const b = makeQE121Board();
+  const row = buildGroups(b).rows.find((r) => r.g.type === "raid");
+  const live = row.items.filter(
+    (i) => i.elig !== false && i.state !== "rolled",
+  );
+  const expect = new Set(live.map((i) => markSlotOf(i.givesId || i.id)));
+  assert.deepEqual(new Set(row.slots), expect);
+  assert.equal(row.slots.length, expect.size, "no slot counted twice");
+
+  // Rolling every item in a slot takes that slot out of the running.
+  const ring = live.find((i) => markSlotOf(i.givesId || i.id) === 9);
+  if (!ring) return;
+  live
+    .filter((i) => markSlotOf(i.givesId || i.id) === 9)
+    .forEach((i) => {
+      b.overlay[`${row.g.key}:${i.id}`] = "rolled";
+    });
+  const after = buildGroups(b).rows.find((r) => r.g.key === row.g.key);
+  assert.equal(after.slots.includes(9), false);
+});
+
+/* ---------- a vault option, as it comes and finished ----------
+   Built on the case that prompted it: Alluring Bubbleband from a Heroic vault slot, Myth 1/6 at 318,
+   for a Mistweaver already wearing a Hero 6/6 copy at 321. The report scores the 318 at nothing — it's
+   a downgrade as it comes — and the 334 it becomes at +2,129. Priced only as it comes, the option
+   read as worthless; priced only finished, it was the old bug. Both readings, and the crests between. */
+
+const RING = 268266; // Alluring Bubbleband, off Tidebound Grotto's Nymrissa Wavecaller
+const RING_POOL = "1317:2849";
+
+/**
+ * A Mythic 12.1 board with one roll worth `rollScore` on the raid's first boss, and the ring priced
+ * the way the real report priced it — 0 at 318, 2,129 at 334 — unless `asItComes` says otherwise.
+ * The ring is marked Rolled in its own pool so the only roll on the page is the one being weighed.
+ */
+function ringBoard(rollScore, asItComes = 0) {
+  const b = makeQE121Board();
+  const item = b.results[0].item;
+  const row = (id, dropType, level, rawDiff) => ({
+    item: id,
+    dropType,
+    dropDifficulty: 3,
+    level,
+    score: 0,
+    rawDiff,
+    percDiff: rawDiff / 100,
+  });
+  b.results = [
+    row(item, "drop", 318, rollScore / 2),
+    row(item, "max", 334, rollScore),
+    row(item, "bonus", 334, rollScore),
+    row(RING, "drop", 318, asItComes),
+    row(RING, "max", 334, 2129),
+    row(RING, "bonus", 334, 2129),
+  ];
+  b.equipped = { [RING]: 321 };
+  b.overlay = { [`${RING_POOL}:${RING}`]: "rolled" };
+  return b;
+}
+
+/** This week's vault holding the ring, as the addon writes it, plus whatever else the paste had. */
+function withRingVault(extra = {}, entry = {}) {
+  state.showAll = false;
+  state.simc = {
+    "heals~area52~": {
+      owned: {},
+      at: new Date().toISOString(),
+      vault: [
+        {
+          name: "Alluring Bubbleband",
+          ilvl: 318,
+          id: RING,
+          bonus: [6652, 13668, 13334, 12849],
+          ...entry,
+        },
+      ],
+      ...extra,
+    },
+  };
+}
+
+test("a vault option is read as it comes and finished, with the crests between", () => {
+  withRingVault();
+  const opt = vaultChoice(ringBoard(40000)).options[0];
+  assert.equal(opt.step, "Myth 1/6");
+  assert.equal(opt.score, 0, "a downgrade of the 321 already worn");
+  assert.equal(opt.held, 321);
+  assert.equal(opt.top.label, "Myth 6/6");
+  assert.equal(opt.top.score, 2129, "read straight off the report's 334 rows");
+  assert.equal(opt.top.at, "exact");
+  assert.equal(opt.top.crests, 80, "four paid steps; the first is Hero 6/6's");
+  assert.equal(opt.top.mark, null, "assumed: no /simc marks to read");
+});
+
+test("finishing is priced against the ring slot's own watermark, not the character's best", () => {
+  withRingVault({ watermarks: marksWith(334, { 9: 321 }) });
+  let top = vaultChoice(ringBoard(40000)).options[0].top;
+  assert.equal(top.crests, 80);
+  assert.equal(top.mark, 321);
   assert.equal(
-    crestSavingAt(m, 331, 318),
-    20,
-    "the watermark still binds where it is the higher floor",
+    top.covered,
+    1,
+    "the mark covers the first of the climb's steps",
+  );
+  assert.equal(top.steps, 5);
+
+  withRingVault({ watermarks: marksWith(321, { 9: 328 }) });
+  assert.equal(vaultChoice(ringBoard(40000)).options[0].top.crests, 40);
+
+  withRingVault({ watermarks: marksWith(300, { 9: 334 }) });
+  top = vaultChoice(ringBoard(40000)).options[0].top;
+  assert.equal(top.crests, 0, "a ring slot already at 334 finishes it free");
+});
+
+test("the balance the paste recorded rides along, and changes nothing", () => {
+  withRingVault({ currencies: { 3446: 214, 3445: 90 } });
+  const top = vaultChoice(ringBoard(40000)).options[0].top;
+  assert.equal(top.have, 214, "Myth crests, the ring's track's currency");
+  assert.equal(top.crests, 80);
+});
+
+test("an option saved before bonus ids were read is still placed on its track", () => {
+  withRingVault({}, { bonus: undefined });
+  assert.equal(vaultChoice(ringBoard(40000)).options[0].top.label, "Myth 6/6");
+});
+
+test("an option already at the top of its track has no finished reading to add", () => {
+  withRingVault({}, { ilvl: 334, bonus: [6652, 13668, 13335, 12854] });
+  const opt = vaultChoice(ringBoard(40000)).options[0];
+  assert.equal(opt.step, "Myth 6/6");
+  assert.equal(opt.top, null);
+  assert.equal(opt.score, 2129);
+});
+
+// The prompting case, with the week's real target in place: a guaranteed tier piece worth more per
+// roll than the ring is worth finished. The roll wins on score and on crests, so crests settle nothing
+// — but the finished ring is still the reading the panel raises, since it was the one being missed.
+test("a roll worth more than the finished option says take the token", () => {
+  withRingVault();
+  const b = ringBoard(40000);
+  const vc = vaultChoice(b);
+  assert.ok(vc.perRoll > 2129, `per roll ${vc.perRoll}`);
+  assert.equal(vc.verdict, "roll");
+  assert.equal(vc.stretch?.id, RING, "the finished ring is still raised");
+  assert.equal(vc.best.kind, "roll");
+});
+
+// The officers' version: that target taken off the table, and the next roll worth well under the ring
+// finished. Now the item wins on score and the roll wins on crests, and no rate between the two exists
+// that doesn't depend on what else the crests would buy — so the verdict says exactly that.
+test("a finished option worth more than the roll turns on the crests it costs", () => {
+  withRingVault();
+  const vc = vaultChoice(ringBoard(1200));
+  assert.ok(vc.perRoll < 2129, `per roll ${vc.perRoll}`);
+  assert.equal(vc.verdict, "crests");
+  assert.equal(vc.free.kind, "roll", "with crests left out, the roll");
+  assert.equal(vc.best.kind, "item", "on score alone, the ring");
+  assert.equal(vc.best.crests, 80);
+  assert.equal(
+    vc.item.id,
+    RING,
+    "and taking it is what the drag is charged for",
+  );
+});
+
+test("an option worth more than the roll as it comes says take it, finished or not", () => {
+  withRingVault();
+  const vc = vaultChoice(ringBoard(1200, 2000));
+  assert.equal(vc.verdict, "keep");
+  assert.equal(vc.free.o.id, RING);
+  assert.equal(vc.best.finished, true, "and finishing it is the further trade");
+});
+
+// A ring slot already at the top means the climb is free, and a free climb is no trade at all: the
+// finished ring is simply what the item is worth to this character, and it's weighed as such.
+test("an option whose slot already covers the climb is weighed finished, for nothing", () => {
+  withRingVault({ watermarks: marksWith(300, { 9: 334 }) });
+  const vc = vaultChoice(ringBoard(1200));
+  assert.equal(vc.options[0].top.crests, 0);
+  assert.equal(vc.verdict, "keep");
+  assert.equal(vc.free, vc.best, "no crests between the answers");
+  assert.equal(vc.best.finished, true);
+});
+
+// A Heroic boss hands its item over at Myth 1/6 while a 12.1 report prices it at 6/6, so its figure
+// assumes the same climb a vault option's finished reading does. Charging the option for that climb and
+// not the roll would compare a finished item with an unfinished one.
+test("a roll that arrives short of its track's top carries the crests to finish it", () => {
+  withRingVault();
+  const b = ringBoard(1200);
+  b.results = b.results.map((r) => ({ ...r, dropDifficulty: 2 }));
+  const vc = vaultChoice(b);
+  assert.equal(vc.top.reward.label, "Myth 1/6");
+  assert.equal(vc.rollFinish?.max, 80);
+  assert.equal(vc.rollFinish.kind, "Myth");
+  assert.equal(
+    vc.verdict,
+    "keep",
+    "same 80 crests either way, so it's score against score",
+  );
+
+  withRingVault();
+  assert.equal(
+    vaultChoice(ringBoard(1200)).rollFinish,
+    null,
+    "a Mythic payout arrives finished",
   );
 });

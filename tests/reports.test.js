@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  backfillEquipped,
   detectSource,
+  equippedBonus,
+  equippedMap,
   loadSharedReport,
   parseDroptimizer,
   parseMarks,
@@ -131,4 +134,82 @@ test("opening a share link for a report you have merges its marks into your boar
     "1320:2895:2": "rolled", // the recipient's own mark is kept
     "1320:2895:3": "rolled",
   });
+});
+
+// A QE report ships its equipped gear with each item's bonus ids as one colon-separated string. They
+// ride along with the item level so a held copy's track can be named without a /simc at all.
+test("a QE report's equipped gear keeps each copy's bonus ids", () => {
+  const data = {
+    equippedItems: [
+      { id: 268266, level: 321, bonusIDS: "6652:13668:13334:12846" },
+      { id: 268252, level: 334, bonusIDS: "6652:13668:13333:12854" },
+      { id: 244573, level: 331, bonusIDS: "" },
+    ],
+  };
+  assert.deepEqual(equippedMap(data), {
+    268266: 321,
+    268252: 334,
+    244573: 331,
+  });
+  assert.deepEqual(equippedBonus(data), {
+    268266: [6652, 13668, 13334, 12846],
+    268252: [6652, 13668, 13333, 12854],
+  });
+});
+
+// Boards saved before the equipped gear's bonus ids were kept can't name a held copy's track. The
+// report is fixed once written, so it is simply read again for its gear — and nothing else on the
+// board moves. Boards that already have the ids, and Droptimizer boards, are left alone.
+test("a QE board saved without its gear's bonus ids gets them from the report", async (t) => {
+  const old = {
+    id: "o",
+    source: "qe",
+    reportId: "AbC123",
+    equipped: { 268266: 321 },
+    results: [{ item: 1 }],
+    overlay: { "1:2:3": "rolled" },
+  };
+  const done = { id: "d", source: "qe", reportId: "Zz9", equippedBonus: {} };
+  const dropt = { id: "r", source: "droptimizer", reportId: "long" };
+  const saved = { ...state };
+  Object.assign(state, { boards: [old, done, dropt], activeId: "o", simc: {} });
+  const asked = [];
+  t.mock.method(globalThis, "fetch", async (url) => {
+    asked.push(String(url));
+    return {
+      json: async () =>
+        JSON.stringify({
+          equippedItems: [
+            { id: 268266, level: 321, bonusIDS: "6652:13668:13334:12846" },
+          ],
+        }),
+    };
+  });
+  try {
+    await backfillEquipped();
+  } catch {
+    // render() may not cope with these stub boards; the backfill has landed by then.
+  } finally {
+    Object.assign(state, saved);
+  }
+  assert.equal(asked.length, 1, "only the board missing them");
+  assert.match(asked[0], /reportID=AbC123/);
+  assert.deepEqual(old.equippedBonus, { 268266: [6652, 13668, 13334, 12846] });
+  assert.deepEqual(old.results, [{ item: 1 }], "scores untouched");
+  assert.deepEqual(old.overlay, { "1:2:3": "rolled" }, "marks untouched");
+});
+
+test("a report that can't be fetched leaves the board to try again next load", async (t) => {
+  const old = { id: "o", source: "qe", reportId: "AbC123", equipped: {} };
+  const saved = { ...state };
+  Object.assign(state, { boards: [old], activeId: "o", simc: {} });
+  t.mock.method(globalThis, "fetch", async () => {
+    throw new Error("offline");
+  });
+  try {
+    await backfillEquipped();
+  } finally {
+    Object.assign(state, saved);
+  }
+  assert.equal(old.equippedBonus, undefined);
 });

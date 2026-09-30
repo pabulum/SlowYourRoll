@@ -3,6 +3,7 @@
 //
 //   EV = ( Σ score of items you still "want" ÷ items still in the pool ) ÷ token cost
 
+import { WATERMARK_SLOT } from "./classes.js";
 import {
   DIFF_ORDER,
   QE_DATA,
@@ -10,7 +11,7 @@ import {
   QE_RAID_DIFFICULTIES_LEGACY,
 } from "./data.js";
 import { canLoot, classSpecs, specId, specIdInClass } from "./loot.js";
-import { lastReset, rollReward, SEASON } from "./season.js";
+import { lastReset, rollReward, SEASON, stepsAt, trackStep } from "./season.js";
 import { simcOf, state } from "./store.js";
 
 /**
@@ -719,6 +720,45 @@ function scoreIlvlOf(items) {
 }
 
 /**
+ * Which of the character's high watermarks an item's upgrades are discounted by — an index into a
+ * `/simc`'s `slot_high_watermarks` — or null where the app can't name one: a one-hander (see
+ * `WATERMARK_SLOT` for why those are left out), or an item the database has no slot for.
+ *
+ * A tier token has no slot of its own; it is spent on a piece, and the piece's slot is the one that
+ * climbs. All four class versions of a token are for the same slot, so any of them will do.
+ *
+ * @param {number} id
+ * @returns {number|null}
+ */
+export function markSlotOf(id) {
+  const m = QE_DATA.items[id];
+  if (!m) return null;
+  const iv = m.iv ?? (m.ct?.length ? QE_DATA.items[m.ct[0]]?.iv : undefined);
+  const s = WATERMARK_SLOT[iv];
+  return s == null ? null : s;
+}
+
+/**
+ * The slots a roll here can land in, as watermark indices, once each.
+ *
+ * Every item still in the pool that this loot spec can be handed counts, filler included: a filler
+ * item unlocks its slot's discount exactly as surely as an upgrade does, which is why the crest figure
+ * never varies *between* items — only between the slots they fill. Rolled items are gone and can't
+ * land. A slot the app can't name is carried as a single null, so the figure can say it assumed one.
+ *
+ * @param {import("./types.js").PoolItem[]} items  With their states settled.
+ * @returns {(number|null)[]}
+ */
+function poolSlots(items) {
+  const out = new Set();
+  items.forEach((it) => {
+    if (it.elig === false || it.state === "rolled") return;
+    out.add(markSlotOf(it.givesId || it.id));
+  });
+  return [...out];
+}
+
+/**
  * Price one grouped encounter: settle what a roll here pays out, decide each item's state against
  * it, then hand the pool to `priceOf`.
  */
@@ -744,7 +784,12 @@ function priceGroup(b, g, selDiff, ownedMap, sp, takeId) {
   const top = rollScored(b) ? scoreIlvl : null;
   items.forEach((it) => {
     const ov = b.overlay[`${g.key}:${it.id}`];
-    it.ownedIlvl = ownedMap[it.id] != null ? ownedMap[it.id] : null;
+    // A tier token is never itself held; the piece it becomes is. Holding that piece at the top of
+    // the roll's track makes the token as much a dupe as holding the item would.
+    const held = ownedMap[it.givesId || it.id] || null;
+    it.ownedIlvl = held ? held.ilvl : null;
+    it.ownedStep = held ? held.step : null;
+    it.ownedMaybe = held ? held.maybe : null;
     // A copy you already hold only makes the roll redundant if it's at least as good as what the
     // roll would hand you — and in a season that promotes rewards to a vault track, that is not
     // the drop. Owning the Heroic version of an item doesn't dupe a roll that pays out on the
@@ -775,6 +820,7 @@ function priceGroup(b, g, selDiff, ownedMap, sp, takeId) {
     diff,
     reward,
     scoreIlvl,
+    slots: poolSlots(items),
     remaining: p.remaining,
     num: p.num,
     ev: p.ev,
@@ -793,7 +839,8 @@ function priceGroup(b, g, selDiff, ownedMap, sp, takeId) {
  *   keyLevel: number|null, unknown: string[] }}
  */
 /**
- * The best copy of each item the character is known to hold, as `{ itemId: ilvl }`.
+ * The best copy of each item the character is known to hold: its item level, and the upgrade-track
+ * step its bonus ids name where either source sent them.
  *
  * Two sources, and they aren't rivals. A QE report ships the gear that was equipped when it ran, so
  * a healer who pastes nothing but a report link still gets dupe detection. A `/simc` export covers
@@ -801,15 +848,49 @@ function priceGroup(b, g, selDiff, ownedMap, sp, takeId) {
  * fresher of the two. Merged by taking the higher item level, which is the question actually being
  * asked: is the copy you hold already as good as what a roll here would hand you?
  *
+ * The step is read off bonus ids where either source sent them. Without them the level decides only
+ * where it can: 334 is Myth 6/6 and nothing else, but 321 is Hero 6/6 *or* Myth 2/6, and which it is
+ * decides whether a Myth 1/6 at 318 is a downgrade or the better item. So an overlap level carries
+ * both candidates (`maybe`) rather than landing on a plausible-looking wrong one. Every item this is
+ * asked about comes out of a raid or dungeon pool or a vault, so "on no track at all" — crafted gear
+ * — isn't a reading the level has to allow for.
+ *
  * @param {import("./types.js").Board} b
- * @returns {Record<number, number>}
+ * @returns {Record<number, {ilvl: number, step: string|null, maybe: string[]|null}>}
  */
 function ownedGear(b) {
-  const fromSimc = simcOf(b)?.owned || {};
-  if (!b.equipped) return fromSimc;
-  const out = { ...b.equipped };
-  Object.keys(fromSimc).forEach((id) => {
-    if (!out[id] || fromSimc[id] > out[id]) out[id] = fromSimc[id];
+  const simc = simcOf(b);
+  /** @type {Record<number, {ilvl: number, bonus: number[]|null}>} */
+  const best = {};
+  const add = (levels, bonus) =>
+    Object.keys(levels || {}).forEach((id) => {
+      const lvl = levels[id],
+        ids = bonus?.[id]?.length ? bonus[id] : null,
+        cur = best[id];
+      // A tie goes to whichever copy says what track it's on.
+      if (!cur || lvl > cur.ilvl || (lvl === cur.ilvl && !cur.bonus && ids))
+        best[id] = { ilvl: lvl, bonus: ids };
+    });
+  add(b.equipped, b.equippedBonus);
+  add(simc?.owned, simc?.ownedBonus);
+  /** @type {Record<number, {ilvl: number, step: string|null, maybe: string[]|null}>} */
+  const out = {};
+  Object.keys(best).forEach((id) => {
+    const { ilvl, bonus } = best[id];
+    if (bonus) {
+      out[id] = {
+        ilvl,
+        step: trackStep(SEASON, bonus, ilvl)?.label || null,
+        maybe: null,
+      };
+      return;
+    }
+    const could = stepsAt(SEASON, ilvl);
+    out[id] = {
+      ilvl,
+      step: could.length === 1 ? could[0] : null,
+      maybe: could.length > 1 ? could : null,
+    };
   });
   return out;
 }
@@ -817,10 +898,10 @@ function ownedGear(b) {
 /**
  * The crests a roll saves in a slot whose high watermark is `mark`.
  *
- * The whole model, in one line of arithmetic. An item arrives at the payout's step, and without the
- * roll you'd have climbed there from where the boss drops it (`crestFrom`). Every step of that climb
- * costs `crestPerStep` — *except* steps landing at or below the slot's watermark, which Blizzard
- * discounts to nothing (`highWatermarkDiscounts`, `scaling: 0`).
+ * The whole model, in one line of arithmetic (`climbCost` carries it). An item arrives at the
+ * payout's step, and without the roll you'd have climbed there from where the boss drops it
+ * (`crestFrom`). Every step of that climb costs `crestPerStep` — *except* steps landing at or below
+ * the slot's watermark, which Blizzard discounts to nothing (`highWatermarkDiscounts`, `scaling: 0`).
  *
  * The watermark is an item level, not a track position, and that is what makes this interesting:
  * Midnight's tracks overlap by two steps, so Hero 6/6 and Myth 2/6 are both ilvl 321.
@@ -837,63 +918,117 @@ function ownedGear(b) {
  *
  * A null mark means "unknown", which lands on the same clamp and so returns the maximum.
  *
- * `against` is the third floor, and the one that makes this a comparison rather than a boast: the
- * item level the *alternative* arrives at. A saving is only a saving against something, and the
- * default something is the boss's drop (`crestFrom`). Where the alternative is a Great Vault slot
- * the season hands over further up the track — or fully upgraded, which is what a Mythic vault
- * does — every step at or below its level is one you weren't going to pay for either way, and the
- * figure falls to zero when it arrives at the payout's own step. Same clamp as the other two, so
- * an alternative *below* the drop can't inflate the number.
+ * It is a saving against the *drop*, which is the comparison between encounters it exists for. It is
+ * not a term of the Great Vault trade: the item there isn't a drop you'd otherwise have climbed, and
+ * what the vault option costs to finish is priced on the option itself (`vaultChoice`).
  *
  * @param {import("./season.js").Reward|null|undefined} reward
  * @param {number|null} [mark]  The slot's high watermark, or null for unknown.
- * @param {number|null} [against]  Item level the alternative arrives at; defaults to the drop.
  * @returns {number|null} Crests saved, or null where the payout has no step table to reason over.
  */
-export function crestSavingAt(reward, mark, against) {
+export function crestSavingAt(reward, mark) {
   if (!reward?.crestSteps || !reward.crestPerStep) return null;
   if (reward.crestFrom == null) return null;
-  const floor = Math.max(
-    mark == null ? -Infinity : mark,
-    reward.crestFreeTo == null ? -Infinity : reward.crestFreeTo,
-    against == null ? -Infinity : against,
+  const steps = reward.crestSteps;
+  return climbCost(
+    {
+      steps,
+      perStep: reward.crestPerStep,
+      freeTo: reward.crestFreeTo == null ? -Infinity : reward.crestFreeTo,
+    },
+    reward.crestFrom,
+    steps[steps.length - 1],
+    mark,
   );
-  const paid = reward.crestSteps.filter(
-    (s) => s > reward.crestFrom && s > floor,
-  );
-  return paid.length * reward.crestPerStep;
 }
 
 /**
- * What a roll here saves this character, across every slot it could land in.
+ * Crests to take an item from `from` up its own track to `to`, in a slot whose high watermark is
+ * `mark` — the one piece of arithmetic every crest figure on the page comes through, whether it is
+ * called a saving (a roll arriving further up than the drop would) or a cost (a vault option that
+ * arrives short of the top).
  *
- * A roll hands you one item in one slot, and which slot is unknowable until it lands — so the honest
- * answer is a range over the slots, collapsing to a single figure when they all agree. Early in a
- * season they usually do agree, because nothing is capped anywhere.
+ * A step is paid for if it lands above both the slot's mark and the track's free line. The free line
+ * is the top of the track below, which the two-step overlap makes this track's second step: capping
+ * a slot on the track below costs that track's crests, never this one's, so the step it covers is
+ * never charged here. `crestSavingAt` explains why that clamp is policy and not a guess.
  *
- * This deliberately does **not** say which slot is which. The addon's `slot_high_watermarks` indices
- * look like SimC's slot enum and do not survive being checked against a real character's gear — the
- * marks come out over-subscribed against the item levels actually held, so something (crafted gear,
- * old-world drops, some other exclusion) isn't counting the way a naive reading assumes. Attributing
- * a mark to a slot would be a guess under a figure people spend tokens on. A range needs no
- * attribution and is exactly as true as the line it reads.
+ * @param {{steps: number[], perStep: number, freeTo?: number}} track  A season `Track`, or anything
+ *   shaped like one. `freeTo` overrides the free line; it defaults to the track's second step.
+ * @param {number} from  Item level the item arrives at.
+ * @param {number} to    Item level it is taken to.
+ * @param {number|null} [mark]  The slot's high watermark, or null for unknown.
+ * @returns {number}
+ */
+export function climbCost(track, from, to, mark) {
+  const free = Math.max(
+    mark == null ? -Infinity : mark,
+    track.freeTo ?? track.steps[1] ?? -Infinity,
+  );
+  return (
+    track.steps.filter((s) => s > from && s <= to && s > free).length *
+    track.perStep
+  );
+}
+
+/**
+ * A crest figure over the slots it could apply to: a range, collapsing to a single number where they
+ * agree. Null where there is nothing to compute from — no linked `/simc`, or one too old to carry the
+ * marks.
+ *
+ * `slots` are watermark indices (`poolSlots`); a null among them is a slot the app can't name, and
+ * any slot the line didn't report is unknown too. Both are priced at a null mark — the season's
+ * assumption — and counted in `assumed`, so the copy never calls a partly assumed figure computed.
+ * Without `slots` it is every slot the character has, which is the character-wide question the
+ * reward pane asks.
  *
  * @param {import("./types.js").Board} b
- * @param {import("./season.js").Reward|null|undefined} reward
- * @param {number|null} [against]  Item level the alternative arrives at; see `crestSavingAt`.
- * @returns {{min: number, max: number, flat: boolean, slots: number}|null} null when there's nothing
- *   to compute from — no linked `/simc`, a paste too old to carry the marks, or a payout with no
- *   step table or nothing to save.
+ * @param {(mark: number|null) => number|null} at  The figure for one slot's mark.
+ * @param {(number|null)[]} [slots]
+ * @returns {{min: number, max: number, flat: boolean, slots: number, assumed: number}|null}
  */
-export function crestSavingRange(b, reward, against) {
-  if (!reward?.crests) return null;
+function overSlots(b, at, slots) {
   const marks = simcOf(b)?.watermarks;
   if (!Array.isArray(marks) || !marks.length) return null;
-  const each = marks.map((m) => crestSavingAt(reward, m, against));
+  const read = slots
+    ? slots.map((s) => (s == null ? null : (marks[s] ?? null)))
+    : marks.filter((m) => m != null);
+  if (!read.length) return null;
+  const each = read.map(at);
   if (each.some((v) => v == null)) return null;
   const min = Math.min(...each),
     max = Math.max(...each);
-  return { min, max, flat: min === max, slots: marks.length };
+  return {
+    min,
+    max,
+    flat: min === max,
+    slots: read.length,
+    assumed: read.filter((m) => m == null).length,
+  };
+}
+
+/**
+ * What a roll here saves this character, across the slots it could land in.
+ *
+ * A roll hands you one item in one slot, and which slot is unknowable until it lands — so the honest
+ * answer is a range over the slots, collapsing to a single figure when they all agree. Pass the row's
+ * `slots` and it is the slots this pool can actually fill; a boss whose only live item is a pair of
+ * legs saves exactly what your legs slot does. Early in a season the slots usually agree anyway,
+ * because nothing is capped anywhere.
+ *
+ * The indices are Blizzard's `Enum.ItemRedundancySlot` (see `WATERMARK_SLOT`). They were once read as
+ * SimC's slot list, which never fitted real gear — marks landed below items held in the same slot —
+ * and the figure stayed a range over the whole character rather than attribute a mark on a guess.
+ *
+ * @param {import("./types.js").Board} b
+ * @param {import("./season.js").Reward|null|undefined} reward
+ * @param {(number|null)[]} [slots]  Watermark indices a roll here can land in; see `poolSlots`.
+ * @returns {{min: number, max: number, flat: boolean, slots: number, assumed: number}|null} null when
+ *   there's nothing to compute from, or a payout with no step table or nothing to save.
+ */
+export function crestSavingRange(b, reward, slots) {
+  if (!reward?.crests) return null;
+  return overSlots(b, (m) => crestSavingAt(reward, m), slots);
 }
 
 /**
@@ -941,8 +1076,9 @@ export function buildGroups(b) {
   fillTable(groups, sp);
 
   const take = vaultTakeOf(b);
+  const owned = ownedGear(b);
   const rows = Object.values(groups).map((g) =>
-    priceGroup(b, g, selDiff, ownedGear(b), sp, take),
+    priceGroup(b, g, selDiff, owned, sp, take),
   );
   rows.sort(
     (a, c) => c.ev - a.ev || c.num - a.num || a.g.name.localeCompare(c.g.name),
@@ -960,24 +1096,6 @@ export function buildGroups(b) {
   };
 }
 
-/**
- * The week's actual trade: one guaranteed item out of the Great Vault, or the token that buys one
- * roll. Where the season pays the token out of a vault slot, these are not two decisions but one,
- * and the ranking on its own can't answer it — it prices rolls against each other, never against
- * the item already sitting in front of you.
- *
- * The roll side is priced with nothing taken from the vault, because that's the branch being
- * costed: you can't both take an item and spend the token it would have been. `buildGroups` is run
- * again for that rather than reusing the board's current `vaultTake`, which is the *other* branch.
- *
- * Item values come from the whole report, not just the visible pools — a vault option filtered out
- * of the ranking (older content, another difficulty) is still an item you can take this week.
- *
- * @param {import("./types.js").Board} b
- * @returns {{options: any[], keep: any, top: import("./types.js").Row|null, perRoll: number,
- *   verdict: "keep"|"roll", drag: {amount: number, name: string, isTop: boolean}|null}|null}
- *   null when no vault has been imported.
- */
 /**
  * What state the linked `/simc`'s Great Vault block is in — and in particular whether it is still
  * this week's.
@@ -1070,6 +1188,10 @@ function scoreCurve(b, id) {
  * claim it was really guarding against is a number pulled from outside the report's own range, and
  * that is exactly what `outside` still refuses.
  *
+ * The capped figure isn't wrong, only unpaid for: 6,837 is what those breeches become for 80 Myth
+ * crests. It comes back as the option's finished reading, with that price beside it, rather than
+ * standing in for the item as offered — see `finishedReading`.
+ *
  * @param {[number, number][]} curve  From `scoreCurve`, ascending.
  * @param {number} ilvl  The level the vault is offering.
  * @returns {{score: number, at: "exact"|"between"|"outside", from: number, to: number}|null}
@@ -1098,6 +1220,147 @@ function valueAt(curve, ilvl) {
   };
 }
 
+/**
+ * What finishing a vault option takes: its value at the top of its own track, and the crests that
+ * climb costs in the slot it would go in.
+ *
+ * The option's as-it-comes value (`valueAt` at the level offered) is the honest number for *this
+ * week*, and it was the fix for quoting every option at a cap most slots never reach. But it is only
+ * half of what the option is. A Heroic or +10 slot hands an item over at Myth 1/6 with five steps
+ * still to climb, and a 318 copy of a ring you already wear at 321 is worth nothing as it comes and
+ * thousands once finished. Quoting only the first number made that item vanish from the panel; quoting
+ * only the second was the old bug. So both are kept, and the second carries its price.
+ *
+ * The price is read off the item's own slot. Its track comes from the option's bonus ids
+ * (`trackStep`), and the climb is `climbCost` over that track against the slot's high watermark, so
+ * a ring whose slot is already at 321 pays four steps, not five. With no `/simc` marks, or a slot the
+ * app can't name, the mark is unknown and the figure is the season's assumption — the most it costs.
+ *
+ * @param {import("./types.js").Board} b
+ * @param {{id: number, ilvl: number, bonus?: number[]}} v
+ * @param {[number, number][]} curve  From `scoreCurve`.
+ */
+function finishedReading(b, v, curve) {
+  const step = trackStep(SEASON, v.bonus, v.ilvl);
+  if (!step || step.top <= v.ilvl) return { step, top: null };
+  const val = valueAt(curve, step.top);
+  const simc = simcOf(b);
+  const slot = markSlotOf(v.id);
+  const mark =
+    Array.isArray(simc?.watermarks) && slot != null
+      ? (simc.watermarks[slot] ?? null)
+      : null;
+  const have = simc?.currencies?.[step.track.currency];
+  const climb = step.track.steps.filter((s) => s > v.ilvl && s <= step.top);
+  return {
+    step,
+    top: {
+      ilvl: step.top,
+      label: step.topLabel,
+      score: val?.score || 0,
+      at: val?.at || null,
+      from: val?.from || 0,
+      to: val?.to || 0,
+      crests: climbCost(step.track, v.ilvl, step.top, mark),
+      kind: step.track.name,
+      // The slot's own mark where it was read; null means `crests` is the assumption, not a reading.
+      slot,
+      mark,
+      // How many steps the climb has, and how many of them the slot's mark already covers — the
+      // difference between this figure and a naive five-step count, stated rather than implied.
+      steps: climb.length,
+      covered: mark == null ? 0 : climb.filter((s) => s <= mark).length,
+      // A known mark below the track's free line: the figure then leans on the same assumption as an
+      // unknown one — that the slot is capped on the track below first — and has to say so.
+      clamped:
+        mark != null && climb.some((s) => s > mark && s <= step.track.steps[1]),
+      // Crests of that kind held at the paste, where the paste says. Context for the figure, never an
+      // input to it: a balance is spent on whatever the player chooses, and this app doesn't choose.
+      have: have == null ? null : have,
+    },
+  };
+}
+
+/**
+ * What the top roll's payout still needs to reach the value it is priced at.
+ *
+ * Nothing, for a payout that arrives at the top of its track — a Mythic boss's. A Heroic boss or a
+ * +10 dungeon hands its item over at Myth 1/6 while a 12.1 report prices it at 6/6, so that roll's
+ * figure assumes the same climb a vault option's finished reading does, and a banner that charged
+ * the option for it and not the roll would be comparing a finished item with an unfinished one.
+ * Where the roll lands is unknown, so it is a range over the slots its pool can fill.
+ *
+ * Only where the report makes that claim: a Droptimizer sims the drop and has climbed nothing.
+ *
+ * @param {import("./types.js").Board} b
+ * @param {import("./types.js").Row|null} row
+ * @returns {{min: number, max: number, known: boolean, kind: string}|null} null where nothing is left
+ *   to pay.
+ */
+function rollFinish(b, row) {
+  if (!row || !rollScored(b)) return null;
+  const rw = row.reward;
+  const track = SEASON.tracks?.[rw?.crestKind];
+  if (!track || !rw.ilvl || !row.scoreIlvl || row.scoreIlvl <= rw.ilvl)
+    return null;
+  const at = (m) => climbCost(track, rw.ilvl, row.scoreIlvl, m);
+  const rng = overSlots(b, at, row.slots);
+  const max = rng ? rng.max : at(null);
+  if (!max) return null;
+  return {
+    min: rng ? rng.min : max,
+    max,
+    known: !!rng && !rng.assumed,
+    kind: track.name,
+  };
+}
+
+/**
+ * The crest the verdict weighs: the season's top track's, the one a player can't farm their way out
+ * of. The tracks below it are paid in crests M+ hands out freely, which the app deliberately doesn't
+ * price (see `crestSavingAt`) — they're still quoted wherever they're spent, just never argued over.
+ */
+function scarceCrest() {
+  const t = Object.values(SEASON.tracks || {}).sort(
+    (x, y) => y.steps[0] - x.steps[0],
+  )[0];
+  return t ? t.name : null;
+}
+
+/**
+ * The week's actual trade: one guaranteed item out of the Great Vault, or the token that buys one
+ * roll. Where the season pays the token out of a vault slot, these are not two decisions but one,
+ * and the ranking on its own can't answer it — it prices rolls against each other, never against
+ * the item already sitting in front of you.
+ *
+ * The roll side is priced with nothing taken from the vault, because that's the branch being
+ * costed: you can't both take an item and spend the token it would have been. `buildGroups` is run
+ * again for that rather than reusing the board's current `vaultTake`, which is the *other* branch.
+ *
+ * Item values come from the whole report, not just the visible pools — a vault option filtered out
+ * of the ranking (older content, another difficulty) is still an item you can take this week.
+ *
+ * Every option is read twice: as it comes (`keep` is the best of those) and finished at the top of
+ * its track, for the crests that costs (`finishedReading`; `stretch` is the finished reading worth
+ * raising). The roll is always finished, since that is what the report priced, and carries whatever
+ * crests it still needs (`rollFinish`). The verdict then never converts crests into score, because
+ * no rate between them exists that doesn't depend on what else you'd spend them on:
+ *
+ *   free   the best of the three at the smallest crest outlay — what you'd pick if crests were off.
+ *   best   the best of the three on value alone.
+ *
+ * Where those are the same thing, that is the answer and the crests don't enter into it — "roll" or
+ * "keep". Where both are items, it's "keep" either way and which item turns on the crests. Otherwise
+ * it's "crests": the token or the item really does turn on what those crests are worth to you, and
+ * the banner says so with both numbers rather than pretending to a rate.
+ *
+ * @param {import("./types.js").Board} b
+ * @returns {{options: any[], keep: any, stretch: any, item: any, top: import("./types.js").Row|null,
+ *   perRoll: number, rollFinish: {min: number, max: number, known: boolean, kind: string}|null,
+ *   free: any, best: any, verdict: "keep"|"roll"|"crests",
+ *   drag: {amount: number, name: string, isTop: boolean}|null}|null}
+ *   null when no vault has been imported.
+ */
 export function vaultChoice(b) {
   const simc = simcOf(b);
   if (!simc?.vault?.length) return null;
@@ -1107,14 +1370,19 @@ export function vaultChoice(b) {
   if (st?.stale) return null;
 
   // Each option priced at the level its own vault slot is offering, which is the only level any of
-  // this is a decision about. Not `mergeRow` — that keeps the bonus row alone, which is right for a
-  // roll and wrong here for every slot the vault doesn't hand over capped. See `valueAt`.
+  // this is a decision about *this week*. Not `mergeRow` — that keeps the bonus row alone, which is
+  // right for a roll and wrong here for every slot the vault doesn't hand over capped. See `valueAt`.
+  // What it becomes once finished is read separately, with its price; see `finishedReading`.
+  const held = ownedGear(b);
   const options = simc.vault.map((v) => {
-    const val = valueAt(scoreCurve(b, v.id), v.ilvl);
+    const curve = scoreCurve(b, v.id);
+    const val = valueAt(curve, v.ilvl);
+    const fin = finishedReading(b, v, curve);
     return {
       id: v.id,
       name: QE_DATA.items[v.id]?.n || v.name,
       ilvl: v.ilvl,
+      step: fin.step ? fin.step.label : null,
       score: val?.score || 0,
       // How much the number above is claiming: read off, interpolated, or refused. Null where the
       // report never evaluated the item — distinguished from a genuine zero, since "worth 0" about
@@ -1123,29 +1391,101 @@ export function vaultChoice(b) {
       from: val?.from || 0,
       to: val?.to || 0,
       scored: val != null,
+      // A copy already held, which is usually why a zero is a zero: the report sims each item against
+      // the gear it was run in, and a 318 of a ring worn at 321 is a downgrade as it comes. Its track
+      // is what says whether the 318 is nonetheless the better item — Myth 1/6 over Hero 6/6.
+      held: held[v.id]?.ilvl || null,
+      heldStep: held[v.id]?.step || null,
+      heldMaybe: held[v.id]?.maybe || null,
+      top: fin.top,
     };
   });
+  const priced = (r) => !!r && !!r.at && r.at !== "outside";
   // An option we can't place can't be the thing the banner argues against — it would be arguing
   // against a number that isn't there. Only where nothing places at all does the best of them stand
   // in, so the panel still has something to head itself with.
-  const placeable = options.filter((o) => o.at && o.at !== "outside");
+  const placeable = options.filter(priced);
+  // Ties go to the option worth more finished: a vault of four zeroes as they come — a real week-7
+  // one — should be headed by the one that becomes something, not by whichever sorted first.
+  const later = (o) => (priced(o.top) ? o.top.score : o.score);
   const keep = (placeable.length ? placeable : options)
     .slice()
-    .sort((a, c) => c.score - a.score)[0];
+    .sort((a, c) => c.score - a.score || later(c) - later(a))[0];
+  // The finished reading worth raising: one the report actually priced, that finishing improves,
+  // and that beats every option as it comes — otherwise it changes nothing the banner says.
+  const stretch =
+    options
+      .filter(
+        (o) =>
+          priced(o.top) &&
+          o.top.score > o.score &&
+          (!priced(keep) || o.top.score > keep.score),
+      )
+      .sort((a, c) => c.top.score - a.top.score)[0] || null;
 
   const rows = buildGroups(Object.assign({}, b, { vaultTake: null })).rows;
   const top = rows.find((r) => r.ev > 0) || null;
   // The expected score of the one roll you'd actually make. Not `row.ev`, which is per *token* —
   // against a single vault slot the question is what one roll returns, with its price alongside.
   const perRoll = top ? top.num / top.remaining : 0;
+  const fin = rollFinish(b, top);
+
+  const scarce = scarceCrest();
+  const cost = (kind, n) => (kind === scarce ? n : 0);
+  // Items first, so an exact tie goes to the item: a guarantee beats an expectation of the same size.
+  const cands = [];
+  if (priced(keep))
+    cands.push({ kind: "item", o: keep, value: keep.score, crests: 0 });
+  if (stretch)
+    cands.push({
+      kind: "item",
+      o: stretch,
+      finished: true,
+      value: stretch.top.score,
+      crests: cost(stretch.top.kind, stretch.top.crests),
+    });
+  if (top)
+    cands.push({
+      kind: "roll",
+      value: perRoll,
+      crests: fin ? cost(fin.kind, fin.max) : 0,
+    });
+  const pick = (cs) =>
+    cs.reduce(
+      (a, c) =>
+        !a || c.value > a.value || (c.value === a.value && c.crests < a.crests)
+          ? c
+          : a,
+      null,
+    );
+  const least = Math.min(...cands.map((c) => c.crests));
+  const free = pick(cands.filter((c) => c.crests === least));
+  const best = pick(cands);
+  const verdict = !best
+    ? "keep"
+    : best === free
+      ? best.kind === "roll"
+        ? "roll"
+        : "keep"
+      : best.kind === "item" && free.kind === "item"
+        ? "keep"
+        : "crests";
+  // The item the banner is weighing — the one to charge for the pool it leaves behind.
+  const side = [best, free].find((c) => c?.kind === "item");
+  const item = side ? side.o : keep;
 
   return {
     options,
     keep,
+    stretch,
+    item,
     top,
     perRoll,
-    drag: dragOf(rows, keep),
-    verdict: perRoll > keep.score ? "roll" : "keep",
+    rollFinish: fin,
+    free,
+    best,
+    verdict,
+    drag: dragOf(rows, item),
   };
 }
 
@@ -1162,12 +1502,12 @@ export function vaultChoice(b) {
  * again, which is a question about the rest of the season that this app doesn't model.
  *
  * @param {import("./types.js").Row[]} rows  Pools priced with nothing taken from the vault.
- * @param {{id: number}} keep  The vault option the trade is measured against.
+ * @param {{id: number}} item  The vault option the trade is weighing.
  */
-function dragOf(rows, keep) {
+function dragOf(rows, item) {
   let worst = null;
   rows.forEach((r, i) => {
-    const it = r.items.find((x) => x.id === keep.id);
+    const it = r.items.find((x) => x.id === item.id);
     // Only an item that currently counts can stop counting. One already Own or Rolled — a dupe, or
     // one you've had before — is doing its damage to the pool either way.
     if (

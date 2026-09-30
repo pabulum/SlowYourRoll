@@ -8,12 +8,14 @@ import { charKeyOf, save, simcOf, state } from "./store.js";
 
 /**
  * Parse a raw /simc export into
- * { name, realm, spec, lootSpec, region, vault, rolledIds, owned, watermarks }.
- *   vault:      [{ name, ilvl, id }] this week's Great Vault choices
+ * { name, realm, spec, lootSpec, region, vault, rolledIds, owned, ownedBonus, watermarks, currencies }.
+ *   vault:      [{ name, ilvl, id, bonus }] this week's Great Vault choices
  *   rolledIds:  item ids the addon logged as already bonus-rolled
  *   owned:      { [itemId]: highestIlvlHeld } from equipped + bags (excludes the vault block)
+ *   ownedBonus: { [itemId]: bonusIds } for that same best copy, which name its upgrade track
  *   lootSpec:   the character's in-game loot spec, which decides what a bonus roll can award
  *   watermarks: per-slot highest item level held, or null — see `parseWatermarks`
+ *   currencies: { [currencyId]: amount } held when exported, or null — see `parseCurrencies`
  */
 export function parseSimc(t) {
   const g = (re) => {
@@ -38,9 +40,20 @@ export function parseSimc(t) {
     const blk = t.slice(vb, ve < 0 ? t.length : ve);
     // Horizontal whitespace only, anchored per line: the addon separates entries with a bare "#"
     // line, and an `\s*` that can cross a newline swallows it into the next entry's name.
-    const re = /^#[ \t]*(.+?)[ \t]*\((\d+)\)[ \t]*\n#[ \t]*\w+=,id=(\d+)/gm;
-    for (const m of blk.matchAll(re))
-      vault.push({ name: m[1], ilvl: +m[2], id: +m[3] });
+    const re =
+      /^#[ \t]*(.+?)[ \t]*\((\d+)\)[ \t]*\n#[ \t]*\w+=,id=(\d+)([^\n]*)/gm;
+    for (const m of blk.matchAll(re)) {
+      // The bonus ids are the only thing in the entry that says which upgrade track the option is
+      // on — at ilvl 318 it could be Hero 5/6 or Myth 1/6, which top out five steps apart. See
+      // `trackStep` in season.js.
+      const bm = m[4].match(/bonus_id=([\d/]+)/);
+      vault.push({
+        name: m[1],
+        ilvl: +m[2],
+        id: +m[3],
+        bonus: bm ? bm[1].split("/").map(Number).filter(Boolean) : [],
+      });
+    }
   }
 
   const rolledIds = [],
@@ -61,12 +74,20 @@ export function parseSimc(t) {
     const oe = t.indexOf("### End of Weekly Reward Choices", vb);
     ot = t.slice(0, vb) + (oe >= 0 ? t.slice(oe) : "");
   }
+  // The best copy's bonus ids ride along beside it, because they are the only thing that says which
+  // track that copy is on: a 321 is Hero 6/6 or Myth 2/6, and those are different items to compare a
+  // roll against. See `trackStep` in season.js.
   const owned = {},
-    ore = /\((\d+)\)\s*\n#?\s*\w+=,id=(\d+)/g;
+    ownedBonus = {},
+    ore = /\((\d+)\)\s*\n#?\s*\w+=,id=(\d+)([^\n]*)/g;
   for (const om of ot.matchAll(ore)) {
     const il = +om[1],
       iid = +om[2];
-    if (!owned[iid] || il > owned[iid]) owned[iid] = il;
+    if (owned[iid] && il <= owned[iid]) continue;
+    owned[iid] = il;
+    const bm = om[3].match(/bonus_id=([\d/]+)/);
+    if (bm) ownedBonus[iid] = bm[1].split("/").map(Number).filter(Boolean);
+    else delete ownedBonus[iid];
   }
 
   return {
@@ -78,7 +99,9 @@ export function parseSimc(t) {
     vault,
     rolledIds,
     owned,
+    ownedBonus,
     watermarks: parseWatermarks(t),
+    currencies: parseCurrencies(t),
   };
 }
 
@@ -95,16 +118,15 @@ export function parseSimc(t) {
  * counts. Read the Midnight entries there (`seasonId: 37`) rather than the TWW ones that fill most
  * of that file: TWW charged Valorstones alongside crests, and Valorstones no longer exist.
  *
- * Each entry is `slot:a:b`, and the two figures differ in the wild (QE's own sample has `14:0:89`),
- * which reads as character mark and account mark — the same split `highWatermarkDiscounts` draws with
- * `accountWide`. Which is which isn't established here, so this takes the **higher** of the pair
- * deliberately: a higher mark means more of a track already paid for, which means a *smaller* crest
- * saving, so guessing wrong this way understates what a roll is worth rather than overstating it.
+ * Each entry is `slot:character:account` — the two values `C_ItemUpgrade.GetHighWatermarkForSlot`
+ * returns, in that order. The order is settled by QE's own sample export, which carries `14:0:89`:
+ * an account's mark is the best across its characters, so it can never sit *below* one of them, and
+ * the 0 has to be this character's. That is the mark a crest step is discounted by (`accountWide:
+ * false`), so it is the one kept. The two agree on every armor slot either real export carries.
  *
- * The slot indices are left as they arrive. They look like SimC's slot enum but don't survive being
- * checked against a real character's gear — see "What the crest figure assumes" in the README — so
- * nothing here maps an index to a slot, and nothing downstream may either. The array is used only
- * for questions that don't need to know which slot is which.
+ * Stored by slot index, because the index is the slot: it is Blizzard's `Enum.ItemRedundancySlot`,
+ * and `WATERMARK_SLOT` in classes.js says which item goes with which. A slot the line leaves out
+ * stays a hole, which every reader treats as unknown rather than as zero.
  *
  * @param {string} t  The raw paste.
  * @returns {number[]|null}
@@ -112,13 +134,42 @@ export function parseSimc(t) {
 function parseWatermarks(t) {
   const m = t.match(/^#?\s*slot_high_watermarks=(\S+)/m);
   if (!m) return null;
+  /** @type {number[]} */
   const out = [];
   m[1].split("/").forEach((rec) => {
     const p = rec.split(":").map(Number);
-    if (p.length < 2 || p.some((n) => !Number.isFinite(n))) return;
-    out.push(Math.max(...p.slice(1)));
+    if (p.length < 2 || p.some((n) => !Number.isInteger(n))) return;
+    if (p[0] >= 0 && p[0] < 64) out[p[0]] = p[1];
   });
+  // Filled rather than left sparse, so a missing slot survives the round trip through localStorage
+  // as null — JSON has no holes.
+  for (let i = 0; i < out.length; i++) if (out[i] === undefined) out[i] = null;
   return out.length ? out : null;
+}
+
+/**
+ * The character's crest balances when the paste was made, off the addon's `upgrade_currencies` line,
+ * as `{ currencyId: amount }`. Null where the paste has none.
+ *
+ * Entries are `c:<currency id>:<amount>` for currencies and `i:<item id>:<count>` for the upgrade
+ * items beside them; only the currencies are kept, since the crests are what an upgrade is priced in.
+ * Which id is which crest comes from the season's tracks (`Track.currency`).
+ *
+ * @param {string} t  The raw paste.
+ * @returns {Record<number, number>|null}
+ */
+function parseCurrencies(t) {
+  const m = t.match(/^#?\s*upgrade_currencies=(\S+)/m);
+  if (!m) return null;
+  /** @type {Record<number, number>} */
+  const out = {};
+  m[1].split("/").forEach((rec) => {
+    const p = rec.split(":");
+    const id = Number(p[1]),
+      n = Number(p[2]);
+    if (p[0] === "c" && Number.isInteger(id) && Number.isFinite(n)) out[id] = n;
+  });
+  return Object.keys(out).length ? out : null;
 }
 
 /** Read the /simc textarea, store the parsed data, and link it to any matching board. */
@@ -145,7 +196,9 @@ export async function readSimc() {
     vault: d.vault,
     rolledIds: d.rolledIds,
     owned: d.owned,
+    ownedBonus: d.ownedBonus,
     watermarks: d.watermarks,
+    currencies: d.currencies,
     name: d.name,
     realm: d.realm,
     region: d.region,

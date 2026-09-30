@@ -618,16 +618,19 @@ test("with no /simc linked the figure is the maximum, and says what reaching it 
 // so arithmetically no slot has its free step and the climb is five paid ones. It must still read 80:
 // reaching 321 costs Hero crests off a dungeon, not Myth crests, so a roll is never worth more than
 // the guides' figure and the page must not invent a number above it. Real values, off a 12.1 export
-// whose best slot is 308.
+// whose best slot is 308, laid out in the line's own slot order.
 test("a /simc under the track overlap is still capped at the maximum", () => {
-  const marks = [298, 298, 289, 289, 308, 289, 292, 305, 266, 279];
+  const marks = [
+    298, 298, 289, 289, 308, 289, 292, 305, 266, 279, 298, 305, 298, 279, 266,
+    266, 289,
+  ];
   const doc = renderWith([makeBoard()], withMarks(marks));
   const save = words(doc.querySelector("#sources .card .crest-save"));
   assert.match(save, /saves 80 Myth crests/);
   assert.doesNotMatch(save, /100/, "a roll never rescues a misplay");
   const note = words(doc.querySelector("#sources .card .crest-note"));
   assert.match(note, /Computed from your/);
-  assert.match(note, new RegExp(`every one of your ${marks.length} slots`));
+  assert.match(note, /slots this pool can land in/);
 });
 
 // Hero capped everywhere reaches the same answer by the other route, so these two must agree. If they
@@ -642,18 +645,229 @@ test("a /simc capped on the Hero track computes the same maximum", () => {
 
 // Slots in different states can't be collapsed to one number, because a roll lands in one of them and
 // which is unknowable. The range is the honest answer, and it has to say why it stays a range — and
-// its top must be the maximum, never above it.
+// its top must be the maximum, never above it. The pool here is a whole boss's table, so it can land
+// in capped slots and open ones alike.
 test("a /simc with slots in mixed states gives a range and says why", () => {
-  const doc = renderWith([makeBoard()], withMarks([300, 321, 324, 334]));
+  const marks = Array(17).fill(334);
+  marks[9] = 300; // rings under the overlap
+  marks[10] = 324; // trinkets part-way up Myth
+  const doc = renderWith([makeBoard()], withMarks(marks));
   assert.match(
     words(doc.querySelector("#sources .card .crest-save")),
     /saves 0–80 Myth crests/,
   );
   const note = words(doc.querySelector("#sources .card .crest-note"));
   assert.match(note, /between 0 and 80/);
-  // It must say it can't name the slots, rather than quietly not naming them: a reader who sees a
-  // range will otherwise assume the app knows which is which, and act on a mapping never established.
-  assert.match(note, /isn’t something a .*pins down reliably/);
+  assert.match(note, /depending which one the roll lands in/);
+});
+
+// Only the slots this pool can fill bear on it. A boss with one live item saves what that item's slot
+// saves, and the note names the slot rather than quoting a range over a character's capped helm.
+test("a pool that can land in one slot quotes that slot's figure, by name", () => {
+  const b = makeBoard();
+  const row = [...Object.keys(QE_DATA.items)].filter((id) =>
+    QE_DATA.items[id].s.some((s) => s[0] === RAID_ID && s[1] === ENC_ID),
+  );
+  // Roll everything but one ring out of the pool, and drop the two synthetic items too.
+  const ring = row.find((id) => QE_DATA.items[id].iv === 11);
+  if (!ring) return;
+  row
+    .filter((id) => id !== ring)
+    .concat(["900001", "900002"])
+    .forEach((id) => {
+      b.overlay[`${RAID_ID}:${ENC_ID}:${id}`] = "rolled";
+    });
+  const marks = Array(17).fill(334);
+  marks[9] = 321;
+  const doc = renderWith([b], withMarks(marks));
+  const note = words(doc.querySelector("#sources .card .crest-note"));
+  assert.match(note, /your ring slot, the only one this pool can land in/);
+  assert.match(
+    words(doc.querySelector("#sources .card .crest-save")),
+    /saves 80 Myth crests/,
+    "not the 0 a capped helm would say",
+  );
+});
+
+// A one-hander has no mark the app can name yet. The figure for it is the assumption, and the note says
+// so rather than calling the whole thing computed.
+test("a slot the app can't match to a mark is owned up to, not passed off as computed", () => {
+  const doc = renderWith([makeBoard()], withMarks(Array(17).fill(334)));
+  const note = words(doc.querySelector("#sources .card .crest-note"));
+  assert.match(note, /can’t match to your marks yet/);
+});
+
+/* ---------- a vault option, as it comes and finished ----------
+   The case that prompted it: a 318 Alluring Bubbleband out of a Heroic vault slot, for someone already
+   wearing a 321 copy. Worth nothing as it comes, +2,129 at Myth 6/6 — and the panel used to show only
+   the first, so the item never registered as an option at all. */
+
+const RING = 268266;
+
+/** A Mythic 12.1 board: one roll worth `rollScore`, and the ring priced as the real report priced it. */
+function makeRingBoard(rollScore) {
+  const b = makeQEHeroicBoard();
+  const item = b.results[0].item;
+  const row = (id, dropType, level, rawDiff) => ({
+    item: id,
+    dropType,
+    dropDifficulty: 3,
+    level,
+    score: 0,
+    rawDiff,
+    percDiff: rawDiff / 100,
+  });
+  b.results = [
+    row(item, "drop", 318, rollScore / 2),
+    row(item, "bonus", 334, rollScore),
+    row(RING, "drop", 318, 0),
+    row(RING, "max", 334, 2129),
+    row(RING, "bonus", 334, 2129),
+  ];
+  b.equipped = { [RING]: 321 };
+  b.equippedBonus = { [RING]: [6652, 13668, 13334, 12846] }; // Hero 6/6
+  b.overlay = { [`1317:2849:${RING}`]: "rolled" };
+  return b;
+}
+
+/** That board's character with the ring in this week's vault, and a ring watermark of 321. */
+function ringVault() {
+  const marks = Array(17).fill(334);
+  marks[9] = 321;
+  return {
+    simc: {
+      "heals~area52~": {
+        owned: {},
+        at: new Date().toISOString(),
+        watermarks: marks,
+        currencies: { 3446: 214 },
+        vault: [
+          {
+            id: RING,
+            ilvl: 318,
+            name: "Alluring Bubbleband",
+            bonus: [6652, 13668, 13334, 12849],
+          },
+        ],
+      },
+    },
+  };
+}
+
+test("a vault option says what it's worth as it comes and finished, and what finishing costs", () => {
+  const doc = renderWith([makeRingBoard(40000)], ringVault());
+  const opt = doc.querySelector("#vaultPanel .vopt");
+  assert.match(words(opt.querySelector(".vmeta")), /Myth 1\/6/);
+  const worth = words(opt.querySelector(".vworth"));
+  assert.match(
+    worth,
+    /Worth 0 HPS as it comes — you hold one at Hero 6\/6 \(321\)/,
+  );
+  assert.match(worth, /2,129 at Myth 6\/6 for 80 Myth crests/);
+});
+
+// The whole point of naming the held copy's track: a Myth 1/6 at 318 beside a Hero 6/6 at 321 is the
+// lower number and the better item, and the two tracks have to read as two different things at a
+// glance — in the colours a character sheet uses for them.
+test("the offered track and the held copy's track are told apart by colour", () => {
+  const doc = renderWith([makeRingBoard(40000)], ringVault());
+  const opt = doc.querySelector("#vaultPanel .vopt");
+  assert.equal(words(opt.querySelector(".vmeta .trk.t-myth")), "Myth 1/6");
+  assert.equal(words(opt.querySelector(".vworth .trk.t-hero")), "Hero 6/6");
+});
+
+// The prompting week: the roll beats the ring even finished, so the lead is the token — but the
+// finished ring is still on the banner, with why the figure is 80 and not 100.
+test("a roll that beats the finished option still shows what the option becomes", () => {
+  const doc = renderWith([makeRingBoard(40000)], ringVault());
+  const trade = doc.querySelector("#vaultPanel .trade");
+  assert.match(trade.getAttribute("class"), /\broll\b/);
+  assert.equal(words(trade.querySelector(".tlead")), "Take the token");
+  const fin = words(trade.querySelector(".tfin"));
+  assert.match(
+    fin,
+    /Finished at Myth 6\/6, Alluring Bubbleband is worth 2,129 HPS/,
+  );
+  assert.match(
+    fin,
+    /your ring watermark \(321\) already covers the first of its 5 steps/,
+  );
+  assert.match(fin, /You had 214 Myth crests/);
+  assert.match(fin, /short of a roll on .*, which arrives finished/);
+});
+
+// With the target gone, the finished ring outscores the roll and costs crests the roll doesn't. The
+// lead says what it turns on, and nothing converts the crests into HPS to force an answer.
+test("a trade that turns on crests says so, with both numbers", () => {
+  const doc = renderWith([makeRingBoard(1200)], ringVault());
+  const trade = doc.querySelector("#vaultPanel .trade");
+  assert.match(trade.getAttribute("class"), /\bcrests\b/);
+  assert.equal(
+    words(trade.querySelector(".tlead")),
+    "It turns on 80 Myth crests",
+  );
+  const fin = words(trade.querySelector(".tfin"));
+  assert.match(fin, /more than a roll on/);
+  assert.match(fin, /what 80 Myth crests are worth to you/);
+});
+
+// A ring slot under the free line prices the same 80, but only by assuming the Hero step is bought
+// with Hero crests first — the line has to say that, not present the figure as read off the mark.
+test("a finished figure that leans on the free-line assumption says so", () => {
+  const extra = ringVault();
+  extra.simc["heals~area52~"].watermarks[9] = 308;
+  const doc = renderWith([makeRingBoard(40000)], extra);
+  const fin = words(doc.querySelector("#vaultPanel .tfin"));
+  assert.match(fin, /for 80 Myth crests/);
+  assert.match(
+    fin,
+    /your ring watermark is only 308, so that assumes you cap the slot/,
+  );
+});
+
+// A board saved before bonus ids were kept knows the copy's level and not its track. At 321 that is
+// Hero 6/6 or Myth 2/6 — the exact question the vault option turns on — so both are named, with how
+// to settle it, rather than a bare item level that reads as if the track didn't matter.
+test("a held copy whose track isn't known names both candidates, not a bare item level", () => {
+  const b = makeRingBoard(40000);
+  delete b.equippedBonus;
+  const doc = renderWith([b], ringVault());
+  const worth = words(doc.querySelector("#vaultPanel .vopt .vworth"));
+  assert.match(worth, /you hold one at Myth 2\/6 or Hero 6\/6 \(321\)/);
+  assert.doesNotMatch(worth, /you hold one at 321/);
+});
+
+// The reward table is where every track appears at once, so it doubles as the key to the colours.
+test("the reward table colours each payout by its track", () => {
+  const doc = renderWith([]);
+  const cells = [...doc.querySelectorAll("#rewardBody .rwd td .trk")];
+  const tracks = new Set(cells.map((c) => c.getAttribute("class")));
+  assert.ok(tracks.has("trk t-myth"));
+  assert.ok(tracks.has("trk t-hero"));
+  assert.ok(tracks.has("trk t-champion"));
+});
+
+// On a pool row the held copy's item level is printed in its track's colour, like the character
+// sheet prints it, and the hover spells the track out for anyone who can't tell the colours apart.
+test("a held copy's item level on a pool row wears its track", () => {
+  const b = makeRingBoard(40000);
+  b.overlay = {}; // the ring back in its own pool
+  const doc = renderWith([b], ringVault());
+  const badge = doc.querySelector(`#sources .item[data-id="${RING}"] .have`);
+  assert.ok(badge, "the ring's row says you have one");
+  assert.equal(words(badge.querySelector(".trk.t-hero")), "321");
+  assert.match(badge.getAttribute("title"), /ilvl 321 \(Hero 6\/6\)/);
+});
+
+// What the banner used to do, and must not again: price the item unfinished and then credit the roll
+// with the crests finishing it would take. That counts one 80 twice, in the roll's favour both times.
+test("the banner never credits a roll with crests over an item priced unfinished", () => {
+  for (const score of [40000, 1200]) {
+    const doc = renderWith([makeRingBoard(score)], ringVault());
+    const txt = words(doc.getElementById("vaultPanel"));
+    assert.doesNotMatch(txt, /counted in neither number above/);
+    assert.doesNotMatch(txt, /roll also saves/);
+  }
 });
 
 /* ---------- the reward pane ---------- */

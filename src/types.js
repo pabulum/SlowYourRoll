@@ -95,6 +95,8 @@
  * @property {number} [baseline]           Droptimizer baseline DPS. A QE board has none stored;
  *   `baselineOf` recovers its HPS equivalent from the report's own numbers.
  * @property {Object<number, number>} [equipped]  Gear worn when a QE report ran, itemId -> ilvl.
+ * @property {Object<number, number[]>} [equippedBonus]  That gear's bonus ids, which name each copy's
+ *   upgrade track. Absent on boards loaded before they were read.
  * @property {string} [fetchedAt]
  * @property {string} [gameType]
  * @property {string} [contentType]
@@ -107,10 +109,15 @@
 /**
  * Parsed /simc addon data for one character.
  * @typedef {Object} SimcData
- * @property {{ name: string, ilvl: number, id: number }[]} vault
+ * @property {{ name: string, ilvl: number, id: number, bonus?: number[] }[]} vault  `bonus` is the
+ *   option's bonus ids, which name its upgrade track; absent on options saved before they were read.
  * @property {number[]} rolledIds
  * @property {Object<number, number>} owned  itemId -> highest ilvl held.
- * @property {number[]|null} [watermarks]  Per-slot highest ilvl held; see `parseWatermarks`.
+ * @property {Object<number, number[]>} [ownedBonus]  That copy's bonus ids, where the paste had them.
+ * @property {(number|null)[]|null} [watermarks]  Highest ilvl held, indexed by Blizzard's
+ *   `Enum.ItemRedundancySlot`; see `parseWatermarks` and `WATERMARK_SLOT`.
+ * @property {Object<number, number>|null} [currencies]  Crest balances when exported, by currency
+ *   id; see `parseCurrencies`.
  * @property {string} [name]
  * @property {string} [realm]
  * @property {string} [region]
@@ -146,6 +153,10 @@
  *   nothing.
  * @property {boolean} vr
  * @property {number|null} [ownedIlvl]
+ * @property {string|null} [ownedStep]  Upgrade track step of the copy held ("Hero 6/6"): off its
+ *   bonus ids, or off its item level where only one track has that level.
+ * @property {string[]|null} [ownedMaybe]  Where the level alone can't say — 321 is Hero 6/6 or Myth
+ *   2/6 — every step it could be, so the row names both rather than picking one.
  * @property {"want"|"own"|"rolled"} [state]
  * @property {boolean} [elig]        False when this loot spec can't be awarded the item.
  * @property {string} [why]          Why not, for the UI.
@@ -174,6 +185,8 @@
  * @property {number|null} [scoreIlvl]  Item level this row's scores were simmed at. Equal to the
  *   payout for a report that sims the drop; the top of the payout's track for a 12.1 QE report,
  *   which sims the roll as "Upgraded Bonus Rolls". See `scoreIlvlOf` in src/model.js.
+ * @property {(number|null)[]} [slots]  The high-watermark slots a roll here can land in, once each;
+ *   null for one the app can't name. See `poolSlots` in src/model.js.
  * @property {number} [nBlocked]  Items shown but out of the pool: this loot spec can't receive them.
  * @property {{spec: string, remaining: number, num: number, ev: number, dodges: string[],
  *   gains: string[], loses: string[]}[]} [alts]  Better-EV loot specs for this encounter.

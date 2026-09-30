@@ -6,6 +6,7 @@ import {
   seasonWeek,
   tokenVaultWindow,
   tokenWeekNow,
+  trackStep,
 } from "../src/season.js";
 
 test("a Season 1 roll hands you the drop, so there is no reward to look up", () => {
@@ -256,4 +257,68 @@ test("every reward carries a label and an item level slot", () => {
       );
     });
   });
+});
+
+/* ---------- the upgrade tracks themselves ----------
+   A Great Vault option's worth once finished, and the crests that takes, are read off these. They are
+   the game's upgrade data (QE's BonusIDs.ts, seasonId 37), so the checks are that they agree with each
+   other and with the reward table rather than any one number. */
+
+test("the Myth climb the crest figure prices is the season's own Myth track", () => {
+  const s2 = SEASONS[2];
+  const m = rewardOf(s2, "raid", "mythic");
+  assert.deepEqual(m.crestSteps, s2.tracks.Myth.steps);
+  assert.equal(m.crestPerStep, s2.tracks.Myth.perStep);
+  assert.equal(
+    m.crestFreeTo,
+    s2.tracks.Hero.steps.at(-1),
+    "the free line is Hero 6/6",
+  );
+});
+
+// The overlap the whole crest model turns on, as a property of every adjacent pair of tracks: the top
+// two steps of one are the bottom two of the next.
+test("each track overlaps the one below it by two steps", () => {
+  const ts = Object.values(SEASONS[2].tracks).sort(
+    (a, b) => a.steps[0] - b.steps[0],
+  );
+  for (let i = 1; i < ts.length; i++)
+    assert.deepEqual(
+      ts[i - 1].steps.slice(-2),
+      ts[i].steps.slice(0, 2),
+      ts[i].name,
+    );
+});
+
+test("a track's step is read off the bonus id the game gives it", () => {
+  const s2 = SEASONS[2];
+  // Apex Brute's Claw Ring as a real vault offered it: Myth 1/6 among a socket and a difficulty tag.
+  const ring = trackStep(s2, [6652, 13668, 13334, 12849], 318);
+  assert.equal(ring.label, "Myth 1/6");
+  assert.equal(ring.top, 334);
+  assert.equal(ring.topLabel, "Myth 6/6");
+  assert.equal(trackStep(s2, [6652, 13335, 12854], 334).label, "Myth 6/6");
+  assert.equal(trackStep(s2, [12846], 321).label, "Hero 6/6", "not Myth 2/6");
+});
+
+// A Venomcursed 9/6 item carries an item-level bonus and no track step. It is finished as it drops,
+// and reading its 344 as some track's step would invent a climb it doesn't have.
+test("an item with bonus ids but no track step is on no track", () => {
+  assert.equal(trackStep(SEASONS[2], [40, 13335, 13848], 344), null);
+});
+
+// Vault options stored before the app read bonus ids have only an item level, and 318 is Hero 5/6 and
+// Myth 1/6 at once. The vault's own rule — each slot jumps to the first step of the next track — makes
+// the higher track the right reading, and it holds for every rung of the M+ ladder too.
+test("without bonus ids an item level is read on the higher of two overlapping tracks", () => {
+  const s2 = SEASONS[2];
+  assert.equal(trackStep(s2, null, 318).label, "Myth 1/6");
+  assert.equal(trackStep(s2, [], 305).label, "Hero 1/6");
+  assert.equal(trackStep(s2, undefined, 315).label, "Hero 4/6");
+  assert.equal(trackStep(s2, null, 344), null);
+  assert.equal(
+    trackStep(SEASONS[1], null, 318),
+    null,
+    "a season with no tracks has no steps",
+  );
 });

@@ -98,6 +98,8 @@
   --cool-tint: #e4edf3;
   --good: #2f6b3a;
   --danger: #a3271f;
+  --q-common: #3d3a34;
+  --q-uncommon: #2e7a1c;
   --q-rare: #1a5fb4;
   --q-epic: #7b2fb5;
   --q-legend: #b45309;
@@ -171,6 +173,8 @@
     --cool-tint: #12222c;
     --good: #4fbb63;
     --danger: #ef6a5e;
+    --q-common: #f4f1ea;
+    --q-uncommon: #6fd85c;
     --q-rare: #4a9eff;
     --q-epic: #b57bff;
     --q-legend: #ff9d3c;
@@ -204,6 +208,8 @@
   --cool-tint: #12222c;
   --good: #4fbb63;
   --danger: #ef6a5e;
+  --q-common: #f4f1ea;
+  --q-uncommon: #6fd85c;
   --q-rare: #4a9eff;
   --q-epic: #b57bff;
   --q-legend: #ff9d3c;
@@ -305,7 +311,8 @@ a {
 .item-group .n,
 .ev,
 .trade b,
-.vopt .couple b {
+.vopt .couple b,
+.vopt .vworth b {
   font-variant-numeric: tabular-nums;
 }
 
@@ -690,6 +697,11 @@ a {
 .trade.keep {
   border-left-color: var(--cool);
 }
+/* Neither side wins outright: the answer turns on crests the app won't put a price on. The neutral
+   rule says "undecided" without borrowing either verdict's colour. */
+.trade.crests {
+  border-left-color: var(--rule-strong);
+}
 .trade .tlead {
   font-size: 13.5px;
   font-weight: 700;
@@ -728,11 +740,11 @@ a {
   color: var(--danger);
   font-weight: 650;
 }
-/* What the roll saves in crests over the vault item, which is a real term of this trade wherever
-   the two arrive on different steps, and outside both numbers above. Same footnote shape as .tdrag,
-   ink rather than danger red: that line is what taking the item costs you, this one is what rolling
-   gets you, and the two must not read as the same kind of warning. */
-.trade .tcrest {
+/* The best vault option finished, and what finishing it costs — the reading that decides the trade
+   whenever an item arrives short of the top of its track. Same footnote shape as .tdrag, ink rather
+   than danger red: that line is a cost that outlives the week, this one is an option with a price,
+   and the two must not read as the same kind of warning. */
+.trade .tfin {
   font-size: 12px;
   color: var(--muted);
   line-height: 1.6;
@@ -741,7 +753,7 @@ a {
   border-top: 1px solid var(--rule);
   padding-right: 18%;
 }
-.trade .tcrest b {
+.trade .tfin b {
   color: var(--ink);
   font-weight: 650;
 }
@@ -784,6 +796,17 @@ a {
   font-size: 12px;
   color: var(--muted);
   margin-top: 5px;
+}
+/* The option's own worth, as it comes and finished. Ink figures on a muted line, like .couple under
+   it, so the two read as one block: what the item is, then what taking it does to a pool. */
+.vopt .vworth {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 5px;
+}
+.vopt .vworth b {
+  color: var(--ink);
+  font-weight: 650;
 }
 .vopt .couple b {
   color: var(--ink);
@@ -1508,6 +1531,30 @@ img.icon,
 }
 .iname .q5 {
   color: var(--q-legend);
+}
+/* Upgrade tracks, in the colours the item-quality ladder gives them — the convention a character
+   sheet paints item levels with: Myth legendary, Hero epic, Champion rare, Veteran uncommon,
+   Adventurer common. Canon for the same reason the quality colours above are: they mean something
+   outside this app, so a raider reads "orange 318" as Myth before reading the word.
+
+   Spent only where one track is being set against another — a vault option against the copy you
+   hold, the "have" badge against the payout, the reward table's rows. Not on every "pays Myth 6/6"
+   chip: nearly every roll this season pays Myth, and a column of orange chips would say nothing
+   while shouting it. Text colour only, never a fill; the accent stays the only gold on the page. */
+.trk.t-myth {
+  color: var(--q-legend);
+}
+.trk.t-hero {
+  color: var(--q-epic);
+}
+.trk.t-champion {
+  color: var(--q-rare);
+}
+.trk.t-veteran {
+  color: var(--q-uncommon);
+}
+.trk.t-adventurer {
+  color: var(--q-common);
 }
 /* What a tier token becomes. Quiet and inline: it qualifies the name rather than competing with it,
    and it sits where the "very rare" badge does so a row never grows a second line. */

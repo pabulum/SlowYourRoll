@@ -68,6 +68,42 @@ async function fetchReport(d) {
     );
 }
 
+/**
+ * Fill in the equipped gear's bonus ids on QE boards saved before the app kept them.
+ *
+ * Those boards know the item level of every copy you wore but not its track, and the track is the
+ * half that matters: a 321 is Hero 6/6 or Myth 2/6. A QE report is fixed once written, so re-reading
+ * it changes nothing else — only the equipped gear is taken from it, and the scores, marks and rolled
+ * history on the board are left exactly as they are. Silent: a report that can't be fetched just
+ * leaves the board as it was, to be tried again next load. A report with no equipped gear at all is
+ * marked so it isn't asked again.
+ *
+ * @returns {Promise<void>}
+ */
+export async function backfillEquipped() {
+  const stale = state.boards.filter(
+    (b) => b.source === "qe" && b.reportId && !b.equippedBonus,
+  );
+  if (!stale.length) return;
+  const got = await Promise.all(
+    stale.map((b) =>
+      fetch(QE_API + encodeURIComponent(b.reportId))
+        .then((r) => r.json())
+        .then((data) => {
+          if (typeof data === "string") data = JSON.parse(data);
+          if (!data || data.status === "Report not found") return false;
+          b.equipped = equippedMap(data);
+          b.equippedBonus = equippedBonus(data);
+          return true;
+        })
+        .catch(() => false),
+    ),
+  );
+  if (!got.some(Boolean)) return;
+  save();
+  render();
+}
+
 /** Load whichever report is in the input box and merge it into state. */
 export function loadReport() {
   const d = detectSource($("reportInput").value);
@@ -270,15 +306,40 @@ function ingestDroptimizer(id, data) {
  * @param {any} data  A parsed QE upgrade report.
  * @returns {Record<number, number>}
  */
-function equippedMap(data) {
-  const owned = {};
+export function equippedMap(data) {
+  return equippedOf(data).equipped;
+}
+
+/**
+ * The same gear's bonus ids, for the copy `equippedMap` kept — the only thing that says which track
+ * that copy is on. QE sends them as one colon-separated string, `bonusIDS`.
+ *
+ * @param {any} data  A parsed QE upgrade report.
+ * @returns {Record<number, number[]>}
+ */
+export function equippedBonus(data) {
+  return equippedOf(data).bonus;
+}
+
+function equippedOf(data) {
+  /** @type {Record<number, number>} */
+  const equipped = {};
+  /** @type {Record<number, number[]>} */
+  const bonus = {};
   (data.equippedItems || []).forEach((it) => {
     const id = Number(it?.id),
       lvl = Number(it?.level);
     if (!id || !lvl) return;
-    if (!owned[id] || lvl > owned[id]) owned[id] = lvl;
+    if (equipped[id] && lvl <= equipped[id]) return;
+    equipped[id] = lvl;
+    const ids = String(it.bonusIDS || "")
+      .split(":")
+      .map(Number)
+      .filter(Boolean);
+    if (ids.length) bonus[id] = ids;
+    else delete bonus[id];
   });
-  return owned;
+  return { equipped, bonus };
 }
 
 function ingest(code, data) {
@@ -289,6 +350,7 @@ function ingest(code, data) {
     b.reportId = code;
     b.results = data.results;
     b.equipped = equippedMap(data);
+    b.equippedBonus = equippedBonus(data);
     b.ufSettings = data.ufSettings || {};
     b.contentType = data.contentType;
     b.fetchedAt = data.dateCreated || "";
@@ -302,6 +364,7 @@ function ingest(code, data) {
       source: "qe",
       metric: "raw",
       equipped: equippedMap(data),
+      equippedBonus: equippedBonus(data),
       player: data.playername || "Unknown",
       realm: data.realm || "",
       region: data.region || "",
