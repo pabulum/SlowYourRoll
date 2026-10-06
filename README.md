@@ -63,8 +63,8 @@ common filler, which is usually a reason to chase it rather than shy off it.
 Optionally paste your in-game `/simc` addon export to fold in this week's Great Vault choices,
 auto-mark owned gear, and import your logged bonus-roll history. Each vault option is priced as it
 comes and finished at the top of its track, with the crests finishing it costs in that slot, and the
-trade against your best roll says when the answer turns on those crests rather than inventing a rate
-to settle it.
+trade against the roll the vault's token would buy says when the answer turns on those crests rather
+than inventing a rate to settle it.
 
 **The vault half of that paste expires at the weekly reset**, and only that half. Three options
 appear at reset and are gone at the next one, so a `/simc` read before the last reset has no live
@@ -551,15 +551,22 @@ and the note leads with the claim that applies. Both claims stay on the card eit
 token for the Mythic kill, and spend one here on Heroic most weeks are both true, and which one
 leads is decided by what the reader is being ranked at (`specialAtTier` in `src/render.js`).
 
-In Season 2 the roll token is itself a Great Vault reward for weeks 2–7, so taking it costs you the
-item you'd otherwise have picked; from week 8 one is handed out every week, so the item stops
-costing you your only roll. (Whether the vault *also* keeps offering a token as a selection past
-week 7 is stated nowhere — Blizzard introduces the Voidcore as a vault selection and never dates its
-removal — so the copy says only what's sourced rather than promising the trade disappears.) That window is a
-rule stated in week numbers, which is only useful next to which week it is now — so the season also
-carries `week1`, the reset that opens week 1 (August 18, off Larias' week-by-week dates), and both
-places that describe the window answer it for today: the reward pane and the vault trade banner.
-Before the season opens it names the date instead. The count is anchored to the US reset, which is
+In Season 2 the roll token is itself a Great Vault reward from week 2, so taking it costs you the
+item you'd otherwise have picked. From week 8 one is also handed out every week, and the vault
+keeps offering its own on top — no source said so (Blizzard introduces the Voidcore as a vault
+selection and never dates its removal), and it was confirmed in game at week 8's reset. So week 8
+doesn't end the trade, it shrinks it: the weekly token takes your best roll, and the vault's buys
+the next one, which is what the banner weighs the item against from then on (`secondRoll` in
+[`src/model.js`](src/model.js)). A raid boss is rolled once a week — the roll is offered by the
+kill — so "the next one" is the next encounter down; a dungeon can be run again, and a second run's
+roll prices exactly as the first did, since before either is made each is as likely to land on any
+given item. The banner names where the weekly token went, because otherwise its roll figure reads
+as the best one on the board.
+
+Those are rules stated in week numbers, which are only useful next to which week it is now — so the
+season also carries `week1`, the reset that opens week 1 (August 18, off Larias' week-by-week
+dates), and both places that describe the window answer it for today: the reward pane and the vault
+trade banner. Before the season opens it names the date instead. The count is anchored to the US reset, which is
 the reset those dates are written in; other regions reset later the same day, so at the boundary it
 can name a week the reader hasn't reached yet.
 

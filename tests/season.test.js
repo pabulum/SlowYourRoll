@@ -167,7 +167,7 @@ test("a named ladder rung agrees with the difficulty that pays the same item lev
   });
 });
 
-test("a season that buys the token with a vault slot says for how long", () => {
+test("a season that buys the token with a vault slot says from when", () => {
   Object.keys(SEASONS).forEach((n) => {
     const s = SEASONS[n];
     const win = tokenVaultWindow(s);
@@ -175,19 +175,20 @@ test("a season that buys the token with a vault slot says for how long", () => {
       assert.equal(win, null, `Season ${n} has no trade to describe`);
       return;
     }
+    assert.ok(win.from >= 1, `Season ${n} window`);
     assert.ok(
-      s.tokenVaultWeeks > 0,
-      `Season ${n} needs the week the trade stops`,
+      win.weekly == null || win.weekly > win.from,
+      `Season ${n}'s handed-out token can't make the vault's a second roll before there is one`,
     );
-    assert.ok(win.from >= 1 && win.from <= win.to, `Season ${n} window`);
   });
 });
 
 // Blizzard's 2026-07-31 season post withholds the Voidcore from the opening vault: it first appears
 // on August 25, the second week. Guides written before that date plan a week 1 roll. If this ever
-// reverts, the two sentences render.js builds off the window revert with it.
-test("Season 2's token window opens in week 2, not week 1", () => {
-  assert.deepEqual(tokenVaultWindow(SEASONS[2]), { from: 2, to: 7 });
+// reverts, the two sentences render.js builds off the window revert with it. From week 8 one is also
+// handed out weekly (Larias: "getting 1 per week starting on Week 8"), and the vault keeps its own.
+test("Season 2's token window opens in week 2, and turns into a second roll in week 8", () => {
+  assert.deepEqual(tokenVaultWindow(SEASONS[2]), { from: 2, weekly: 8 });
 });
 
 /* ---------- the season calendar ---------- */
@@ -230,8 +231,9 @@ test("the token window's state follows the week it's asked about", () => {
   assert.equal(at("2026-08-11T16:00:00Z"), "before"); // season hasn't opened
   assert.equal(at("2026-08-18T16:00:00Z"), "early"); // week 1, no token in the vault
   assert.equal(at("2026-08-25T16:00:00Z"), "trade"); // week 2, the window opens
-  assert.equal(at("2026-09-29T16:00:00Z"), "trade"); // week 7, its last week
-  assert.equal(at("2026-10-06T16:00:00Z"), "free"); // week 8, a free weekly reward
+  assert.equal(at("2026-09-29T16:00:00Z"), "trade"); // week 7, its last one-roll week
+  assert.equal(at("2026-10-06T16:00:00Z"), "second"); // week 8, one handed out too
+  assert.equal(at("2026-11-17T16:00:00Z"), "second"); // and it stays that way
 });
 
 // The date the window opens is quoted in the pane while it's still ahead of the reader, so it has to

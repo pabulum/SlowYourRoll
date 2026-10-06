@@ -11,7 +11,14 @@ import {
   QE_RAID_DIFFICULTIES_LEGACY,
 } from "./data.js";
 import { canLoot, classSpecs, specId, specIdInClass } from "./loot.js";
-import { lastReset, rollReward, SEASON, stepsAt, trackStep } from "./season.js";
+import {
+  lastReset,
+  rollReward,
+  SEASON,
+  stepsAt,
+  tokenWeekNow,
+  trackStep,
+} from "./season.js";
 import { simcOf, state } from "./store.js";
 
 /**
@@ -1340,6 +1347,13 @@ function scarceCrest() {
  * Item values come from the whole report, not just the visible pools — a vault option filtered out
  * of the ranking (older content, another difficulty) is still an item you can take this week.
  *
+ * Which roll the token buys depends on the week. While the vault's token is the only one you get, it
+ * buys your best roll. From the week the season also hands one out weekly, the vault keeps offering
+ * its own, and that one is a *second* roll: the weekly token takes the best roll on the board, so
+ * the vault's is weighed against the one after it (`secondRoll`), and `weekly` names the row the
+ * handed-out token goes on. Weighing it against the best would credit the vault's token with a roll
+ * you're making anyway.
+ *
  * Every option is read twice: as it comes (`keep` is the best of those) and finished at the top of
  * its track, for the crests that costs (`finishedReading`; `stretch` is the finished reading worth
  * raising). The roll is always finished, since that is what the report priced, and carries whatever
@@ -1355,18 +1369,22 @@ function scarceCrest() {
  * the banner says so with both numbers rather than pretending to a rate.
  *
  * @param {import("./types.js").Board} b
+ * @param {Date} [now]  Defaults to now; a parameter because which roll the token buys is a question
+ *   about the week.
  * @returns {{options: any[], keep: any, stretch: any, item: any, top: import("./types.js").Row|null,
+ *   weekly: import("./types.js").Row|null,
  *   perRoll: number, rollFinish: {min: number, max: number, known: boolean, kind: string}|null,
  *   free: any, best: any, verdict: "keep"|"roll"|"crests",
  *   drag: {amount: number, name: string, isTop: boolean}|null}|null}
- *   null when no vault has been imported.
+ *   null when no vault has been imported. `top` is the roll the vault's token would buy, null where
+ *   nothing is worth it.
  */
-export function vaultChoice(b) {
+export function vaultChoice(b, now) {
   const simc = simcOf(b);
   if (!simc?.vault?.length) return null;
   // An expired vault has no trade in it: the options are gone from the game, so there is nothing to
   // weigh a roll against. The panel says so rather than the app quietly ranking last week's items.
-  const st = vaultStatus(b);
+  const st = vaultStatus(b, now);
   if (st?.stale) return null;
 
   // Each option priced at the level its own vault slot is offering, which is the only level any of
@@ -1424,8 +1442,11 @@ export function vaultChoice(b) {
       .sort((a, c) => c.top.score - a.top.score)[0] || null;
 
   const rows = buildGroups(Object.assign({}, b, { vaultTake: null })).rows;
-  const top = rows.find((r) => r.ev > 0) || null;
-  // The expected score of the one roll you'd actually make. Not `row.ev`, which is per *token* —
+  const first = rows.find((r) => r.ev > 0) || null;
+  const weekly =
+    first && tokenWeekNow(SEASON, now)?.state === "second" ? first : null;
+  const top = weekly ? secondRoll(rows, weekly) : first;
+  // The expected score of the one roll the token would buy. Not `row.ev`, which is per *token* —
   // against a single vault slot the question is what one roll returns, with its price alongside.
   const perRoll = top ? top.num / top.remaining : 0;
   const fin = rollFinish(b, top);
@@ -1480,6 +1501,7 @@ export function vaultChoice(b) {
     stretch,
     item,
     top,
+    weekly,
     perRoll,
     rollFinish: fin,
     free,
@@ -1487,6 +1509,26 @@ export function vaultChoice(b) {
     verdict,
     drag: dragOf(rows, item),
   };
+}
+
+/**
+ * The roll a second token buys, in a week whose first is going on `first`.
+ *
+ * A raid boss is rolled once a week: the roll is offered by the kill (the addon logs it off the
+ * kill's own confirmation prompt), and a boss drops loot for you once per lockout. So the second
+ * token goes to the next encounter down. A dungeon can be run again, and a second run's roll is worth
+ * what the first one's was: a roll takes what it hands you out of the pool, so before either is made
+ * the second is as likely as the first to land on any given item. Mark what the first one gave you
+ * and the row reprices for the second.
+ *
+ * Null where nothing else is worth a roll, which leaves the vault's token buying nothing this week.
+ *
+ * @param {import("./types.js").Row[]} rows  Ranked, best first.
+ * @param {import("./types.js").Row} first
+ */
+function secondRoll(rows, first) {
+  if (first.g.type === "dungeon") return first;
+  return rows.find((r) => r !== first && r.ev > 0) || null;
 }
 
 /**

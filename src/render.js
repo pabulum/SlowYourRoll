@@ -144,12 +144,13 @@ function weekNowHTML(s, long) {
           first one is week ${tokenVaultWindow(s).from}, ${trades}.`
       : html` Week ${w.week}: no token in this vault yet, so nothing is being
         given up for one.`;
-  if (w.state === "free")
+  if (w.state === "second")
     return long
-      ? html`<b>It's week ${w.week}.</b> You're given a token every week now, so
-          your vault item no longer costs you a roll.`
-      : html` Week ${w.week}: you're given a token weekly, so the item costs you
-        no roll.`;
+      ? html`<b>It's week ${w.week}.</b> You're handed a token every week now,
+          and the vault still offers one on top — so the item costs you a
+          second roll this week, not your only one.`
+      : html` Week ${w.week}: you're handed a token weekly too, so the vault's
+        is a second roll — it or the item.`;
   return long
     ? html`<b>It's week ${w.week}.</b> The token is a Great Vault slot this
         week: take it or take the item, not both.`
@@ -361,17 +362,16 @@ export function renderRewards(here, keyLevel) {
         ${
           win &&
           html`<p>
-            ${win.to ? html`Weeks ${win.from}–${win.to}` : html`From week ${win.from}`}
-            the token <em>is</em> a Great Vault slot: you take the token or you
-            take the item, not both.
+            From week ${win.from} the token <em>is</em> a Great Vault slot: you
+            take the token or you take the item, not both.
             ${win.from > 1 && html`There is no token in the opening vault of the season at all.`}
             ${
-              win.to &&
-              html`From week ${win.to + 1} you're given one every week, so an
-                item no longer costs you your only roll. Whether the vault keeps
-                offering a token as a selection on top of that isn't stated
-                anywhere — if it does, the choice becomes a second roll or the
-                item.`
+              win.weekly &&
+              html`From week ${win.weekly} you're also handed one every week,
+                and the vault keeps offering its own — so from then on the
+                choice is a second roll or the item. The weekly token takes your
+                best roll and the vault's buys the next: a raid boss can be
+                rolled once a week, a dungeon again on another run.`
             }
           </p>`
         }
@@ -1205,7 +1205,7 @@ function tradeHTML(b, vc) {
         and ${keep.to}.`
       }
       ${roll.cost !== 1 && html` That roll costs ${roll.cost} tokens.`}
-      ${tokenWeeksHTML()}
+      ${tokenWeeksHTML(vc)}
     </div>
     ${finishedHTML(b, vc, unit, turn)}
     ${vc.drag && dragHTML(b, vc.drag, vc.item, unit)}
@@ -1302,18 +1302,29 @@ function finishedHTML(b, vc, unit, turn) {
 /**
  * The one-line version of the token window, for the trade banner. "" when there is no trade.
  *
- * Where the season is dated, this says which week it is instead of the range — the banner is a
- * decision being made right now, and "weeks 2–7" leaves the reader to work out whether that's them.
- * The range stays as the fallback for a season whose calendar isn't out yet.
+ * Where the season is dated, this says which week it is instead of the rule — the banner is a
+ * decision being made right now, and "from week 8" leaves the reader to work out whether that's them.
+ * The rule stays as the fallback for a season whose calendar isn't out yet.
+ *
+ * In a week whose token is also handed out, it names where that one goes. The banner's roll figure is
+ * then the *second* roll, and without the encounter it's measured after, it reads as the best one.
+ *
+ * @param {NonNullable<ReturnType<typeof vaultChoice>>} vc
  */
-function tokenWeeksHTML() {
+function tokenWeeksHTML(vc) {
   const win = tokenVaultWindow(SEASON);
   if (!win) return "";
+  const w = vc.weekly && tokenWeekNow(SEASON);
+  if (w)
+    return html` Week ${w.week}: the token you're handed weekly goes on
+      ${vc.weekly.g.name}, so the vault's buys
+      ${vc.top === vc.weekly ? "a second run there" : "your next-best roll"} —
+      it or the item.`;
   const now = weekNowHTML(SEASON);
   if (now) return now;
-  return html` ${win.to ? html`Weeks ${win.from}–${win.to}` : html`From week ${win.from}`}
-    the token <em>is</em> a vault slot, so it’s one choice, not two.
-    ${win.to && html`From week ${win.to + 1} a token is given weekly instead.`}`;
+  return html` From week ${win.from} the token <em>is</em> a vault slot, so it’s
+    one choice, not two.
+    ${win.weekly && html`From week ${win.weekly} you’re handed one weekly too, which makes the vault’s a second roll.`}`;
 }
 
 function dragHTML(b, d, item, unit) {

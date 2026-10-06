@@ -258,6 +258,13 @@ function withVault(ids) {
   };
 }
 
+// Which roll the vault's token buys is a question about the week, so a trade test has to say which
+// week it's in. Most of them are about the one-roll trade, where that token is the only one you get
+// and buys your best roll. From week 8 one is handed out weekly too and the vault's buys the roll
+// after it — a different trade, with its own tests below.
+const ONE_ROLL = new Date("2026-09-16T16:00:00Z"); // week 5
+const SECOND_ROLL = new Date("2026-10-07T16:00:00Z"); // week 8
+
 /* ---------- a vault is only this week's ----------
    Three options appear at the weekly reset and are gone at the next one, but the /simc paste
    describing them sits in localStorage forever. Undated, a Season 1 vault kept being offered as a
@@ -355,7 +362,7 @@ test("with no vault imported there is no trade to weigh", () => {
 test("a vault item worth more than one roll's expectation says keep the item", () => {
   state.showAll = false;
   withVault([900002]); // the 20-value item, against 30/POOL per roll
-  const vc = vaultChoice(makeBoard());
+  const vc = vaultChoice(makeBoard(), ONE_ROLL);
   assert.equal(vc.keep.id, 900002);
   assert.equal(vc.keep.score, 20);
   assert.equal(vc.perRoll, 30 / POOL);
@@ -365,7 +372,7 @@ test("a vault item worth more than one roll's expectation says keep the item", (
 test("a vault of nothing you want says spend the token", () => {
   state.showAll = false;
   withVault([900003]); // never scored by the report
-  const vc = vaultChoice(makeBoard());
+  const vc = vaultChoice(makeBoard(), ONE_ROLL);
   assert.equal(vc.keep.score, 0);
   assert.equal(
     vc.keep.scored,
@@ -382,7 +389,84 @@ test("the roll side is priced as if nothing were taken from the vault", () => {
   withVault([900002]);
   const b = makeBoard();
   b.vaultTake = 900002;
-  assert.equal(vaultChoice(b).perRoll, 30 / POOL);
+  assert.equal(vaultChoice(b, ONE_ROLL).perRoll, 30 / POOL);
+});
+
+/* ---------- from week 8, the vault's token is a second roll ----------
+   A token is handed out every week from week 8 and the vault keeps offering its own on top. The
+   handed-out one takes the best roll on the board, so the vault's buys the next — weighing the item
+   against the best roll would credit the vault's token with a roll you were making anyway. */
+
+const ENC_2 = Number(Object.keys(RAID.bosses)[1]);
+
+/** `makeBoard`, plus a lesser upgrade on the raid's next boss. */
+function twoBossBoard() {
+  const b = makeBoard();
+  b.results.push({
+    item: 900004,
+    inst: RAID_ID,
+    enc: ENC_2,
+    diff: "mythic",
+    level: 639,
+    score: 1,
+  });
+  return b;
+}
+
+test("from week 8 the vault's token is weighed against the roll after the best", () => {
+  state.showAll = false;
+  withVault([900002]);
+  const b = twoBossBoard();
+  const [first, next] = buildGroups(b).rows;
+  assert.equal(first.g.key, `${RAID_ID}:${ENC_ID}`, "the 30-point boss leads");
+  assert.equal(next.g.key, `${RAID_ID}:${ENC_2}`);
+
+  const vc = vaultChoice(b, SECOND_ROLL);
+  assert.equal(vc.weekly.g.key, first.g.key, "the handed-out token takes it");
+  assert.equal(
+    vc.top.g.key,
+    next.g.key,
+    "a boss is rolled once a week, so the vault's goes on the next one",
+  );
+  assert.equal(vc.perRoll, next.num / next.remaining);
+
+  const before = vaultChoice(b, ONE_ROLL);
+  assert.equal(before.weekly, null);
+  assert.equal(
+    before.top.g.key,
+    first.g.key,
+    "while it's the only token, it buys the best roll",
+  );
+});
+
+// A dungeon can be run again, and before either roll is made the second is as likely as the first to
+// land on any given item — a roll takes what it hands you out of the pool — so it prices the same.
+test("a dungeon at the top takes the vault's token too, on another run", () => {
+  state.showAll = false;
+  withVault([900002]);
+  const b = twoBossBoard();
+  b.results.push({
+    item: 900005,
+    inst: -1,
+    enc: Number(QE_DATA.currentDungeons[0]),
+    diff: "mythic",
+    level: 639,
+    score: 1000,
+  });
+  const vc = vaultChoice(b, SECOND_ROLL);
+  assert.equal(vc.weekly.g.type, "dungeon");
+  assert.equal(vc.top, vc.weekly);
+  assert.equal(vc.perRoll, vc.top.num / vc.top.remaining);
+});
+
+test("with nothing else worth a roll, the vault's token buys nothing that week", () => {
+  state.showAll = false;
+  withVault([900002]);
+  const vc = vaultChoice(makeBoard(), SECOND_ROLL);
+  assert.equal(vc.weekly.g.key, `${RAID_ID}:${ENC_ID}`);
+  assert.equal(vc.top, null);
+  assert.equal(vc.perRoll, 0);
+  assert.equal(vc.verdict, "keep", "the item, against no roll at all");
 });
 
 // The asymmetry a one-week comparison hides: a roll takes an item out of the pool for good, while
@@ -1438,7 +1522,7 @@ test("an option already at the top of its track has no finished reading to add",
 test("a roll worth more than the finished option says take the token", () => {
   withRingVault();
   const b = ringBoard(40000);
-  const vc = vaultChoice(b);
+  const vc = vaultChoice(b, ONE_ROLL);
   assert.ok(vc.perRoll > 2129, `per roll ${vc.perRoll}`);
   assert.equal(vc.verdict, "roll");
   assert.equal(vc.stretch?.id, RING, "the finished ring is still raised");
@@ -1450,7 +1534,7 @@ test("a roll worth more than the finished option says take the token", () => {
 // that doesn't depend on what else the crests would buy — so the verdict says exactly that.
 test("a finished option worth more than the roll turns on the crests it costs", () => {
   withRingVault();
-  const vc = vaultChoice(ringBoard(1200));
+  const vc = vaultChoice(ringBoard(1200), ONE_ROLL);
   assert.ok(vc.perRoll < 2129, `per roll ${vc.perRoll}`);
   assert.equal(vc.verdict, "crests");
   assert.equal(vc.free.kind, "roll", "with crests left out, the roll");
@@ -1465,7 +1549,7 @@ test("a finished option worth more than the roll turns on the crests it costs", 
 
 test("an option worth more than the roll as it comes says take it, finished or not", () => {
   withRingVault();
-  const vc = vaultChoice(ringBoard(1200, 2000));
+  const vc = vaultChoice(ringBoard(1200, 2000), ONE_ROLL);
   assert.equal(vc.verdict, "keep");
   assert.equal(vc.free.o.id, RING);
   assert.equal(vc.best.finished, true, "and finishing it is the further trade");
@@ -1475,7 +1559,7 @@ test("an option worth more than the roll as it comes says take it, finished or n
 // finished ring is simply what the item is worth to this character, and it's weighed as such.
 test("an option whose slot already covers the climb is weighed finished, for nothing", () => {
   withRingVault({ watermarks: marksWith(300, { 9: 334 }) });
-  const vc = vaultChoice(ringBoard(1200));
+  const vc = vaultChoice(ringBoard(1200), ONE_ROLL);
   assert.equal(vc.options[0].top.crests, 0);
   assert.equal(vc.verdict, "keep");
   assert.equal(vc.free, vc.best, "no crests between the answers");
@@ -1489,7 +1573,7 @@ test("a roll that arrives short of its track's top carries the crests to finish 
   withRingVault();
   const b = ringBoard(1200);
   b.results = b.results.map((r) => ({ ...r, dropDifficulty: 2 }));
-  const vc = vaultChoice(b);
+  const vc = vaultChoice(b, ONE_ROLL);
   assert.equal(vc.top.reward.label, "Myth 1/6");
   assert.equal(vc.rollFinish?.max, 80);
   assert.equal(vc.rollFinish.kind, "Myth");
@@ -1501,7 +1585,7 @@ test("a roll that arrives short of its track's top carries the crests to finish 
 
   withRingVault();
   assert.equal(
-    vaultChoice(ringBoard(1200)).rollFinish,
+    vaultChoice(ringBoard(1200), ONE_ROLL).rollFinish,
     null,
     "a Mythic payout arrives finished",
   );

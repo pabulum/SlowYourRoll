@@ -177,10 +177,10 @@ const MIDNIGHT_TRACKS = {
  *   of the vault comparison, never its arithmetic — a wrong guess here misleads nobody's maths.
  * @property {number} [tokenVaultFrom]  First week of the season in which the token can be taken at
  *   all. Defaults to week 1; Season 2 withholds it from the opening vault. Wording only, as above.
- * @property {number} [tokenVaultWeeks]  Last week of the season in which that's true; from the week
- *   after, a token is handed out every week, so an item stops costing you your only roll. Whether
- *   the vault keeps offering one as a selection past this week is unsourced; see the Season 2 note.
- *   Wording only, as above.
+ * @property {number} [tokenWeeklyFrom]  First week of the season in which a token is also handed out
+ *   every week, on top of the vault's. From then on the vault's token is the week's *second* roll,
+ *   not its only one, so the vault trade is weighed against the roll after the one the weekly token
+ *   takes (`vaultChoice`). Unlike the two above, this one moves a number.
  * @property {string} [week1]  ISO instant of the weekly reset that opens week 1 — the anchor every
  *   week number on the page is counted from. Absent where a season's calendar isn't published,
  *   which leaves those week numbers abstract rather than wrong.
@@ -223,18 +223,16 @@ export const SEASONS = {
     tokenDungeon: 1,
     tokenNote:
       "1 token for everything in Season 2, raid bosses and M+ dungeons alike. (Season 1 charged 2 per raid boss, which is why older notes halve raid EV.)",
-    // Weeks 2–7 the token comes out of a Great Vault slot, so a roll is bought with the item you'd
-    // otherwise have taken. From week 8 Blizzard hands one out every week — Larias: "they will
-    // return as a regular reward, getting 1 per week starting on Week 8 again" — so the item stops
-    // costing you your only roll.
+    // From week 2 the token comes out of a Great Vault slot, so a roll is bought with the item you'd
+    // otherwise have taken. From week 8 Blizzard also hands one out every week — Larias: "they will
+    // return as a regular reward, getting 1 per week starting on Week 8 again".
     //
-    // What no source states is whether the vault *also* keeps offering a Voidcore as a selection
-    // past week 7. Blizzard's post introduces it as one ("can be selected by anyone who has unlocked
-    // at least 3 panes") and never dates its removal, so the page used to say "you get both" and the
-    // trade disappears on an inference nobody published. If the selection stays, week 8 onward is
-    // not "no trade" but a smaller one: a *second* roll against the item. The copy now says only
-    // what's sourced and names the gap. Wording only either way — `tokenVaultWeeks` never touches
-    // the arithmetic.
+    // And the vault keeps offering its own on top. No source said so: Blizzard's post introduces the
+    // Voidcore as a vault selection ("can be selected by anyone who has unlocked at least 3 panes")
+    // and never dates its removal, so for weeks the page named the gap rather than guess. It was
+    // confirmed in game at week 8's reset, 2026-10-06. So week 8 doesn't end the trade, it shrinks
+    // it: the weekly token takes your best roll, and the vault's buys the *next* one, still at the
+    // price of the item. That is what the vault banner weighs from then on; see `vaultChoice`.
     //
     // The window opens in week 2, not week 1: Blizzard's 2026-07-31 season post says a Voidcore is
     // not offered in the opening vault of Season 2 and first appears on August 25. Guides written
@@ -242,7 +240,7 @@ export const SEASONS = {
     // https://us.forums.blizzard.com/en/wow/t/midnight-season-1-ending-and-season-2-information/2331696
     tokenFromVault: true,
     tokenVaultFrom: 2,
-    tokenVaultWeeks: 7,
+    tokenWeeklyFrom: 8,
     // Larias' week-by-week dates the season: pre-season August 11, week 1 August 18, then every
     // week by sevens (week 2 August 25, week 3 September 1 …), which is what turns the window above
     // from a rule into an answer. Unchanged through the 8/10 revision. Quoted at the US reset — 8am
@@ -441,24 +439,25 @@ export const REWARD_SEASON = SEASONS[2];
 export const REWARDS_LIVE = REWARD_SEASON === SEASON;
 
 /**
- * The run of weeks in which taking a bonus-roll token costs you your Great Vault item.
+ * From which week taking a bonus-roll token costs you your Great Vault item, and from which week that
+ * token is a second roll rather than your only one.
  *
  * Returns null when the season never charges a vault slot for the token, so callers can drop the
- * sentence entirely rather than print a range with nothing behind it. `to` is null when the season
- * knows the trade starts but not when it stops — "from week N" is still worth saying, and inventing
- * an end week to make the phrasing tidy would be inventing data.
+ * sentence entirely rather than print a range with nothing behind it. `weekly` is the first week a
+ * token is also handed out every week, and null where the season hands none out. It doesn't close
+ * the trade — the vault keeps offering its token — it changes which roll that token buys.
  *
  * Two places on the page describe this window in prose and they must not disagree, which is the
  * whole reason it's derived here rather than written out twice.
  *
  * @param {Season} season
- * @returns {{from: number, to: number|null}|null}
+ * @returns {{from: number, weekly: number|null}|null}
  */
 export function tokenVaultWindow(season) {
   if (!season.tokenFromVault) return null;
   return {
     from: season.tokenVaultFrom || 1,
-    to: season.tokenVaultWeeks || null,
+    weekly: season.tokenWeeklyFrom || null,
   };
 }
 
@@ -467,9 +466,10 @@ const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 /**
  * Which week of the season a moment falls in.
  *
- * The season describes itself in week numbers — the token comes out of a vault slot in weeks 2–7 —
- * and a week number is only worth printing next to which week it is now. That's a calendar question
- * nothing else in the app has a reason to hold, so it lives here, beside the window it answers.
+ * The season describes itself in week numbers — the token is a vault slot from week 2 and is handed
+ * out weekly from week 8 — and a week number is only worth printing next to which week it is now.
+ * That's a calendar question nothing else in the app has a reason to hold, so it lives here, beside
+ * the window it answers.
  *
  * Week 0 is a state, not a floor: before the season opens, "it starts on the 18th" is the honest
  * thing to say, and clamping it to 1 would claim the season had begun. Null where the season has no
@@ -534,10 +534,10 @@ export function lastReset(season, now) {
  *
  * @param {Season} season
  * @param {Date} [now]
- * @returns {{week: number, opens: Date, trades: Date, state: "before"|"early"|"trade"|"free"}|null}
+ * @returns {{week: number, opens: Date, trades: Date, state: "before"|"early"|"trade"|"second"}|null}
  *   `before` — the season hasn't opened. `early` — in season, but the token isn't in the vault yet.
- *   `trade` — inside the window, so the token costs you the item. `free` — past it, one is handed
- *   out weekly, so the item no longer costs a roll.
+ *   `trade` — the vault's token is the week's only roll, so it costs you the item. `second` — one is
+ *   handed out weekly too, so the vault's is a second roll, and that is what the item costs you.
  *   `trades` is the reset the window opens on, which is the date worth naming in the first two.
  */
 export function tokenWeekNow(season, now) {
@@ -549,8 +549,8 @@ export function tokenWeekNow(season, now) {
       ? w.week
         ? "early"
         : "before"
-      : win.to && w.week > win.to
-        ? "free"
+      : win.weekly && w.week >= win.weekly
+        ? "second"
         : "trade";
   return {
     week: w.week,

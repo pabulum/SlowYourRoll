@@ -82,6 +82,18 @@ function renderWith(boards, extra = {}) {
   return doc;
 }
 
+// The vault banner weighs the item against the roll the vault's token would buy, and which roll that
+// is depends on the week: the best one while it's the only token you get, the one after it once a
+// token is also handed out weekly (week 8 on). Tests about the banner pin the week they mean rather
+// than inherit whichever one they happen to run in.
+const ONE_ROLL = new Date("2026-09-16T16:00:00Z"); // week 5
+const SECOND_ROLL = new Date("2026-10-07T16:00:00Z"); // week 8
+
+/** Run the rest of test `t` with the clock at `at`. */
+function inWeek(t, at) {
+  t.mock.timers.enable({ apis: ["Date"], now: at });
+}
+
 test("with nothing loaded the page invites a report and hides the controls", () => {
   const doc = renderWith([]);
   assert.equal(doc.getElementById("controls").hasAttribute("hidden"), true);
@@ -226,7 +238,8 @@ test("the vault panel prices the choice both ways and offers to take it", () => 
 // A vault reward and the level a report scored it at are rarely the same, and a score from outside
 // the report's range is not a number about the item on the table. Real case: a Heroic 9-boss vault
 // slot paying Myth 1/6 (318) for an item the report only scored from its Mythic drop (324) up.
-test("a vault option the report never priced at the offered level isn't given a number", () => {
+test("a vault option the report never priced at the offered level isn't given a number", (t) => {
+  inWeek(t, ONE_ROLL);
   const doc = renderWith([makeBoard()], {
     simc: {
       "foo~area52~": {
@@ -248,7 +261,8 @@ test("a vault option the report never priced at the offered level isn't given a 
 
 // The tier that does the work. A vault slot lands between two levels the report actually simmed, so
 // the value is read off the line joining them rather than off a row for a different item level.
-test("a vault option between two scored levels is read between them", () => {
+test("a vault option between two scored levels is read between them", (t) => {
+  inWeek(t, ONE_ROLL);
   const b = makeBoard();
   b.results = [
     {
@@ -280,6 +294,45 @@ test("a vault option between two scored levels is read between them", () => {
   const panel = doc.getElementById("vaultPanel").textContent;
   assert.match(panel, /17 DPS guaranteed/, "10 + 0.7 x (20 - 10)");
   assert.match(panel, /read between the report’s 311\s+and 321/);
+});
+
+// From week 8 the banner's roll is the vault token's: the one after the roll the handed-out token
+// takes. It has to say where that one went, or the figure reads as the best roll on the board.
+test("from week 8 the banner prices the next roll and says where the weekly token goes", (t) => {
+  inWeek(t, SECOND_ROLL);
+  const enc2 = Number(Object.keys(RAID.bosses)[1]);
+  const b = makeBoard();
+  b.results.push({
+    item: 900004,
+    inst: RAID_ID,
+    enc: enc2,
+    diff: "mythic",
+    level: 639,
+    score: 1,
+  });
+  const doc = renderWith([b], {
+    simc: {
+      "foo~area52~": {
+        owned: {},
+        at: new Date().toISOString(),
+        vault: [{ id: 900002, ilvl: 639, name: "V900002" }],
+      },
+    },
+  });
+  const body = words(doc.querySelector("#vaultPanel .tbody"));
+  assert.ok(
+    body.includes(`per roll on ${RAID.bosses[String(enc2)]}`),
+    `priced on the next boss: ${body}`,
+  );
+  assert.ok(
+    body.includes(`Week 8: the token you're handed weekly goes on ${BOSS},`),
+    `and says the best one is taken: ${body}`,
+  );
+  assert.match(body, /the vault's buys your next-best roll — it or the item/);
+  assert.match(
+    words(doc.querySelector("#rewardBody .rwd-now")),
+    /the item costs you a second roll this week/,
+  );
 });
 
 test("a vault item scored at the level it's offered at is quoted without qualification", () => {
@@ -778,7 +831,8 @@ test("the offered track and the held copy's track are told apart by colour", () 
 
 // The prompting week: the roll beats the ring even finished, so the lead is the token — but the
 // finished ring is still on the banner, with why the figure is 80 and not 100.
-test("a roll that beats the finished option still shows what the option becomes", () => {
+test("a roll that beats the finished option still shows what the option becomes", (t) => {
+  inWeek(t, ONE_ROLL);
   const doc = renderWith([makeRingBoard(40000)], ringVault());
   const trade = doc.querySelector("#vaultPanel .trade");
   assert.match(trade.getAttribute("class"), /\broll\b/);
@@ -798,7 +852,8 @@ test("a roll that beats the finished option still shows what the option becomes"
 
 // With the target gone, the finished ring outscores the roll and costs crests the roll doesn't. The
 // lead says what it turns on, and nothing converts the crests into HPS to force an answer.
-test("a trade that turns on crests says so, with both numbers", () => {
+test("a trade that turns on crests says so, with both numbers", (t) => {
+  inWeek(t, ONE_ROLL);
   const doc = renderWith([makeRingBoard(1200)], ringVault());
   const trade = doc.querySelector("#vaultPanel .trade");
   assert.match(trade.getAttribute("class"), /\bcrests\b/);
@@ -813,7 +868,8 @@ test("a trade that turns on crests says so, with both numbers", () => {
 
 // A ring slot under the free line prices the same 80, but only by assuming the Hero step is bought
 // with Hero crests first — the line has to say that, not present the figure as read off the mark.
-test("a finished figure that leans on the free-line assumption says so", () => {
+test("a finished figure that leans on the free-line assumption says so", (t) => {
+  inWeek(t, ONE_ROLL);
   const extra = ringVault();
   extra.simc["heals~area52~"].watermarks[9] = 308;
   const doc = renderWith([makeRingBoard(40000)], extra);
