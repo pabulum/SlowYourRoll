@@ -31,4 +31,8 @@ globalThis.localStorage = /** @type {any} */ ({
 // Not part of the page: the theme toggle asks the OS what it prefers.
 globalThis.matchMedia = /** @type {any} */ (() => ({ matches: false }));
 
+// Node only grew a global `navigator` in 21, and the engines floor (20.19) has none. The Share button
+// writes to `navigator.clipboard`, which tests stand in per test (tests/ui.test.js).
+if (!globalThis.navigator) globalThis.navigator = /** @type {any} */ ({});
+
 loadPage();
