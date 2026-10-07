@@ -60,7 +60,7 @@ jobs:
     # itself can only edit Workers in the one Cloudflare account that holds this Worker.
     environment:
       name: cloudflare
-      url: https://slowyourroll-share.careful-agate-b2f.workers.dev/
+      url: https://slowyourroll.pabulum.workers.dev/
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7

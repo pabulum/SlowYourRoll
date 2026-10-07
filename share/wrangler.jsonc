@@ -1,7 +1,7 @@
 // The share Worker: share links unfurl as the board (share/card.js, src/share.js).
 // Deploy from the repo root with `npx wrangler deploy -c share/wrangler.jsonc`.
 {
-  "name": "slowyourroll-share",
+  "name": "slowyourroll",
   // The account the Worker lives in, so a login that can see several accounts doesn't stop to ask.
   "account_id": "b2fe2d2ba8569a7414583b882e37bdfd",
   "main": "worker.js",

@@ -15,8 +15,7 @@
  * breaks them.
  * @type {string|null}
  */
-export const SHARE_HOST =
-  "https://slowyourroll-share.careful-agate-b2f.workers.dev/";
+export const SHARE_HOST = "https://slowyourroll.pabulum.workers.dev/";
 
 /** Detect which source a pasted link/code refers to. Returns { source, id } or null. */
 export function detectSource(v) {
