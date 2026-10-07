@@ -193,6 +193,46 @@ function initBackup() {
   });
 }
 
+/**
+ * A long share link as the share Worker's three-word one (share/card.js). Anything short of a short
+ * link — the Worker down, slow, or refusing — settles for the long link, which works on its own, so
+ * Share always copies something that opens the board. Four seconds keeps the copy inside the window
+ * browsers give a click to write the clipboard.
+ *
+ * @param {string} long
+ * @returns {Promise<string>}
+ */
+function shortLink(long) {
+  return fetch(SHARE_HOST, {
+    method: "POST",
+    body: long,
+    signal: AbortSignal.timeout(4000),
+  })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((j) =>
+      typeof j?.url === "string" && j.url.startsWith(SHARE_HOST) ? j.url : long,
+    )
+    .catch(() => long);
+}
+
+/**
+ * Copy a link that may still be on its way. Safari only lets a page write the clipboard during the
+ * click itself, which a link still being shortened has missed; a ClipboardItem can be handed the
+ * promise during the click and fill in the text when it lands. Where that isn't supported, the
+ * text is written once it's known, which other browsers allow for a few seconds after a click.
+ *
+ * @param {Promise<string>} link
+ */
+function copyLink(link) {
+  if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
+    const blob = link.then((u) => new Blob([u], { type: "text/plain" }));
+    return navigator.clipboard
+      .write([new ClipboardItem({ "text/plain": blob })])
+      .catch(() => link.then((u) => navigator.clipboard.writeText(u)));
+  }
+  return link.then((u) => navigator.clipboard.writeText(u));
+}
+
 export function initUI() {
   // Encounter list — expand/collapse, reveal what this loot spec can't be given, cycle item state.
   on("sources", "click", "[data-act]", (el) => {
@@ -268,21 +308,23 @@ export function initUI() {
 
   // Share the active report as a ?report= link. The recipient fetches the same scores fresh; what
   // travels besides the report id is the Rolled/Own marks, so their pools match ours (`shareUrl`).
-  // Token overrides and the vault stay local. Once there's a share Worker, the link goes through it
-  // and carries the board's top rows too, for the link preview (src/share.js).
+  // Token overrides and the vault stay local. Once there's a share Worker, the link goes through it,
+  // carries the board's top rows too for the link preview (src/share.js), and is shortened to three
+  // words by the Worker on the way to the clipboard.
   $("shareBoard").addEventListener("click", () => {
     const b = active();
-    const url = SHARE_HOST
+    const long = SHARE_HOST
       ? shareUrl(b, SHARE_HOST, cardOf(b, buildGroups(b)))
       : shareUrl(b, location.href.replace(/[?#].*$/, ""));
-    navigator.clipboard.writeText(url).then(
+    const link = SHARE_HOST ? shortLink(long) : Promise.resolve(long);
+    copyLink(link).then(
       () =>
         toast(
           b.source === "droptimizer"
             ? "Link copied. Raidbots reports expire after ~30 days"
             : `Link copied. It opens with ${b.player}'s report loaded`,
         ),
-      () => prompt("Copy this link:", url),
+      () => link.then((url) => prompt("Copy this link:", url)),
     );
   });
 

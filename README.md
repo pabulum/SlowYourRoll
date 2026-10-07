@@ -616,6 +616,12 @@ free plan's 10 ms of CPU per request (a cold `buildGroups` alone costs about tha
 still draws after its Raidbots report has expired. The card is a snapshot, dated with a Discord
 timestamp ("shared 2 hours ago"); the board behind the link is live.
 
+All of that makes the link a few hundred characters long, so the Share button has the Worker
+shorten it to three words, `…workers.dev/CozyVenomGrell`. The Worker keeps the long link in a
+small Cloudflare D1 table (`share/schema.sql`) under words picked from its hash (`share/words.js`),
+so the same link always gets the same words and sharing twice stores nothing new. If the Worker
+can't be reached, Share copies the long link instead, which works on its own.
+
 ## Running locally
 
 The app uses native ES modules, so it must be served over HTTP (not opened as a `file://`
@@ -717,6 +723,8 @@ data/
   qe-data.json      Generated encounter + item database (see src/types.js QEData for its shape)
 share/              The share Worker: link previews for share links (see "Sharing a report")
   card.js           What it serves; worker.js is its entry point, wrangler.jsonc its config
+  words.js          The word lists short links are made of
+  schema.sql        Its D1 table of short links, applied once by hand
 scripts/
   build-data.mjs    Regenerates data/qe-data.json from a QuestionablyEpic checkout
   serve.mjs         Zero-dependency static server for local development
@@ -734,7 +742,9 @@ The same workflow deploys the share Worker to Cloudflare's free Workers plan. It
 from, and the token can only edit Workers in the one Cloudflare account that holds this Worker.
 The Worker bundles `data/qe-data.json` for item and boss names, so redeploying on every push to
 `main` is also what keeps a merged data refresh from leaving new items nameless on cards. To deploy
-it by hand: `npx wrangler login` once, then `npm run share:deploy`.
+it by hand: `npx wrangler login` once, then `npm run share:deploy`. Its short links live in a D1
+database, `slowyourroll`, bound in `share/wrangler.jsonc`; a fresh account needs it created
+(`npx wrangler d1 create slowyourroll`) and `share/schema.sql` applied once, as that file says.
 
 ## Disclaimer
 

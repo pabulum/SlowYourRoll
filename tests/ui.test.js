@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { QE_DATA } from "../src/data.js";
 import { render } from "../src/render.js";
+import { SHARE_HOST } from "../src/share.js";
 import { readSimc } from "../src/simc.js";
 import { simcOf, state } from "../src/store.js";
 import { initUI } from "../src/ui.js";
@@ -283,4 +284,62 @@ test("a /simc links to every spec of its character, and to no one else", async (
     undefined,
     "and so is another character on the realm",
   );
+});
+
+/**
+ * Click Share with the share Worker answering `respond`, and hand back what reached the clipboard.
+ * Node has no clipboard, so this stands one in, and the Worker is a stubbed fetch.
+ *
+ * @param {(body: string) => Promise<Response>} respond
+ */
+async function share(respond) {
+  const { doc } = boot();
+  /** @type {string[]} */
+  const copied = [];
+  const posted = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = /** @type {any} */ (
+    async (url, init) => {
+      posted.push({ url, body: init.body });
+      return respond(init.body);
+    }
+  );
+  Object.defineProperty(globalThis.navigator, "clipboard", {
+    configurable: true,
+    value: { writeText: async (t) => copied.push(t) },
+  });
+  try {
+    click(doc, "#shareBoard");
+    for (let i = 0; i < 20 && !copied.length; i++)
+      await new Promise((r) => setTimeout(r, 5));
+  } finally {
+    globalThis.fetch = realFetch;
+    delete (/** @type {any} */ (globalThis.navigator).clipboard);
+  }
+  return { copied, posted };
+}
+
+test("Share copies the share Worker's three-word link for the board", async () => {
+  const short = `${SHARE_HOST}GreedyFelMurloc`;
+  const { copied, posted } = await share(
+    async () => new Response(JSON.stringify({ url: short })),
+  );
+  assert.deepEqual(copied, [short]);
+  // What the Worker is asked to shorten is the long link, pointed at itself.
+  assert.equal(posted.length, 1);
+  assert.equal(posted[0].url, SHARE_HOST);
+  assert.ok(posted[0].body.startsWith(`${SHARE_HOST}?report=r`));
+});
+
+test("Share falls back to the long link when the Worker can't shorten it", async () => {
+  for (const respond of [
+    async () => {
+      throw new TypeError("offline");
+    },
+    async () => new Response("busy", { status: 503 }),
+    async () => new Response(JSON.stringify({ url: "https://evil.example/x" })),
+  ]) {
+    const { copied, posted } = await share(respond);
+    assert.deepEqual(copied, [posted[0].body]);
+  }
 });

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { APP, appUrl, EMBED_BYTES, handle } from "../share/card.js";
+import { APP, appUrl, EMBED_BYTES, handle, slugOf } from "../share/card.js";
+import { ADJECTIVES, CREATURES, ELEMENTS } from "../share/words.js";
 import { QE_DATA } from "../src/data.js";
 import { buildGroups, cardOf } from "../src/model.js";
 import { CARD_ROWS, parseMarks, readCard, shareUrl } from "../src/share.js";
@@ -48,9 +49,56 @@ function linkTo(card) {
   return shareUrl(board, "https://share.example.workers.dev/", card);
 }
 
-/** @param {string} ua */
-function get(url, ua) {
-  return handle(new Request(url, { headers: { "user-agent": ua } }), QE_DATA);
+/**
+ * D1 as far as the Worker uses it: one table of slug → query, in a Map. `INSERT OR IGNORE` keeps
+ * the first row for a slug, the same as SQLite.
+ */
+function fakeDB() {
+  const rows = new Map();
+  const exec = (sql, [slug, query]) => {
+    if (sql.startsWith("INSERT")) {
+      if (!rows.has(slug)) rows.set(slug, query);
+      return [];
+    }
+    return rows.has(slug) ? [{ query: rows.get(slug) }] : [];
+  };
+  return {
+    rows,
+    prepare: (sql) => ({
+      bind: (...args) => ({
+        sql,
+        args,
+        first: async () => exec(sql, args)[0] ?? null,
+      }),
+    }),
+    batch: async (stmts) =>
+      stmts.map((st) => ({ results: exec(st.sql, st.args) })),
+  };
+}
+
+/**
+ * @param {string} url
+ * @param {string} ua
+ * @param {ReturnType<typeof fakeDB>} [db]
+ */
+function get(url, ua, db = fakeDB()) {
+  return handle(
+    new Request(url, { headers: { "user-agent": ua } }),
+    QE_DATA,
+    /** @type {any} */ ({ DB: db }),
+  );
+}
+
+/** Ask the Worker to shorten a link, as the Share button does. */
+function mint(long, db) {
+  return handle(
+    new Request("https://share.example.workers.dev/", {
+      method: "POST",
+      body: long,
+    }),
+    QE_DATA,
+    /** @type {any} */ ({ DB: db }),
+  );
 }
 
 const DISCORD =
@@ -205,7 +253,9 @@ test("cardOf has nothing to say about a board with no roll worth making", () => 
 test("every visitor gets the same page, and a browser's script sends it on to the app", async () => {
   const url = linkTo(makeCard());
   const [person, discord, unknown] = await Promise.all(
-    [BROWSER, DISCORD, "SomeNewPreviewer/1.0"].map((ua) => get(url, ua).text()),
+    [BROWSER, DISCORD, "SomeNewPreviewer/1.0"].map((ua) =>
+      get(url, ua).then((r) => r.text()),
+    ),
   );
   assert.equal(person, discord, "nothing depends on who's asking");
   assert.equal(unknown, discord);
@@ -224,16 +274,19 @@ test("every visitor gets the same page, and a browser's script sends it on to th
   assert.ok(person.includes('<meta name="robots" content="noindex">'));
 });
 
-test("anything that isn't a share link goes to the app's front page", () => {
+test("anything that isn't a share link goes to the app's front page", async () => {
   assert.equal(appUrl(new URLSearchParams("report=<script>")), APP);
-  const res = get("https://share.example.workers.dev/favicon.ico", BROWSER);
+  const res = await get(
+    "https://share.example.workers.dev/favicon.ico",
+    BROWSER,
+  );
   assert.equal(res.status, 302);
   assert.equal(res.headers.get("location"), APP);
 });
 
 test("Discord gets a component embed of the board, inside its limits", async () => {
   const card = makeCard();
-  const res = get(linkTo(card), DISCORD);
+  const res = await get(linkTo(card), DISCORD);
   assert.equal(res.status, 200);
   assert.match(res.headers.get("content-type"), /^text\/html/);
   const html = await res.text();
@@ -286,9 +339,8 @@ test("Discord gets a component embed of the board, inside its limits", async () 
 });
 
 test("other previewers get the board as Open Graph text", async () => {
-  const html = await get(
-    linkTo(makeCard()),
-    "Slackbot-LinkExpanding 1.0",
+  const html = await (
+    await get(linkTo(makeCard()), "Slackbot-LinkExpanding 1.0")
   ).text();
   assert.match(
     html,
@@ -305,7 +357,7 @@ test("a card naming nothing this Worker knows gets the app's own preview", async
   const card = makeCard({
     rows: [{ inst: 999999, enc: 1, ev: 50, want: 1, pool: 4, item: 0 }],
   });
-  const html = await get(linkTo(card), DISCORD).text();
+  const html = await (await get(linkTo(card), DISCORD)).text();
   assert.equal(embedOf(html), null);
   assert.match(html, /og:title" content="Slow Your Roll · Bonus Roll EV"/);
 });
@@ -343,12 +395,105 @@ test("rows come off the bottom until the embed fits Discord's ceiling", async ()
     item: 100 + i,
   }));
   const url = linkTo(makeCard({ rows }));
-  const html = await handle(
-    new Request(url, { headers: { "user-agent": DISCORD } }),
-    /** @type {any} */ (data),
+  const html = await (
+    await handle(
+      new Request(url, { headers: { "user-agent": DISCORD } }),
+      /** @type {any} */ (data),
+      /** @type {any} */ ({ DB: fakeDB() }),
+    )
   ).text();
   const embed = embedOf(html);
   assert.ok(embed.bytes <= EMBED_BYTES, `${embed.bytes} bytes`);
   const shown = walk(embed.json.component).filter((c) => c.type === 9).length;
   assert.ok(shown > 0 && shown < CARD_ROWS, `${shown} rows`);
+});
+
+const SLUG = /^(?:[A-Z][a-z]+){3}$/;
+
+test("a long link is stored under three words, and those words read back the same card", async () => {
+  const db = fakeDB();
+  const long = linkTo(makeCard());
+  const res = await mint(long, db);
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get("access-control-allow-origin"), "*");
+  const { url } = await res.json();
+  const slug = new URL(url).pathname.slice(1);
+  assert.match(slug, SLUG);
+  assert.equal(url, `https://share.example.workers.dev/${slug}`);
+  // What's kept is the long link's query, exactly as the app wrote it.
+  assert.deepEqual([...db.rows], [[slug, new URL(long).search.slice(1)]]);
+
+  const [byWords, byLink] = await Promise.all(
+    [url, long].map((u) => get(u, DISCORD, db).then((r) => r.text())),
+  );
+  assert.deepEqual(embedOf(byWords).json, embedOf(byLink).json);
+  assert.ok(byWords.includes(`<meta property="og:url" content="${url}">`));
+});
+
+test("the same link always gets the same words, and stores nothing new", async () => {
+  const db = fakeDB();
+  const long = linkTo(makeCard());
+  const first = await (await mint(long, db)).json();
+  const again = await (await mint(long, db)).json();
+  assert.equal(again.url, first.url);
+  assert.equal(db.rows.size, 1);
+  assert.equal(
+    new URL(first.url).pathname.slice(1),
+    await slugOf(new URL(long).search.slice(1)),
+  );
+});
+
+test("words already holding a different link move on to the next pick", async () => {
+  const db = fakeDB();
+  const query = new URL(linkTo(makeCard())).search.slice(1);
+  const taken = await slugOf(query);
+  db.rows.set(taken, "report=someoneElse");
+  const { url } = await (await mint(`?${query}`, db)).json();
+  assert.equal(new URL(url).pathname.slice(1), await slugOf(query, 1));
+  assert.equal(db.rows.get(taken), "report=someoneElse", "untouched");
+});
+
+test("only what a long link can say gets stored", async () => {
+  const db = fakeDB();
+  const long = `${linkTo(makeCard())}&note=<script>alert(1)</script>&who2=Mallory`;
+  await mint(long, db);
+  const [stored] = [...db.rows.values()];
+  assert.equal(stored, new URL(linkTo(makeCard())).search.slice(1));
+  // No report, no link; and nothing long enough to be anything but abuse.
+  assert.equal(
+    (await mint("https://example.com/?who=Handstamp", db)).status,
+    400,
+  );
+  assert.equal(
+    (await mint(`?report=cqovetmadchw&x=${"a".repeat(5000)}`, db)).status,
+    413,
+  );
+  assert.equal(db.rows.size, 1);
+});
+
+test("words no link has go to the app's front page", async () => {
+  for (const path of ["NoSuchMurloc", "GreedyFelMurloc", "greedyfelmurloc"]) {
+    const res = await get(`https://share.example.workers.dev/${path}`, DISCORD);
+    assert.equal(res.status, 302, path);
+    assert.equal(res.headers.get("location"), APP);
+  }
+});
+
+test("the app can ask for short links from its own origin", async () => {
+  const res = await handle(
+    new Request("https://share.example.workers.dev/", { method: "OPTIONS" }),
+    QE_DATA,
+    /** @type {any} */ ({ DB: fakeDB() }),
+  );
+  assert.equal(res.status, 204);
+  assert.equal(res.headers.get("access-control-allow-origin"), "*");
+  assert.match(res.headers.get("access-control-allow-methods"), /POST/);
+});
+
+test("every word list makes names that split back into three words", () => {
+  for (const list of [ADJECTIVES, ELEMENTS, CREATURES]) {
+    assert.ok(list.length > 50);
+    for (const w of list) assert.match(w, /^[A-Z][a-z]+$/);
+    assert.equal(new Set(list).size, list.length, "no repeats");
+  }
 });

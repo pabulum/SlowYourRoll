@@ -8,16 +8,44 @@
 //
 // Nothing is fetched and the model never runs (src/share.js says why), so a request costs well under
 // a millisecond of CPU, and a card still draws after its Raidbots report has expired.
+//
+// A long link is a few hundred characters of query string, so the app has the Worker shorten it
+// first: a POST stores it under three words (words.js) in D1, and `/GreedyFelMurloc` then reads it
+// back and serves the same page the long link would. The long link keeps working on its own, which
+// is also what the Share button copies when the Worker can't be reached.
 
 import { CLASS_COLOR } from "../src/classes.js";
 import { SEASON, seasonWeek } from "../src/season.js";
 import { detectSource, parseMarks, readCard, shareUrl } from "../src/share.js";
+import { ADJECTIVES, CREATURES, ELEMENTS } from "./words.js";
 
 /** Where a person following a share link ends up. */
 export const APP = "https://pabulum.github.io/SlowYourRoll/";
 const ICON_CDN = "https://wow.zamimg.com/images/wow/icons/large/";
 /** Discord's ceiling on a component embed's JSON, escapes included. */
 export const EMBED_BYTES = 3000;
+
+/** A short link's path: three capitalised words. */
+const SLUG = /^(?:[A-Z][a-z]+){3}$/;
+/** The longest link worth shortening. A real one, marks and all, is a few hundred characters. */
+const MAX_LINK = 4096;
+/**
+ * Any page may ask for a short link, since all that can be stored is a link the Worker could have
+ * been handed anyway, read back through the same checks a visit gets (`mint`).
+ */
+const CORS = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-methods": "GET, POST, OPTIONS",
+  "access-control-allow-headers": "content-type",
+};
+
+/**
+ * The few D1 calls this file makes, which is all a test has to stand in for.
+ * @typedef {{ bind(...values: unknown[]): D1Statement }} D1Prepared
+ * @typedef {{ first(): Promise<any> }} D1Statement
+ * @typedef {{ prepare(sql: string): D1Prepared,
+ *   batch(statements: D1Statement[]): Promise<{ results: any[] }[]> }} D1
+ */
 
 const DEFAULT_TITLE = "Slow Your Roll · Bonus Roll EV";
 const DEFAULT_DESCRIPTION =
@@ -26,14 +54,29 @@ const DEFAULT_DESCRIPTION =
 /**
  * @param {Request} req
  * @param {import("../src/types.js").QEData} data
- * @returns {Response}
+ * @param {{ DB: D1 }} env
+ * @returns {Promise<Response>}
  */
-export function handle(req, data) {
+export async function handle(req, data, env) {
   const url = new URL(req.url);
-  if (url.pathname !== "/") return Response.redirect(APP, 302);
-  const app = appUrl(url.searchParams);
-  const card = readCard(url.searchParams);
-  const report = detectSource(url.searchParams.get("report") || "");
+  if (req.method === "OPTIONS")
+    return new Response(null, { status: 204, headers: CORS });
+  if (req.method === "POST" && url.pathname === "/")
+    return mint(req, url, env.DB);
+  if (req.method !== "GET" && req.method !== "HEAD")
+    return new Response("Method not allowed", { status: 405 });
+
+  // A short link reads back the long link's query, and from there it's the same page.
+  let params = url.searchParams;
+  if (url.pathname !== "/") {
+    const slug = url.pathname.slice(1);
+    const query = SLUG.test(slug) ? await lookup(env.DB, slug) : null;
+    if (query == null) return Response.redirect(APP, 302);
+    params = new URLSearchParams(query);
+  }
+  const app = appUrl(params);
+  const card = readCard(params);
+  const report = detectSource(params.get("report") || "");
   const view = card && report ? viewOf(card, report, app, data) : null;
   return new Response(pageHTML(url.href, app, view), {
     headers: {
@@ -41,6 +84,94 @@ export function handle(req, data) {
       // The card is fixed when the link is made, so what a URL shows never changes.
       "cache-control": "public, max-age=86400",
     },
+  });
+}
+
+/**
+ * Store a long share link under three words and answer with the short link. The words come from the
+ * link's own hash, so the same link always gets the same ones and a second click stores nothing
+ * new; a name that already holds a different link moves on to the next pick.
+ *
+ * What's stored is the link as a visit would read it, written back out by `shareUrl`, so nothing
+ * gets in that a long link couldn't have said: unknown parameters fall away, a malformed card is no
+ * card, and a link with no report is refused outright.
+ *
+ * @param {Request} req
+ * @param {URL} url
+ * @param {D1} db
+ */
+async function mint(req, url, db) {
+  const body = await req.text();
+  if (body.length > MAX_LINK) return json({ error: "Too long" }, 413);
+  let params;
+  try {
+    params = new URL(body, url).searchParams;
+  } catch {
+    return json({ error: "Not a link" }, 400);
+  }
+  const report = detectSource(params.get("report") || "");
+  if (!report) return json({ error: "No report in that link" }, 400);
+  const b = /** @type {any} */ ({
+    reportId: report.id,
+    overlay: parseMarks(params),
+  });
+  const query = shareUrl(b, "", readCard(params)).slice(1);
+  for (let n = 0; n < 4; n++) {
+    const slug = await slugOf(query, n);
+    const [, found] = await db.batch([
+      db
+        .prepare(
+          "INSERT OR IGNORE INTO links (slug, query, created) VALUES (?1, ?2, ?3)",
+        )
+        .bind(slug, query, Date.now()),
+      db.prepare("SELECT query FROM links WHERE slug = ?1").bind(slug),
+    ]);
+    if (found.results[0]?.query === query)
+      return json({ url: `${url.origin}/${slug}` });
+  }
+  return json({ error: "No free name" }, 503);
+}
+
+/**
+ * The long link's query a short link stands for, or null if no link has those words.
+ *
+ * @param {D1} db
+ * @param {string} slug
+ * @returns {Promise<string|null>}
+ */
+async function lookup(db, slug) {
+  const row = await db
+    .prepare("SELECT query FROM links WHERE slug = ?1")
+    .bind(slug)
+    .first();
+  return row ? row.query : null;
+}
+
+/**
+ * Three words for a link, picked by its hash. `n` picks again, for when the first name is taken.
+ *
+ * @param {string} query
+ * @param {number} [n]
+ */
+export async function slugOf(query, n = 0) {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(`${n}:${query}`),
+  );
+  const h = new Uint8Array(digest);
+  /** @param {string[]} list @param {number} at */
+  const pick = (list, at) => list[((h[at] << 8) | h[at + 1]) % list.length];
+  return pick(ADJECTIVES, 0) + pick(ELEMENTS, 2) + pick(CREATURES, 4);
+}
+
+/**
+ * @param {unknown} body
+ * @param {number} [status]
+ */
+function json(body, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json", ...CORS },
   });
 }
 

@@ -7,5 +7,15 @@
   "main": "worker.js",
   "compatibility_date": "2026-09-01",
   "workers_dev": true,
-  "preview_urls": false
+  "preview_urls": false,
+  // Short links' words and the long links behind them (share/schema.sql). D1 rather than KV
+  // because a link is read from wherever Discord's crawler is, seconds after it was written from
+  // wherever the sharer is, and KV can take a minute to show a new key to another location.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "slowyourroll",
+      "database_id": "c6946457-dc83-41ae-b83b-4885e99853a4"
+    }
+  ]
 }

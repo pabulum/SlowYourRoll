@@ -6,8 +6,11 @@ import data from "../data/qe-data.json" with { type: "json" };
 import { handle } from "./card.js";
 
 export default {
-  /** @param {Request} req */
-  fetch(req) {
-    return handle(req, /** @type {any} */ (data));
+  /**
+   * @param {Request} req
+   * @param {any} env  Bindings from wrangler.jsonc: `DB`, the short links.
+   */
+  fetch(req, env) {
+    return handle(req, /** @type {any} */ (data), env);
   },
 };
