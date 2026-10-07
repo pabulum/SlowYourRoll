@@ -1,7 +1,8 @@
-name: Deploy to GitHub Pages
+name: Deploy
 
-# Publishes the static site to GitHub Pages on every push to main, but only after CI
-# passes. In the repo settings, set Pages → Build and deployment → Source to "GitHub Actions".
+# Publishes the static site to GitHub Pages, and the share Worker to Cloudflare, on every push to
+# main, but only after CI passes. In the repo settings, set Pages → Build and deployment → Source to
+# "GitHub Actions".
 
 on:
   push:
@@ -46,3 +47,26 @@ jobs:
           path: _site
       - id: deployment
         uses: actions/deploy-pages@v5
+
+  # The share Worker (share/), which turns share links into Discord cards. Shipped from the same
+  # commit as the site, so the link format the app writes and the one the Worker reads move together,
+  # and a merged data refresh reaches the Worker's item names without anyone remembering to redeploy.
+  # Its own job rather than a step of the one above: a Cloudflare hiccup shouldn't hold the site back.
+  share:
+    needs: check
+    runs-on: ubuntu-latest
+    # The Cloudflare API token is a secret of this environment, which only main can deploy from
+    # (Settings → Environments → cloudflare), so no pull request's workflow can read it. The token
+    # itself can only edit Workers in the one Cloudflare account that holds this Worker.
+    environment:
+      name: cloudflare
+      url: https://slowyourroll-share.careful-agate-b2f.workers.dev/
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+      - run: npm run share:deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          WRANGLER_SEND_METRICS: "false"

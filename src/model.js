@@ -19,6 +19,7 @@ import {
   tokenWeekNow,
   trackStep,
 } from "./season.js";
+import { CARD_ROWS } from "./share.js";
 import { simcOf, state } from "./store.js";
 
 /**
@@ -1100,6 +1101,64 @@ export function buildGroups(b) {
     diffs,
     keyLevel: keyed ? keyed.keyLevel : null,
     unknown: Object.values(unknown),
+  };
+}
+
+/**
+ * The upgrades still in a row's pool, best first: what its EV is made of. An item this loot spec
+ * can't be awarded is listed on the row but isn't in the pool, so it can't be what carries it.
+ *
+ * @param {import("./types.js").Row} r
+ */
+export function upgradesOf(r) {
+  return r.items.filter(
+    (i) => i.elig !== false && i.state === "want" && i.score > 0,
+  );
+}
+
+/**
+ * The card a share link carries for this board: its best rolls, ranked and priced as this page
+ * shows them. src/share.js says why a link carries the numbers rather than a way to work them out.
+ *
+ * Only rows worth a roll make it, by the verdict's own `ev > 0` cut, and each names the upgrade that
+ * carries it, as the verdict does. Null when there's nothing worth a card, or no spec to say whose.
+ *
+ * @param {import("./types.js").Board} b
+ * @param {ReturnType<typeof buildGroups>} built
+ * @param {Date} [now]
+ * @returns {import("./share.js").Card|null}
+ */
+export function cardOf(b, built, now) {
+  const spec = activeLootSpec(b);
+  const rows = built.rows.filter((r) => r.ev > 0).slice(0, CARD_ROWS);
+  if (!spec || !rows.length) return null;
+  const fac = facOf(b);
+  return {
+    who: b.player,
+    spec: String(spec),
+    unit: /** @type {import("./share.js").CardUnit} */ (
+      (b.metric === "pct" ? "pct-" : "") + rawUnitOf(b).toLowerCase()
+    ),
+    diff:
+      built.selDiff != null && rows.some((r) => r.g.type === "raid")
+        ? diffKey(b, built.selDiff)
+        : null,
+    key: rows.some((r) => r.g.type === "dungeon") ? built.keyLevel : null,
+    payout: rollScored(b),
+    at: Math.floor((now || new Date()).getTime() / 1000),
+    rows: rows.map((r) => {
+      const [inst, enc] = r.g.key.split(":").map(Number);
+      const v = r.ev * fac;
+      return {
+        inst,
+        enc,
+        // Three significant figures is plenty to rank by, and keeps the link short.
+        ev: v >= 100 ? Math.round(v) : Number(v.toPrecision(3)),
+        want: r.nWant,
+        pool: r.remaining,
+        item: upgradesOf(r)[0]?.id || 0,
+      };
+    }),
   };
 }
 

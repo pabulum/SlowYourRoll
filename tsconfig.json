@@ -16,6 +16,8 @@
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true
   },
-  "include": ["src/**/*.js"],
-  "exclude": ["node_modules"]
+  // share/worker.js is left out: it only imports the database, which TypeScript would otherwise
+  // infer a type for from all 1.2 MB of it.
+  "include": ["src/**/*.js", "share/**/*.js"],
+  "exclude": ["node_modules", "share/worker.js"]
 }

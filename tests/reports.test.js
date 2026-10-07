@@ -2,14 +2,12 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   backfillEquipped,
-  detectSource,
   equippedBonus,
   equippedMap,
   loadSharedReport,
   parseDroptimizer,
-  parseMarks,
-  shareUrl,
 } from "../src/reports.js";
+import { detectSource, parseMarks, shareUrl } from "../src/share.js";
 import { state } from "../src/store.js";
 
 test("detectSource recognizes Raidbots links and long ids", () => {

@@ -27,6 +27,7 @@ import {
   rollScored,
   simcLootSpec,
   unitOf,
+  upgradesOf,
   vaultChoice,
   vaultStatus,
 } from "./model.js";
@@ -1352,8 +1353,7 @@ function renderVerdict(built, b) {
     return;
   }
   const next = built.rows.find((r) => r.ev > 0 && r.g.key !== best.g.key);
-  const top = best.items
-    .filter((i) => i.state === "want" && i.score > 0)
+  const top = upgradesOf(best)
     .slice(0, 2)
     .map((i) => html`${i.name}${i.vr ? " ✦" : ""} (${dv(b, i.score)})`);
   const dl = best.g.type === "raid" ? diffLabel(b, built.selDiff) : "M+";

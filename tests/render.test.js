@@ -123,6 +123,34 @@ test("the verdict names the encounter the ranking sends you to", () => {
   );
 });
 
+test("the verdict's 'carried by' only names items this loot spec can be awarded", () => {
+  // A real drop off the boss that some spec can't receive, scored far above the other upgrade. It
+  // stays listed on the card, but it's out of the pool, so it isn't what the EV is made of.
+  const [id, item] = Object.entries(QE_DATA.items).find(
+    ([, it]) => it.p && it.s.some((s) => s[0] === RAID_ID && s[1] === ENC_ID),
+  );
+  const lootSpec = Object.keys(QE_DATA.specs).find(
+    (s) => !item.p.includes(Number(s)),
+  );
+  const row = (itemId, score) => ({
+    item: itemId,
+    inst: RAID_ID,
+    enc: ENC_ID,
+    diff: "mythic",
+    level: 639,
+    score,
+  });
+  const doc = renderWith([
+    makeBoard({ lootSpec, results: [row(Number(id), 100), row(900001, 10)] }),
+  ]);
+  const why = doc.querySelector("#verdict .why").textContent;
+  assert.match(why, /carried by/);
+  assert.doesNotMatch(
+    why,
+    new RegExp(item.n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+  );
+});
+
 test("with no upgrades anywhere the verdict says hold the token instead of ranking nothing", () => {
   const doc = renderWith([
     makeBoard({

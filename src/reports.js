@@ -6,27 +6,13 @@
 import { loadQEData } from "./data.js";
 import { $, toast } from "./dom.js";
 import { render } from "./render.js";
+import { detectSource, parseMarks } from "./share.js";
 import { applySimc, parseSimc } from "./simc.js";
 import { keyOf, save, state, uid } from "./store.js";
 
 const QE_API =
   "https://questionablyepic.com/api/getUpgradeReport.php?reportID=";
 const DROPT_URL = "https://www.raidbots.com/reports/";
-
-/** Detect which source a pasted link/code refers to. Returns { source, id } or null. */
-export function detectSource(v) {
-  v = (v || "").trim();
-  if (!v) return null;
-  if (/raidbots\.com/i.test(v)) {
-    const m = v.match(/reports?\/([A-Za-z0-9]+)/);
-    return m ? { source: "droptimizer", id: m[1] } : null;
-  }
-  const q = v.match(/upgradereport\/([A-Za-z0-9]+)/);
-  if (q) return { source: "qe", id: q[1] };
-  if (/^[A-Za-z0-9]{20,}$/.test(v)) return { source: "droptimizer", id: v }; // raidbots ids are long
-  if (/^[A-Za-z0-9]{6,16}$/.test(v)) return { source: "qe", id: v };
-  return null;
-}
 
 /** Fetch a detected report ({ source, id }) and merge it into state. Always resolves. */
 async function fetchReport(d) {
@@ -118,52 +104,6 @@ export function loadReport() {
     btn.disabled = false;
     btn.textContent = "Load report";
   });
-}
-
-/** An overlay key, "instId:encId:itemId" — the only shape a share link's marks may take. */
-const MARK_KEY = /^-?\d+:\d+:\d+$/;
-
-/**
- * The share link for a board: the report id, plus the items marked Rolled or Own. The report alone
- * reproduces the scores, but not the pool — an item already rolled is out of it, and without the
- * marks the recipient sees EVs for rolls the sharer can't make any more. Marks come from the
- * overlay, which already holds both what was clicked and what a /simc logged (`applySimc`).
- * Separators are left unencoded, so a link stays readable when pasted into chat.
- *
- * @param {import("./types.js").Board} b
- * @param {string} base  The page's own URL, without query or hash.
- */
-export function shareUrl(b, base) {
-  const byState = { rolled: [], own: [] };
-  Object.keys(b.overlay || {}).forEach((k) => {
-    const s = b.overlay[k];
-    if (byState[s] && MARK_KEY.test(k)) byState[s].push(k);
-  });
-  let url = `${base}?report=${encodeURIComponent(b.reportId)}`;
-  if (byState.rolled.length)
-    url += `&rolled=${byState.rolled.sort().join(",")}`;
-  if (byState.own.length) url += `&own=${byState.own.sort().join(",")}`;
-  return url;
-}
-
-/**
- * The marks a share link carries, as overlay entries. Anything that isn't a well-formed key is
- * dropped: the link is someone else's input, and the overlay is persisted.
- *
- * @param {URLSearchParams} params
- * @returns {Record<string, "own"|"rolled">}
- */
-export function parseMarks(params) {
-  /** @type {Record<string, "own"|"rolled">} */
-  const out = {};
-  for (const s of /** @type {const} */ (["own", "rolled"]))
-    (params.get(s) || "")
-      .split(",")
-      .filter((k) => MARK_KEY.test(k))
-      .forEach((k) => {
-        out[k] = s;
-      });
-  return out;
 }
 
 /**

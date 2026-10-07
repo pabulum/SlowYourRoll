@@ -6,8 +6,10 @@
 // thrown away with the row it was attached to — see `on` below.
 
 import { $, setShown, toast } from "./dom.js";
+import { buildGroups, cardOf } from "./model.js";
 import { closeBoardMenu, render } from "./render.js";
-import { loadReport, shareUrl } from "./reports.js";
+import { loadReport } from "./reports.js";
+import { SHARE_HOST, shareUrl } from "./share.js";
 import { readSimc } from "./simc.js";
 import { active, replaceState, save, simcOf, state } from "./store.js";
 
@@ -266,10 +268,13 @@ export function initUI() {
 
   // Share the active report as a ?report= link. The recipient fetches the same scores fresh; what
   // travels besides the report id is the Rolled/Own marks, so their pools match ours (`shareUrl`).
-  // Token overrides and the vault stay local.
+  // Token overrides and the vault stay local. Once there's a share Worker, the link goes through it
+  // and carries the board's top rows too, for the link preview (src/share.js).
   $("shareBoard").addEventListener("click", () => {
     const b = active();
-    const url = shareUrl(b, location.href.replace(/[?#].*$/, ""));
+    const url = SHARE_HOST
+      ? shareUrl(b, SHARE_HOST, cardOf(b, buildGroups(b)))
+      : shareUrl(b, location.href.replace(/[?#].*$/, ""));
     navigator.clipboard.writeText(url).then(
       () =>
         toast(

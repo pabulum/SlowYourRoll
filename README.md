@@ -596,11 +596,25 @@ QE Live reports are the exception: they carry only item ids, and the loot table 
 
 ## Sharing a report
 
-The link button next to the report picker copies a link like `…/?report=<code>`. Opening it
-loads that report before anything is pasted — handy for handing a character's board to a
-guild officer. Only the report id travels: the recipient fetches the same scores fresh from
-QE Live / Raidbots, while rolled history, Own/Rolled marks, and token overrides stay in each
-person's own browser. Raidbots links expire when the underlying report does (~30 days).
+The link button next to the report picker copies a share link. Opening it loads that report
+before anything is pasted — handy for handing a character's board to a guild officer. The link
+carries the report id and the Rolled/Own marks, so the recipient's pools match yours; they fetch
+the scores fresh from QE Live / Raidbots, while token overrides and the vault stay in each person's
+own browser. Raidbots links expire when the underlying report does (~30 days).
+
+Pasted into Discord, a share link unfurls as the board: the top five rolls with their EV per
+token, upgrades left in each pool, and the item carrying each one. That takes a server, because
+Discord reads link previews without running any script and GitHub Pages serves the same page for
+every link. So share links point at a small Cloudflare Worker (`share/`, address in `SHARE_HOST`
+in `src/share.js`), which serves the preview — a Discord
+[component embed](https://docs.discord.com/developers/link-previews/component-embeds) plus Open
+Graph tags for everything else — and sends a person's browser straight on to the app.
+
+The Worker never fetches a report or runs the model: the app writes the card's numbers into the
+link when it makes it, and the Worker only looks up names and icons. That keeps it far inside the
+free plan's 10 ms of CPU per request (a cold `buildGroups` alone costs about that), and a card
+still draws after its Raidbots report has expired. The card is a snapshot, dated with a Discord
+timestamp ("shared 2 hours ago"); the board behind the link is live.
 
 ## Running locally
 
@@ -694,12 +708,15 @@ src/
   simc.js           Parsing the /simc addon export (vault, owned, roll history)
   render.js         All DOM rendering
   ui.js             Event wiring, theme toggle, export/import
+  share.js          The share link's format, read by both the app and the share Worker
   html.js           The `html` tagged template — escaping by default
   dom.js            Element-id registry, typed `$`, and the mutations the app makes
   wowhead.js        Item links and the tooltip widget's payload
   types.js          JSDoc type definitions (no runtime code)
 data/
   qe-data.json      Generated encounter + item database (see src/types.js QEData for its shape)
+share/              The share Worker: link previews for share links (see "Sharing a report")
+  card.js           What it serves; worker.js is its entry point, wrangler.jsonc its config
 scripts/
   build-data.mjs    Regenerates data/qe-data.json from a QuestionablyEpic checkout
   serve.mjs         Zero-dependency static server for local development
@@ -711,6 +728,13 @@ tests/              node:test suites; page.js supplies the real DOM
 The site is fully static. Push to GitHub and enable Pages for the branch/root, or let the
 included workflow at `.github/workflows/pages.yml` deploy on every push to `main` (set
 Pages → Source to "GitHub Actions" in the repo settings).
+
+The same workflow deploys the share Worker to Cloudflare's free Workers plan. It reads a
+`CLOUDFLARE_API_TOKEN` secret from the repo's `cloudflare` environment, which only `main` can deploy
+from, and the token can only edit Workers in the one Cloudflare account that holds this Worker.
+The Worker bundles `data/qe-data.json` for item and boss names, so redeploying on every push to
+`main` is also what keeps a merged data refresh from leaving new items nameless on cards. To deploy
+it by hand: `npx wrangler login` once, then `npm run share:deploy`.
 
 ## Disclaimer
 
