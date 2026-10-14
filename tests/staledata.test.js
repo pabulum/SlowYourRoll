@@ -10,13 +10,15 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { QE_DATA } from "../src/data.js";
 import { buildGroups, resolve } from "../src/model.js";
-import { SEASON } from "../src/season.js";
+import { SEASON, seasonDrift } from "../src/season.js";
 import { state } from "../src/store.js";
 
 // Ids chosen to be absent from any real database: Blizzard instance ids are ~4 digits.
 const FUTURE_RAID = 999901;
 const FUTURE_BOSS = 999801;
 const FUTURE_DUNGEON = 999701;
+// And an item id no database has, for reports that name only the item.
+const FUTURE_ITEM = 999601;
 
 /** A Droptimizer board whose drops come from a raid this build has never heard of. */
 function futureBoard() {
@@ -246,5 +248,100 @@ test("unknown sources hidden by a filter don't raise a warning", () => {
     built.unknown,
     [],
     "the filtered-out normal row raises nothing",
+  );
+});
+
+/* ---------- QE reports: new content the database can't place ----------
+   A QE row names an item and nothing else; the database says which boss drops it. So an item the
+   database has never heard of can't be put at any boss, and the Droptimizer path above — rank the
+   unknown source, flag it — has nothing to work with. 12.1.5 launched Kith'ix like that, and every
+   one of its rows vanished from the ranking with nothing on the page to say a boss was missing. */
+
+/** A 12.1 QE board: one known raid item at Mythic, plus whatever rows a test adds. */
+function qeBoard(extra = []) {
+  const raidId = Number(QE_DATA.currentRaids[0]);
+  const encId = Object.keys(QE_DATA.raids[String(raidId)].bosses)[0];
+  const known = Number(
+    Object.keys(QE_DATA.items).find((id) =>
+      QE_DATA.items[id].s.some(
+        (x) => x[0] === raidId && String(x[1]) === encId,
+      ),
+    ),
+  );
+  const row = (item, over = {}) => ({
+    item,
+    dropLoc: "Raid",
+    dropType: "bonus",
+    dropDifficulty: 3,
+    level: 334,
+    score: 0,
+    rawDiff: 100,
+    percDiff: 1,
+    ...over,
+  });
+  return {
+    ...futureBoard(),
+    source: "qe",
+    results: [row(known), ...extra.map((over) => row(FUTURE_ITEM, over))],
+  };
+}
+
+test("a QE report's items the database doesn't know are reported, not dropped in silence", () => {
+  state.showAll = false;
+  state.simc = {};
+  const built = buildGroups(qeBoard([{}, { dropType: "drop", level: 318 }]));
+  assert.equal(built.rows.length, 1, "the known boss still ranks");
+  assert.deepEqual(built.unplaced, [FUTURE_ITEM], "once per item, not per row");
+  assert.deepEqual(
+    built.unknown,
+    [],
+    "it has no source, and `unknown` names sources",
+  );
+});
+
+test("a dungeon row the database doesn't know is reported too", () => {
+  state.showAll = false;
+  state.simc = {};
+  const built = buildGroups(
+    qeBoard([{ dropLoc: "Dungeon", dropDifficulty: 7 }]),
+  );
+  assert.deepEqual(built.unplaced, [FUTURE_ITEM]);
+});
+
+test("unknown crafted gear and Delve rewards raise nothing: they're never roll targets", () => {
+  state.showAll = false;
+  state.simc = {};
+  const built = buildGroups(
+    qeBoard([{ dropLoc: "Crafted" }, { dropLoc: "Delves" }]),
+  );
+  assert.deepEqual(built.unplaced, []);
+});
+
+test("an unknown item at a difficulty that isn't on screen raises nothing", () => {
+  state.showAll = false;
+  state.simc = {};
+  const built = buildGroups(qeBoard([{ dropDifficulty: 2 }]));
+  assert.equal(built.selDiff, "3");
+  assert.deepEqual(built.unplaced, []);
+});
+
+test("a Droptimizer never has unplaced items: it names its sources itself", () => {
+  state.showAll = false;
+  state.simc = {};
+  assert.deepEqual(buildGroups(futureBoard()).unplaced, []);
+});
+
+// The data refresh (.github/workflows/data-refresh.yml) runs these checks on the rebuilt database and
+// reports them on its PR, and the deploy is gated on them. A raid list that moved without
+// src/season.js moving with it would put the "newer season" banner on the live site, which is plain
+// wrong for a raid added mid-season — 12.1.5 added Kith'ix that way — so it fails here first, and
+// says which of the two fixes applies.
+test("the shipped database lists the raids the active season is configured for", () => {
+  assert.equal(
+    seasonDrift(QE_DATA),
+    false,
+    `data/qe-data.json lists raids ${QE_DATA.currentRaids.join(", ")}, src/season.js expects ` +
+      `${(SEASON.qeRaids || []).join(", ")}. A new season: bump ACTIVE. A raid added ` +
+      "mid-season: add its id to that season's qeRaids.",
   );
 });

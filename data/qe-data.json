@@ -1,7 +1,7 @@
 {
   "_meta": {
     "note": "Generated — do not hand-edit. Regenerate with `npm run data` (scripts/build-data.mjs). Shape: src/types.js QEData.",
-    "source": "QuestionablyEpic @ 3e998d449",
+    "source": "QuestionablyEpic @ e88c8e432",
     "qeSeasonId": 37
   },
   "currentDungeons": [
@@ -14,7 +14,7 @@
     "1202",
     "1030"
   ],
-  "currentRaids": ["1320", "1317"],
+  "currentRaids": ["1320", "1317", "1324"],
   "dungeons": {
     "1030": "Temple of Sethraliss",
     "1041": "Kings Rest",
@@ -56884,7 +56884,7 @@
       "c": 4,
       "ic": "inv_boot_mail_outdooramaniloa_c_01",
       "iv": 8,
-      "n": "Galerider's Chausses",
+      "n": "Galerider's Footguards",
       "q": 4,
       "s": [[-98, -98]],
       "sc": "mc",
@@ -57999,6 +57999,73 @@
       "st": "i",
       "u": 0
     },
+    "280617": {
+      "c": 4,
+      "ic": "inv_1215_trinket_shield_fragment",
+      "iv": 12,
+      "n": "Lightbearer's Shield Fragment",
+      "p": [66, 73, 104, 250, 268, 581],
+      "q": 4,
+      "s": [[1324, 2896]],
+      "st": "as",
+      "u": 0
+    },
+    "280799": {
+      "c": 2,
+      "ic": "inv_sword_2h_raidmidnight_d_01",
+      "iv": 17,
+      "n": "Lu'selama, Light's Justice",
+      "q": 4,
+      "s": [[1324, 2896]],
+      "st": "s",
+      "u": 8
+    },
+    "280835": {
+      "c": 4,
+      "ic": "inv_1215_trinket_eclipse_sigil",
+      "iv": 12,
+      "n": "Sigil of the Impending Eclipse",
+      "p": [65, 105, 256, 257, 264, 270, 1468],
+      "q": 4,
+      "s": [[1324, 2896]],
+      "st": "i",
+      "u": 0
+    },
+    "281029": {
+      "c": 4,
+      "ic": "acidbroodscourge_8268560",
+      "iv": 11,
+      "n": "Band of the Swarmcaller",
+      "q": 4,
+      "s": [[1324, 2896]],
+      "sc": "mh",
+      "u": 0
+    },
+    "281056": {
+      "c": 2,
+      "ic": "inv_sword_1h_raidmidnight_d_01",
+      "iv": 13,
+      "n": "Sanctified Knight's Phoenixblade",
+      "q": 4,
+      "s": [[1324, 2896]],
+      "sc": "mc",
+      "st": "i",
+      "u": 7
+    },
+    "281215": {
+      "c": 4,
+      "ic": "twistedhorrorstendril_8268563",
+      "iv": 12,
+      "n": "Twisted Horror's Tendril",
+      "p": [
+        62, 63, 64, 70, 71, 72, 102, 103, 251, 252, 253, 254, 255, 258, 259,
+        260, 261, 262, 263, 265, 266, 267, 269, 577, 1467, 1473, 1480
+      ],
+      "q": 4,
+      "s": [[1324, 2896]],
+      "st": "asi",
+      "u": 0
+    },
     "281227": {
       "c": 4,
       "ic": "inv_helm_armor_hextrollpriestess_d_01",
@@ -58007,6 +58074,50 @@
       "q": 3,
       "s": [[1320, 2888]],
       "u": 5
+    },
+    "281235": {
+      "c": 4,
+      "ic": "inv_pant_cloth_raidmageulatek_d_01",
+      "iv": 7,
+      "n": "Voidweaver's Leggings",
+      "q": 4,
+      "s": [[1324, 2896]],
+      "sc": "mc",
+      "st": "i",
+      "u": 1
+    },
+    "281236": {
+      "c": 4,
+      "ic": "inv_chest_leather_raidrogueulatek_d_01",
+      "iv": 5,
+      "n": "Chestwrap of Palpable Terror",
+      "q": 4,
+      "s": [[1324, 2896]],
+      "sc": "hc",
+      "st": "ai",
+      "u": 2
+    },
+    "281238": {
+      "c": 4,
+      "ic": "inv_glove_mail_raidhunterulatek_d_01",
+      "iv": 10,
+      "n": "Aberrant Commander's Gauntlets",
+      "q": 4,
+      "s": [[1324, 2896]],
+      "sc": "cm",
+      "st": "ai",
+      "u": 3
+    },
+    "281239": {
+      "c": 4,
+      "ic": "inv_helm_plate_raidwarriorulatek_d_01",
+      "iv": 1,
+      "n": "Corroded Hulk's Skullcap",
+      "q": 4,
+      "s": [[1324, 2896]],
+      "sc": "mh",
+      "st": "si",
+      "u": 4
     }
   },
   "raids": {
@@ -58195,6 +58306,13 @@
       },
       "name": "Venomous Abyss",
       "order": ["2888", "2874", "2894", "2882", "2871", "2887", "2883", "2895"]
+    },
+    "1324": {
+      "bosses": {
+        "2896": "Kith'ix"
+      },
+      "name": "Unbinding of Kith'ix",
+      "order": ["2896"]
     }
   },
   "seasonId": 37,

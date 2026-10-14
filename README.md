@@ -342,6 +342,11 @@ npm run data -- --qe=/path/to/QELive  # explicit checkout
 npm run data:check                    # report drift without writing
 ```
 
+`.github/workflows/data-refresh.yml` does this every evening (9:17 PM US Eastern) against QE's
+`master` and opens (or updates) one PR when the result differs. QE merges a patch on patch Tuesday
+evening (6:24 PM Eastern for 12.1.5) and keeps fixing loot for weeks after on any day, so a weekly
+run — it used to be Monday mornings — sat on 12.1.5 for six days.
+
 QE writes those databases in TypeScript and renames them between patches (`InstanceDB.js` became
 `InstanceDB.ts` on the 12.1 branch), so the build tries both spellings and erases types with Node's
 own stripper before evaluating them. A new season usually lands on a patch branch weeks before it
@@ -367,10 +372,16 @@ day patch 12.1 went live; the raid itself opens on the 18th, so through pre-seas
 content that is listed but not yet lootable, and the week copy says so by reporting week 0.
 
 The build warns when the database has moved to a season the build doesn't know about, and it
-watches the **current raid list** to do it, not QE's `seasonID`. Upstream carried the same season id
-(34) across Midnight's Season 1 → 2 boundary while swapping every raid underneath it, so an id check
-would have sat silent through the one rollover it existed to catch. Each season therefore records
-the raid ids it expects in `qeRaids`.
+watches the **current raid list** to do it, not QE's `seasonID`. Upstream went live on Season 2 with
+every raid swapped and Season 1's season id (34) unchanged, and only moved the id a day later, so an
+id check would have sat silent through the one rollover it existed to catch. Each season therefore
+records the raid ids it expects in `qeRaids`.
+
+The list also moves mid-season, when a patch adds a raid: 12.1.5 appended Unbinding of Kith'ix
+(1324), a one-boss raid. That's not a new season, so the fix is adding the id to `qeRaids` rather
+than bumping `ACTIVE`. Either way a test (`tests/staledata.test.js`) fails while the shipped
+database and `qeRaids` disagree, so a refresh that needs either edit fails its checks, and can't
+deploy, until it has it. The refresh PR says which of the two it needs.
 
 Season 2 also promotes what a roll pays out — a Mythic boss hands back a fully upgraded Myth item
 rather than the drop — so that season's table carries item levels as well as tracks. They're read
@@ -539,8 +550,9 @@ ends on Coiled Altar (2883) — sixth of eight by id. Sorting badged Lost Explor
 the wrong boss to tell someone to bank a token for.
 
 And the badge is gated on the season naming its tier raid (`special.raid`), because Season 2 ranks
-two raids: the tier raid and Tidebound Grotto, a one-boss flex world boss. "The last two bosses" of
-a one-boss raid is that boss, so without the gate the world boss wore the badge too.
+more raids than that one: Tidebound Grotto, a one-boss flex world boss, and from 12.1.5 Kith'ix, a
+one-boss raid. "The last two bosses" of a one-boss raid is that boss, so without the gate the world
+boss wore the badge too.
 
 The badge is also gated on **difficulty**, because "Venomcursed 9/6" quotes an item level and an
 item level is a claim about the roll it's attached to. Those bosses carry their tier at Mythic only;
@@ -592,7 +604,10 @@ encounter `999`, world drops under a negative encounter id). So the warning only
 database is behind."
 
 QE Live reports are the exception: they carry only item ids, and the loot table comes entirely from
-`data/qe-data.json`. A new season's items won't resolve to any source until you regenerate.
+`data/qe-data.json`. A new season's items won't resolve to any source until you regenerate. Those
+items used to vanish without a word, which is how 12.1.5's Kith'ix went missing on launch day; the
+banner now counts them instead (`unplacedItems` in `src/model.js`), limited to raid and dungeon rows
+at the difficulty on screen.
 
 ## Sharing a report
 

@@ -212,20 +212,37 @@ test("asking for no final bosses, or for an unknown raid, names none", () => {
 });
 
 // `finalBosses` answers for any raid; only the season's named tier raid gets the badge. Season 2
-// ranks a one-boss flex world boss alongside the tier raid, and "the last two bosses" of a one-boss
-// raid is that boss — so without the gate the world boss wore the Venomcursed badge.
+// ranks one-boss raids alongside the tier raid — Tidebound Grotto, and from 12.1.5 Kith'ix — and
+// "the last two bosses" of a one-boss raid is that boss, so without the gate the world boss wore the
+// Venomcursed badge.
 test("only the season's tier raid carries the end-of-raid badge", () => {
   const sp = SEASON.special;
   if (!sp?.raid) return; // a season with one raid needs no gate
   const others = QE_DATA.currentRaids.filter((id) => id !== String(sp.raid));
   assert.ok(others.length, "Season 2 ranks more than one raid");
+  state.showAll = false;
+  state.simc = {};
+  // A scored result at every boss of every other raid, so each one has a row to check. Rows only in
+  // the tier raid — what this test used to build — pass whatever the gate does.
+  const b = makeBoard();
+  let item = 900100;
+  b.results = others.flatMap((id) =>
+    Object.keys(QE_DATA.raids[id].bosses).map((enc) => ({
+      item: item++,
+      inst: Number(id),
+      enc: Number(enc),
+      diff: "mythic",
+      level: 639,
+      score: 10,
+    })),
+  );
+  const rows = buildGroups(b).rows;
   for (const id of others) {
-    const bosses = Object.keys(QE_DATA.raids[id].bosses);
-    for (const enc of bosses) {
+    for (const enc of Object.keys(QE_DATA.raids[id].bosses)) {
+      const row = rows.find((r) => r.g.key === `${id}:${enc}`);
+      assert.ok(row, `${QE_DATA.raids[id].name} ranks`);
       assert.equal(
-        buildGroups(makeBoard()).rows.some(
-          (r) => r.g.key === `${id}:${enc}` && r.g.special,
-        ),
+        row.g.special,
         false,
         `${QE_DATA.raids[id].name} is not the tier raid`,
       );

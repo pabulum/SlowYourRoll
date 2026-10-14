@@ -419,6 +419,34 @@ test("a report the database can't identify is ranked and the banner says so", (t
   );
 });
 
+// A QE row names only the item, so an item the database lacks can't be ranked at all — which is how
+// Kith'ix went missing on 12.1.5's launch day with nothing on screen. It can at least be said.
+test("a QE report's items the database can't place put the banner up", (t) => {
+  t.mock.method(console, "warn", () => {});
+  const doc = renderWith([
+    makeBoard({
+      source: "qe",
+      results: [
+        {
+          item: 999601,
+          dropLoc: "Raid",
+          dropType: "bonus",
+          dropDifficulty: 3,
+          level: 334,
+          score: 0,
+          rawDiff: 50,
+          percDiff: 1,
+        },
+      ],
+    }),
+  ]);
+  assert.equal(doc.getElementById("dataNote").hasAttribute("hidden"), false);
+  assert.match(
+    doc.getElementById("dataNote").textContent.replace(/\s+/g, " "),
+    /1 item in this report isn't in the site's item data yet/,
+  );
+});
+
 test("known content raises no staleness banner", () => {
   const doc = renderWith([makeBoard()]);
   assert.equal(doc.getElementById("dataNote").hasAttribute("hidden"), true);

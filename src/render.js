@@ -570,12 +570,14 @@ export function renderRewards(here, keyLevel) {
 
 /**
  * Warn when the encounter database has fallen behind what we're being asked to rank.
- * Two independent signals: sources in this report the database can't identify (a new raid, most
- * likely), and the database itself having moved to a season this build wasn't configured for.
+ * Three independent signals: sources in this report the database can't identify (a new raid, most
+ * likely), items in a QE report it can't place at any source (the same thing, seen through a report
+ * that doesn't name its sources), and the database itself having moved to a season this build
+ * wasn't configured for.
  *
- * Both are the site's problem to fix, not the visitor's — the banner says what it means for the
- * numbers on screen and stops there. The maintainer's fix (`npm run data`, `src/season.js`) needs
- * a local checkout nobody browsing the site has, so it goes to the console instead.
+ * All three are the site's problem to fix, not the visitor's — the banner says what it means for
+ * the numbers on screen and stops there. The maintainer's fix (`npm run data`, `src/season.js`)
+ * needs a local checkout nobody browsing the site has, so it goes to the console instead.
  */
 function renderDataNote(built) {
   const parts = [];
@@ -601,6 +603,25 @@ function renderDataNote(built) {
         ". Maintainer fix: rerun `npm run data` against a current QuestionablyEpic checkout and commit data/qe-data.json.",
     );
   }
+  if (built.unplaced.length) {
+    const n = built.unplaced.length,
+      many = n > 1;
+    parts.push(
+      html`<b
+          >${n} item${many ? "s" : ""} in this report ${many ? "aren't" : "isn't"}
+          in the site's item data yet,</b
+        >
+        so ${many ? "they're" : "it's"} left out of the ranking: a QE report
+        doesn't say which boss drops what, and the site can't place
+        ${many ? "them" : "it"} without that. Usually means new content just went
+        live. Clears up once the site's data catches up.`,
+    );
+    console.warn(
+      "[SlowYourRoll] Item database is missing report items: " +
+        built.unplaced.join(", ") +
+        ". Maintainer fix: rerun `npm run data` against a current QuestionablyEpic checkout and commit data/qe-data.json.",
+    );
+  }
   if (seasonDrift(QE_DATA)) {
     parts.push(
       html`<b
@@ -616,7 +637,8 @@ function renderDataNote(built) {
         (QE_DATA.currentRaids || []).join(", ") +
         ", but src/season.js is configured for " +
         (SEASON.qeRaids || []).join(", ") +
-        ". Maintainer fix: bump ACTIVE in src/season.js.",
+        ". Maintainer fix: in src/season.js, bump ACTIVE for a new season, or add the new id to " +
+        "that season's qeRaids for a raid added mid-season.",
     );
   }
   setShown("dataNote", parts.length > 0);

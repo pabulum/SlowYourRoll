@@ -6,11 +6,20 @@ name: Refresh QE data
 #
 # The PR says whether the checks passed on the new data. A failure is usually not a bug — it is the
 # journal fixtures (tests/journal.test.js) disagreeing with a Blizzard loot change, which needs
-# someone to look at the in-game journal before the fixture is edited to match.
+# someone to look at the in-game journal before the fixture is edited to match — or a raid list that
+# moved without src/season.js (tests/staledata.test.js), which the PR body says how to fix.
 
 on:
   schedule:
-    - cron: "17 14 * * 1" # Mondays, before the Tuesday reset
+    # Every evening, US Eastern. QE merges a patch into master on patch Tuesday evening — 7:44 PM for
+    # 12.1, 6:24 PM for 12.1.5 — and keeps pushing loot fixes for weeks after, on any day: 7 of the
+    # 11 pushes that changed this data between 12.1 and 12.1.5 landed on a day other than Tuesday. So
+    # daily, timed after the patch-day window. It used to be Monday mornings, which missed 12.1.5 by
+    # a day and then sat on it for six. A quiet day is a 25-second no-op, and a busy one updates the
+    # one open PR rather than opening another. GitHub runs schedules late under load (the Monday runs
+    # started 6–8 hours after 14:17 UTC), so this is a floor on the time, not the time.
+    - cron: "17 21 * * *"
+      timezone: "America/New_York"
   workflow_dispatch:
     inputs:
       ref:
@@ -65,11 +74,20 @@ jobs:
             echo "::error::data:check failed before comparing — see the log above"
             exit 1
           fi
-          # A new raid list is the season boundary: ACTIVE in src/season.js needs bumping by hand.
-          if grep -q "^  currentRaids:" drift.txt; then
-            echo "season=true" >> "$GITHUB_OUTPUT"
+          # A new raid list needs a hand edit to src/season.js, and which one depends on how it moved:
+          # a list replaced outright is a new season (bump ACTIVE), a list that only grew is a raid
+          # added mid-season, as 12.1.5 added Kith'ix (add its id to the season's qeRaids).
+          raids=$(grep "^  currentRaids:" drift.txt || true)
+          if [ -z "$raids" ]; then
+            echo "raids=same" >> "$GITHUB_OUTPUT"
           else
-            echo "season=false" >> "$GITHUB_OUTPUT"
+            node -e '
+              const [was, now] = process.argv[1]
+                .replace(/^\s*currentRaids:\s*/, "")
+                .split(" -> ")
+                .map((x) => JSON.parse(x));
+              console.log(`raids=${was.every((id) => now.includes(id)) ? "added" : "season"}`);
+            ' "$raids" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Rebuild
@@ -95,15 +113,19 @@ jobs:
           {
             echo "Automated rebuild of \`data/qe-data.json\` from [Voulk/QuestionablyEpic](https://github.com/Voulk/QuestionablyEpic) \`${{ inputs.ref || 'master' }}\` ($(git -C _qe rev-parse --short HEAD))."
             echo
-            if [ "${{ steps.drift.outputs.season }}" = "true" ]; then
+            if [ "${{ steps.drift.outputs.raids }}" = "season" ]; then
               echo "> [!IMPORTANT]"
-              echo "> **The raid list changed — this is a season rollover.** Bump \`ACTIVE\` in \`src/season.js\` in this PR before merging."
+              echo "> **The raid list was replaced — this is a season rollover.** Bump \`ACTIVE\` in \`src/season.js\` in this PR before merging, and give the new season its \`qeRaids\`."
+              echo
+            elif [ "${{ steps.drift.outputs.raids }}" = "added" ]; then
+              echo "> [!IMPORTANT]"
+              echo "> **A raid was added mid-season.** Add its id to the season's \`qeRaids\` in \`src/season.js\` in this PR before merging (\`ACTIVE\` stays), and check that a roll there pays what the season's \`rollReward\` table says."
               echo
             fi
             if [ "${{ steps.check.outputs.ok }}" = "true" ]; then
               echo "✅ lint, typecheck and tests pass on the new data."
             else
-              echo "❌ **Checks fail on the new data.** If it's \`tests/journal.test.js\`, compare the named encounter against the in-game journal before editing the fixture."
+              echo "❌ **Checks fail on the new data.** If it's \`tests/journal.test.js\`, compare the named encounter against the in-game journal before editing the fixture. If it's the raid-list check in \`tests/staledata.test.js\`, make the \`src/season.js\` edit above."
               echo
               echo '<details><summary>Failures</summary>'
               echo
@@ -128,6 +150,6 @@ jobs:
           add-paths: data/qe-data.json
           commit-message: Refresh QE data
           title: >-
-            ${{ steps.drift.outputs.season == 'true' && 'New season: ' || '' }}Refresh QE data${{ steps.check.outputs.ok != 'true' && ' (checks failing)' || '' }}
+            ${{ steps.drift.outputs.raids == 'season' && 'New season: ' || steps.drift.outputs.raids == 'added' && 'New raid: ' || '' }}Refresh QE data${{ steps.check.outputs.ok != 'true' && ' (checks failing)' || '' }}
           body-path: pr-body.md
           delete-branch: true

@@ -447,11 +447,12 @@ export function finalBosses(instId, n) {
  * Does this encounter carry the season's end-of-raid rewards? Memoised per raid.
  *
  * Gated on the season naming its tier raid, because "the last two bosses of a raid" is not a rule
- * that survives being applied to every raid on the page. Season 2 lists two: Venomous Abyss, whose
- * last two bosses are the Venomcursed tier, and Tidebound Grotto, a one-boss flex world boss that
- * has nothing to do with it — and asking for the last two bosses of a one-boss raid returns that
- * boss, so the badge landed on it. A season with no `raid` named falls back to the old behaviour of
- * treating every raid's tail as special, which is right for a season whose only raid is the tier.
+ * that survives being applied to every raid on the page. Season 2 lists Venomous Abyss, whose last
+ * two bosses are the Venomcursed tier, beside two one-boss raids that have nothing to do with it —
+ * Tidebound Grotto, a flex world boss, and from 12.1.5 Kith'ix — and asking for the last two bosses
+ * of a one-boss raid returns that boss, so the badge landed on it. A season with no `raid` named
+ * falls back to the old behaviour of treating every raid's tail as special, which is right for a
+ * season whose only raid is the tier.
  */
 let specialByRaid = null;
 function isSpecial(instId, encId) {
@@ -839,14 +840,6 @@ function priceGroup(b, g, selDiff, ownedMap, sp, takeId) {
 }
 
 /**
- * Build the ranked list of rollable sources for a board at its selected difficulty.
- * Returns { rows, selDiff, diffs, unknown } where each row carries its items, pool size, and EV,
- * and `unknown` names the visible sources the encounter database couldn't identify.
- * @param {import("./types.js").Board} b
- * @returns {{ rows: import("./types.js").Row[], selDiff: string, diffs: string[],
- *   keyLevel: number|null, unknown: string[] }}
- */
-/**
  * The best copy of each item the character is known to hold: its item level, and the upgrade-track
  * step its bonus ids name where either source sent them.
  *
@@ -1071,6 +1064,47 @@ export function simcLootSpec(b) {
   return raw ? specIdInClass(raw, specId(b.spec)) : null;
 }
 
+/**
+ * Items a QE report scored at a raid boss or a dungeon that the item database has never heard of.
+ *
+ * A QE row names no source of its own — the database supplies one (`srcList`) — so an item missing
+ * from it has nowhere to go and drops out of every pool without a trace. That is what a patch adding
+ * a raid looks like until the data is rebuilt: on 12.1.5's launch day every Kith'ix row vanished
+ * this way and nothing on the page said a boss was missing. A Droptimizer names its sources inline,
+ * so its new content still ranks and is flagged through `unknown` instead.
+ *
+ * Only "Raid" and "Dungeon" rows count. Those are the bonus-rollable kinds; crafted gear and Delve
+ * rewards are outside the ranking whether the database knows them or not. And a raid row at a
+ * difficulty other than the one on screen doesn't, for the reason `collectScored` gives for unknown
+ * sources: what the reader can't see isn't worth interrupting them over.
+ *
+ * @param {import("./types.js").Board} b
+ * @param {string} [selDiff]  The difficulty on screen; absent counts every raid row.
+ * @returns {number[]} item ids, ascending.
+ */
+export function unplacedItems(b, selDiff) {
+  if (b.source === "droptimizer" || !Array.isArray(b.results)) return [];
+  const ids = new Set();
+  b.results.forEach((r) => {
+    if (QE_DATA.items[r.item]) return;
+    const shown =
+      r.dropLoc === "Dungeon" ||
+      (r.dropLoc === "Raid" &&
+        (selDiff == null || String(r.dropDifficulty) === selDiff));
+    if (shown) ids.add(r.item);
+  });
+  return [...ids].sort((x, y) => x - y);
+}
+
+/**
+ * Build the ranked list of rollable sources for a board at its selected difficulty.
+ * Returns { rows, selDiff, diffs, unknown, unplaced } where each row carries its items, pool size,
+ * and EV, `unknown` names the visible sources the encounter database couldn't identify, and
+ * `unplaced` lists the report's items it couldn't place at any source (`unplacedItems`).
+ * @param {import("./types.js").Board} b
+ * @returns {{ rows: import("./types.js").Row[], selDiff: string, diffs: string[],
+ *   keyLevel: number|null, unknown: string[], unplaced: number[] }}
+ */
 export function buildGroups(b) {
   const sp = activeLootSpec(b);
   const diffs = raidDiffs(b);
@@ -1101,6 +1135,7 @@ export function buildGroups(b) {
     diffs,
     keyLevel: keyed ? keyed.keyLevel : null,
     unknown: Object.values(unknown),
+    unplaced: unplacedItems(b, selDiff),
   };
 }
 

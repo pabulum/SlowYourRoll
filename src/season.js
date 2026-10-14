@@ -9,9 +9,12 @@
 //   1. `npm run data`   — pulls the new current raids/dungeons from a QE Live checkout.
 //   2. Set ACTIVE below to that season, and copy the build's "Current raids" ids into `qeRaids`.
 //   3. Fill in the `rollReward` item levels once the expansion's upgrade tracks are published.
-// The app warns on its own when step 1 has happened but step 2 hasn't (see seasonDrift). Step 3 is
-// safe to leave undone: a null item level degrades to "promoted, amount unknown", which suppresses
-// the dupe guess rather than getting it wrong.
+// The app warns on its own when step 1 has happened but step 2 hasn't (see seasonDrift), and so does
+// tests/staledata.test.js. Step 3 is safe to leave undone: a null item level degrades to "promoted,
+// amount unknown", which suppresses the dupe guess rather than getting it wrong.
+//
+// A patch that adds a raid mid-season (12.1.5's Kith'ix) needs only half of step 2: append its id to
+// `qeRaids`, leave ACTIVE alone.
 //
 // Season 2's item levels below are read off the 12.1 PTR, via norumu's reward sheet:
 // https://docs.google.com/spreadsheets/d/1BCDWQvv_HFRO97s8UCQr_7vwz0pFXQw6gbTBgM1VeOg/htmlview
@@ -139,9 +142,10 @@ const MIDNIGHT_TRACKS = {
  *
  * @typedef {Object} Special
  * @property {string} [raid]  Instance id of the raid these rewards belong to. Worth naming once the
- *   season has more than one raid on the page: the Season 2 list pairs the tier raid with a one-boss
- *   flex world boss, and "the last two bosses" is a true sentence about the first and a meaningless
- *   one about the second. Omit where the season's only raid is the tier raid.
+ *   season has more than one raid on the page: the Season 2 list puts two one-boss raids beside the
+ *   tier raid (a flex world boss, and from 12.1.5 Kith'ix), and "the last two bosses" is a true
+ *   sentence about the tier raid and a meaningless one about the others. Omit where the season's
+ *   only raid is the tier raid.
  * @property {number} lastBosses  How many bosses at the end of that raid carry these rewards.
  * @property {string} badge  Short tag for the encounter card, naming the top-tier reward.
  * @property {string} [badgeAlt]  The tag to wear at a difficulty that doesn't pay those rewards.
@@ -162,13 +166,16 @@ const MIDNIGHT_TRACKS = {
  * @property {number} number       Season number within the expansion.
  * @property {string} expansion    Expansion name.
  * @property {number|null} qeSeasonId  QE Live's own CONSTANTS.seasonID for this season, once known.
- *   Midnight Seasons 1 and 2 both carry 34 — upstream moved the raid list and left this alone — so
- *   it identifies the expansion's database more than the season, and `qeRaids` is what actually
- *   detects a rollover. Kept because it is still the field upstream means as a season id.
+ *   Season 2 went live upstream still carrying Season 1's 34, and only moved to 37 the next day
+ *   (QE b421de5c5, 2026-08-12) — the raid list changed first. So this lags a rollover rather than
+ *   marking it, and `qeRaids` is what actually detects one. Kept because it is still the field
+ *   upstream means as a season id.
  * @property {string[]} [qeRaids]  The raid ids QE Live lists as current while this season is on,
  *   in upstream's own order. This is the fingerprint `seasonDrift` compares against, and the only
- *   one that moves at a season boundary. Absent means "don't check", which is what a season whose
- *   raid list nobody has recorded should do rather than warn about every build.
+ *   one that moves at a season boundary. It moves mid-season too, when a patch adds a raid — 12.1.5
+ *   appended Kith'ix — and then the fix is to add the id here, not to bump ACTIVE. Absent means
+ *   "don't check", which is what a season whose raid list nobody has recorded should do rather than
+ *   warn about every build.
  * @property {number} tokenRaid    Bonus-roll token cost for a raid boss.
  * @property {number} tokenDungeon Bonus-roll token cost for a M+ dungeon.
  * @property {string} tokenNote    Plain-English summary of the token economy, shown in the legend.
@@ -217,8 +224,11 @@ export const SEASONS = {
   2: {
     number: 2,
     expansion: "Midnight",
-    qeSeasonId: 34, // unchanged from Season 1 upstream — see the typedef; qeRaids is the real tell
-    qeRaids: ["1320", "1317"], // Venomous Abyss, and Tidebound Grotto as the flex world boss
+    qeSeasonId: 37, // 34 for its first day upstream — see the typedef; qeRaids is the real tell
+    // Venomous Abyss; Tidebound Grotto, the flex world boss; and from 12.1.5 (2026-10-13) Unbinding
+    // of Kith'ix, a one-boss raid. A roll there pays what any boss at that difficulty pays — QE sims
+    // its Mythic roll at Myth 6/6 like the rest — so it needs no reward table of its own.
+    qeRaids: ["1320", "1317", "1324"],
     tokenRaid: 1,
     tokenDungeon: 1,
     tokenNote:
@@ -381,7 +391,7 @@ export const SEASONS = {
       url: "https://docs.google.com/spreadsheets/d/1BCDWQvv_HFRO97s8UCQr_7vwz0pFXQw6gbTBgM1VeOg/htmlview",
     },
     special: {
-      raid: "1320", // Venomous Abyss — not 1317, the Tidebound Grotto world boss
+      raid: "1320", // Venomous Abyss — not 1317 (Tidebound Grotto) or 1324 (Kith'ix), one boss each
       lastBosses: 2,
       badge: "Venomcursed 9/6",
       // What is true of these bosses at every difficulty is the cantrips, not the item level: 9/6 is
