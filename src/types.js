@@ -180,8 +180,8 @@
  *   null when the season simply hands you the drop.
  * @property {string} [diff]  Canonical difficulty this row was priced at ("mythic", "heroic"), from
  *   `diffKey`. Meaningful for a raid; a dungeon prices off its key level instead. Carried because
- *   an end-of-raid encounter's top-tier rewards are a Mythic-only claim — see `specialAtTier` in
- *   src/render.js.
+ *   an end-of-raid encounter's top-tier rewards are a claim about one difficulty, the one the season
+ *   gives them a payout for (`Special.rollReward`) — see `specialAtTier` in src/render.js.
  * @property {number|null} [scoreIlvl]  Item level this row's scores were simmed at. Equal to the
  *   payout for a report that sims the drop; the top of the payout's track for a 12.1 QE report,
  *   which sims the roll as "Upgraded Bonus Rolls". See `scoreIlvlOf` in src/model.js.

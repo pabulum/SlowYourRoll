@@ -774,9 +774,10 @@ function poolSlots(items) {
 function priceGroup(b, g, selDiff, ownedMap, sp, takeId) {
   // What a roll here hands you, which is not always what the boss drops. Same for every item in
   // the row: an upgrade track step is one item level, whichever item lands on it. For a dungeon the
-  // key level is the difficulty, and `collectScored` picked it off the report's own rows.
+  // key level is the difficulty, and `collectScored` picked it off the report's own rows. The last
+  // bosses of the tier raid pay a tier of their own on Mythic, past the season's table.
   const diff = diffKey(b, selDiff);
-  const reward = rollReward(g.type, diff, g.keyLevel);
+  const reward = rollReward(g.type, diff, g.keyLevel, g.special);
   const idx = reportIndex(b);
   const items = Object.values(g.items);
   // The token carries the piece's value, because rolling the token *is* getting the piece. Left at

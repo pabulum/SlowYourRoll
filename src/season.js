@@ -72,6 +72,9 @@
  *   figure never claims the roll saved you from it.
  * @property {LadderStep[]} [ladder]  The full run of payouts this one is the top of, where the
  *   payout depends on something the app can't see. Display only — nothing prices off it.
+ * @property {boolean} [asDropped]  The roll hands over exactly what the boss drops: same item level,
+ *   finished, nothing promoted. True of one payout only, the end-of-raid tier's on Mythic. Wording
+ *   only — it's what stops a card telling the reader the drop is lower.
  */
 
 /**
@@ -147,18 +150,24 @@ const MIDNIGHT_TRACKS = {
  *   sentence about the tier raid and a meaningless one about the others. Omit where the season's
  *   only raid is the tier raid.
  * @property {number} lastBosses  How many bosses at the end of that raid carry these rewards.
- * @property {string} badge  Short tag for the encounter card, naming the top-tier reward.
+ * @property {string} badge  Short tag for the encounter card, naming the top-tier reward. Where
+ *   that reward is the one the card is priced at, the badge stands in for the card's "pays" chip,
+ *   so it reads as that payout's label does.
  * @property {string} [badgeAlt]  The tag to wear at a difficulty that doesn't pay those rewards.
  *   `badge` quotes an item level — "Venomcursed 9/6" — and a Heroic roll on the same boss pays Myth
  *   1/6 like any other Heroic boss, so wearing it there claims five upgrade steps the card can't
  *   hand over. The encounter is still special at every difficulty, for the reason `heroicNote`
  *   gives, so the badge changes rather than disappearing.
- * @property {number|null} ilvl  Item level those rewards drop and pay out at.
+ * @property {Record<string, Partial<Reward>>} [rollReward]  What a roll on these bosses pays where
+ *   it isn't what every other boss at that difficulty pays, keyed by difficulty like the season's
+ *   own table and merged over that table's entry (`rewardOf`), so it names only what differs. A
+ *   difficulty it doesn't list pays what any boss there does — which is also where the badge stops
+ *   quoting an item level (`badgeAlt`).
  * @property {string} note   One line on why the encounter is worth saving a token for.
  * @property {string} [heroicNote]  Why the same encounters are worth rolling at a *lower* difficulty
- *   than the one `ilvl` describes. Separate from `note` because it argues the opposite way — spend
- *   the token now rather than bank it — and a reader deciding between the two needs both, not a
- *   sentence that has quietly averaged them.
+ *   than the one `rollReward` describes. Separate from `note` because it argues the opposite way —
+ *   spend the token now rather than bank it — and a reader deciding between the two needs both, not
+ *   a sentence that has quietly averaged them.
  */
 
 /**
@@ -383,9 +392,7 @@ export const SEASONS = {
         ],
       },
     },
-    // The last two Mythic bosses are the one place a roll promotes nothing: they drop at 344 and
-    // their vault and bonus roll pay the same 344, three steps past Myth 6/6. The token is still
-    // worth banking for them — it just buys a second shot at the drop rather than an upgrade of it.
+    // One exception to the table above, the last two Mythic bosses: see `special.rollReward` below.
     source: {
       name: "norumu’s 12.1 PTR reward sheet",
       url: "https://docs.google.com/spreadsheets/d/1BCDWQvv_HFRO97s8UCQr_7vwz0pFXQw6gbTBgM1VeOg/htmlview",
@@ -397,7 +404,22 @@ export const SEASONS = {
       // What is true of these bosses at every difficulty is the cantrips, not the item level: 9/6 is
       // the Mythic payout alone, and it's the Heroic roll that guides actually recommend week to week.
       badgeAlt: "Cantrip items",
-      ilvl: 344,
+      // The one place a roll promotes nothing. On Mythic these bosses drop Venomcursed 9/6 — ilvl 344,
+      // three steps past Myth 6/6 and on no upgrade track — and their vault and bonus roll pay the
+      // same 344, so the token buys a second shot at the drop rather than an upgrade of it. QE Live
+      // sims it there too: `getSetItemLevel` sets 344 for the drop, max and bonus rows alike. Until
+      // 2026-10-14 the cards quoted the table's 334 instead, which on a Droptimizer marked a Myth 6/6
+      // copy Own when a roll here out-levels it by ten.
+      //
+      // The crest figure is inherited from the Mythic row, not zeroed, and that is a decision. Against
+      // this boss's own drop a roll saves nothing, since neither climbs. But the figure was never that
+      // comparison: it is what a roll saves the *slot* it lands in. An item you wear arrives finished,
+      // and filler lifts the slot's high watermark past every Myth step, so the piece you do wear
+      // climbs free — and 344 does both exactly as 334 does. Zeroing it would put these two bosses
+      // below every other Mythic boss on crests, which gets the comparison backwards.
+      rollReward: {
+        mythic: { label: "Venomcursed 9/6", ilvl: 344, asDropped: true },
+      },
       note:
         "Its Mythic items are 9/6 (ilvl 344) with cantrip effects, a tier above anything else in " +
         "the game, and the reason most raiders bank a token for kill week instead of spending it here.",
@@ -584,13 +606,19 @@ export function tokenWeekNow(season, now) {
  * A report that doesn't say falls back to the entry itself, which quotes the top rung; see the
  * comment on `mythic-plus` for why overstating is the safe direction there.
  *
+ * One of the season's end-of-raid bosses pays its own figure where the season records one
+ * (`Special.rollReward`), merged over the difficulty's — on Mythic, Venomcursed 9/6 at ilvl 344 with
+ * the Mythic crest figure carried across. Whether an encounter is one of those is the caller's to
+ * say, because it takes the raid's pull order to know (`isSpecial` in model.js).
+ *
  * @param {Season} season
  * @param {"raid"|"dungeon"} type
  * @param {string} [diffKey]  Canonical difficulty ("mythic", "heroic", …); ignored for dungeons.
  * @param {number|null} [keyLevel]  QE key-slider index the report was run at; dungeons only.
+ * @param {boolean} [special]  The encounter is one of the season's end-of-raid bosses.
  * @returns {Reward|null}
  */
-export function rewardOf(season, type, diffKey, keyLevel) {
+export function rewardOf(season, type, diffKey, keyLevel, special) {
   const table = season.rollReward;
   if (!table) return null;
   if (type === "dungeon") {
@@ -604,7 +632,9 @@ export function rewardOf(season, type, diffKey, keyLevel) {
     // still wants every rung even when the card is only quoting one of them.
     return rung ? { ...rung, label: rung.label || "", ladder: mp.ladder } : mp;
   }
-  return table[String(diffKey)] || { label: "", ilvl: null };
+  const base = table[String(diffKey)] || { label: "", ilvl: null };
+  const own = special && season.special?.rollReward?.[String(diffKey)];
+  return own ? { ...base, ...own } : base;
 }
 
 /**
@@ -671,8 +701,8 @@ export function stepsAt(season, ilvl) {
 }
 
 /** `rewardOf` against the season this build targets. */
-export function rollReward(type, diffKey, keyLevel) {
-  return rewardOf(SEASON, type, diffKey, keyLevel);
+export function rollReward(type, diffKey, keyLevel, special) {
+  return rewardOf(SEASON, type, diffKey, keyLevel, special);
 }
 
 /**

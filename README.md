@@ -154,10 +154,10 @@ instead, nothing has been taken to a track top and the payout stays the number s
 over at 318 and ends at 334, so a Hero 6/6 copy at 321 does not dupe it — the copy that roll leads to
 is four steps better — even though 321 clears the hand-over. Measuring against the ceiling is also
 what the rest of the card already assumes: the crest table credits a Heroic roll with **zero** saved
-crests precisely because you pay for that 318→334 climb yourself. It settles the last two Mythic
-bosses too, whose Venomcursed 9/6 payout the season table still records as 334 — the report prices
-them at 344, so a 334 copy of one stays **Want**. Only where the report makes the claim: a
-Droptimizer sims the drop and has taken nothing to a track top, so there the payout stands alone.
+crests precisely because you pay for that 318→334 climb yourself. Only where the report makes the
+claim: a Droptimizer sims the drop and has taken nothing to a track top, so there the payout stands
+alone — which is why the last two Mythic bosses carry their own payout in the season data rather
+than leaning on the report's level (under [Seasons](#seasons), with the end-of-raid tier).
 
 ### QE Live computes this too, now
 
@@ -562,6 +562,17 @@ rolling exactly these bosses on Heroic week to week — so the card wears `speci
 and the note leads with the claim that applies. Both claims stay on the card either way: bank a
 token for the Mythic kill, and spend one here on Heroic most weeks are both true, and which one
 leads is decided by what the reader is being ranked at (`specialAtTier` in `src/render.js`).
+
+**On Mythic a roll there pays the tier itself: Venomcursed 9/6, ilvl 344.** That is the drop, on no
+upgrade track, so the roll promotes nothing — it buys a second shot at the drop. QE Live sims it the
+same way (`getSetItemLevel` sets 344 for the drop, max and bonus rows of those two bosses). The
+season records it as `special.rollReward`, merged over the Mythic row by `rewardOf`, and until
+2026-10-14 the cards quoted the Mythic row's 334 instead: "pays Myth 6/6" in the head, `334→344` on
+every row, and — on a Droptimizer, which has no report level for `rollTopFor` to fall back on — a
+Myth 6/6 copy marked **Own** when the roll out-levels it by ten. The crest figure is the Mythic row's,
+not zero. Against the boss's own drop the roll saves nothing, but the figure was never that
+comparison: it is what a roll saves the slot it lands in, and an item past the top of the Myth track
+spares that slot every Myth step exactly as one at the top does.
 
 In Season 2 the roll token is itself a Great Vault reward from week 2, so taking it costs you the
 item you'd otherwise have picked. From week 8 one is also handed out every week, and the vault

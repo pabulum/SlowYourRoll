@@ -126,11 +126,55 @@ test("only a season with an end-of-raid tier describes one", () => {
 });
 
 // The tier the ranking can't see: three steps past the Mythic payout, and the reason a token gets
-// banked for kill week. Pinned like every other PTR figure.
+// banked for kill week. Pinned like every other PTR figure — and it is what a roll on those bosses
+// pays, which until 2026-10-14 the cards didn't know: they quoted the table's 334, where QE Live sims
+// 344.
 test("the end-of-raid tier out-levels the season's best ordinary payout", () => {
   const s2 = SEASONS[2];
-  assert.equal(s2.special.ilvl, 344); // Venomcursed 9/6
-  assert.ok(s2.special.ilvl > rewardOf(s2, "raid", "mythic").ilvl);
+  const tier = rewardOf(s2, "raid", "mythic", null, true);
+  assert.equal(tier.ilvl, 344);
+  assert.equal(tier.label, "Venomcursed 9/6");
+  assert.ok(tier.ilvl > rewardOf(s2, "raid", "mythic").ilvl);
+  assert.equal(tier.asDropped, true, "a roll there pays the drop itself");
+});
+
+// The card's badge stands in for the "pays" chip at that tier, so the two must name one thing.
+test("at its own tier the badge names what the roll pays", () => {
+  const s2 = SEASONS[2];
+  assert.equal(
+    rewardOf(s2, "raid", "mythic", null, true).label,
+    s2.special.badge,
+  );
+});
+
+// The tier is a Mythic claim only. On Heroic the same bosses pay Myth 1/6 like any Heroic boss, and
+// the badge there says cantrips instead of an item level.
+test("below Mythic an end-of-raid boss pays what every other boss does", () => {
+  const s2 = SEASONS[2];
+  for (const d of ["heroic", "normal", "lfr"])
+    assert.deepEqual(
+      rewardOf(s2, "raid", d, null, true),
+      rewardOf(s2, "raid", d),
+    );
+  assert.equal(rewardOf(s2, "raid", "mythic", null, false).ilvl, 334);
+});
+
+// The decision recorded at `special.rollReward`: the figure is what a roll saves the slot it lands
+// in, and an item past the top of the Myth track saves exactly what one at the top does. So the tier
+// carries the Mythic row's crest fields across rather than a figure of its own.
+test("the end-of-raid tier saves the crests any Mythic roll does", () => {
+  const s2 = SEASONS[2];
+  const tier = rewardOf(s2, "raid", "mythic", null, true),
+    m = rewardOf(s2, "raid", "mythic");
+  for (const k of [
+    "crests",
+    "crestKind",
+    "crestFrom",
+    "crestPerStep",
+    "crestSteps",
+    "crestFreeTo",
+  ])
+    assert.deepEqual(tier[k], m[k], k);
 });
 
 // The app quotes the top of the M+ ladder everywhere, because no report says which key you run.
@@ -250,12 +294,26 @@ test("every reward carries a label and an item level slot", () => {
   Object.keys(SEASONS).forEach((n) => {
     const table = SEASONS[n].rollReward;
     if (!table) return;
+    const tier = SEASONS[n].special?.rollReward || {};
     Object.keys(table).forEach((d) => {
       const r = table[d];
       assert.ok(r.label, `Season ${n} ${d} needs a display label`);
       assert.ok(
         r.ilvl === null || typeof r.ilvl === "number",
         `Season ${n} ${d} ilvl`,
+      );
+    });
+    Object.keys(tier).forEach((d) => {
+      assert.ok(
+        table[d],
+        `Season ${n}'s end-of-raid ${d} overrides a real row`,
+      );
+      const r = rewardOf(SEASONS[n], "raid", d, null, true);
+      assert.ok(r.label, `Season ${n} end-of-raid ${d} needs a display label`);
+      assert.equal(
+        typeof r.ilvl,
+        "number",
+        `Season ${n} end-of-raid ${d} ilvl`,
       );
     });
   });

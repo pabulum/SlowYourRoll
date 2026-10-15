@@ -250,6 +250,53 @@ test("only the season's tier raid carries the end-of-raid badge", () => {
   }
 });
 
+/* ---------- what a roll on those bosses pays ----------
+   On Mythic the end-of-raid tier pays its own 9/6, ten item levels past the season's Myth 6/6. The
+   cards used to quote the 334 anyway, and on a Droptimizer — which makes no claim about a track top
+   for `rollTopFor` to fall back on — that marked a 334 copy Own when the roll out-levels it. */
+
+/** A Droptimizer board with one scored item off the tier raid's last boss, and a copy of it held. */
+function makeTierBoard(diff, held) {
+  const sp = SEASON.special;
+  const raid = Number(sp.raid);
+  const enc = Number(finalBosses(raid, sp.lastBosses).at(-1));
+  const item = Number(
+    Object.keys(QE_DATA.items).find(
+      (id) =>
+        !QE_DATA.items[id].ct && // a tier token's copy is the piece, held under another id
+        QE_DATA.items[id].s.some((s) => s[0] === raid && s[1] === enc),
+    ),
+  );
+  state.showAll = false;
+  state.simc = { "foo~area52~": { owned: { [item]: held } } };
+  const b = makeBoard();
+  b.results = [{ item, inst: raid, enc, diff, level: 344, score: 50 }];
+  const row = buildGroups(b).rows.find((r) => r.g.key === `${raid}:${enc}`);
+  return { row, it: row.items.find((i) => i.id === item) };
+}
+
+test("a Mythic roll on an end-of-raid boss pays the tier, so a Myth 6/6 copy stays Want", () => {
+  if (!SEASON.special?.rollReward?.mythic) return; // a season without the tier
+  const { row, it } = makeTierBoard("mythic", 334);
+  assert.equal(row.g.special, true);
+  assert.equal(row.reward.label, "Venomcursed 9/6");
+  assert.equal(it.rollIlvl, 344);
+  assert.equal(it.dupe, false);
+  assert.equal(it.state, "want");
+  assert.equal(row.nWant, 1, "and it counts toward the EV");
+  assert.equal(
+    makeTierBoard("mythic", 344).it.state,
+    "own",
+    "a 9/6 copy is the dupe",
+  );
+});
+
+test("on Heroic the same boss pays Myth 1/6 like any other", () => {
+  if (!SEASON.special?.rollReward?.mythic) return;
+  const { row } = makeTierBoard("heroic", 300);
+  assert.deepEqual(row.reward, rollReward("raid", "heroic"));
+});
+
 // A raid shorter than the window is all endgame rather than an error.
 test("a raid with fewer bosses than asked for yields all of them", () => {
   const n = Object.keys(RAID.bosses).length;

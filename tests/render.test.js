@@ -617,6 +617,69 @@ test("on Heroic the same boss is badged for what it still gives you, not for ilv
   assert.match(note, /^Cantrip items\./, "a sentence, so it opens like one");
 });
 
+/* What a Mythic roll there pays is the tier itself, 344, and the cards used to say otherwise in three
+   places at once: "pays Myth 6/6" in the head, "334→344" on every row, and a note calling the drop
+   lower. QE Live sims those rows at 344 for drop, max and bonus alike, which is what this board is. */
+
+/** `makeSpecialBoard` on Mythic, with the levels QE writes for that tier. */
+function makeTierQEBoard() {
+  const b = makeSpecialBoard(3);
+  b.results = b.results.map((r) => ({ ...r, level: 344 }));
+  return b;
+}
+
+test("on Mythic an end-of-raid card pays the tier, and says so once", () => {
+  const card = onlyCard(renderWith([makeTierQEBoard()]));
+  assert.doesNotMatch(
+    words(card.querySelector(".card-head .name")),
+    /pays/,
+    "the badge already names the payout",
+  );
+  const levels = new Set([...card.querySelectorAll(".item .ilvl")].map(words));
+  assert.deepEqual([...levels], ["344"], "nothing climbs, so no arrow");
+  const note = [...card.querySelectorAll(".swap-note")]
+    .map(words)
+    .find((t) => /Upgraded Bonus Rolls/.test(t));
+  assert.match(note, /pays out at Venomcursed 9\/6 — ilvl 344/);
+  assert.doesNotMatch(note, /lower/, "the boss drops the same 344");
+});
+
+// The crests are inherited from the Mythic row (see `special.rollReward`), and what they'd have bought
+// is a slot taken to the top of the Myth track — not to 9/6, which no crest reaches.
+test("its crest note names the top of the Myth track, not the tier", () => {
+  const card = onlyCard(renderWith([makeTierQEBoard()]));
+  assert.match(words(card.querySelector(".crest-save")), /80 Myth crests/);
+  const note = words(card.querySelector(".crest-note"));
+  assert.match(note, /taking a slot to Myth 6\/6/);
+  assert.match(note, /down to nothing at Myth 6\/6/);
+  assert.doesNotMatch(note, /Venomcursed/);
+});
+
+// A Droptimizer sims the drop, and here the drop is the payout: its scores are neither a floor nor high.
+test("a Droptimizer on the tier is told its scores are the payout's own", () => {
+  const sp = SEASON.special;
+  const raid = Number(sp.raid);
+  const enc = Number(finalBosses(raid, sp.lastBosses).at(-1));
+  const item = Number(
+    Object.keys(QE_DATA.items).find((id) =>
+      QE_DATA.items[id].s.some((s) => s[0] === raid && s[1] === enc),
+    ),
+  );
+  const b = makeBoard();
+  b.results = [
+    { item, inst: raid, enc, diff: "mythic", level: 344, score: 10 },
+  ];
+  const card = onlyCard(renderWith([b]));
+  const note = [...card.querySelectorAll(".swap-note")]
+    .map(words)
+    .find((t) => /pays out at/.test(t));
+  assert.match(
+    note,
+    /Venomcursed 9\/6 — ilvl 344 — the item level your report simmed/,
+  );
+  assert.doesNotMatch(note, /floor|run a little high/);
+});
+
 /* Vashnikt, its chest token, the Monk chest it is a voucher for, and one ordinary drop off the same
    boss so the encounter has a row at all — the same fixture tests/model.test.js reasons about. */
 const TOKEN = { enc: 2882, id: 270927, piece: 271522, alsoDrops: 268205 };
@@ -1015,6 +1078,17 @@ test("every payout in the season's table reaches the pane with its item level", 
     if (r.ilvl != null) assert.match(body, new RegExp(`\\b${r.ilvl}\\b`));
     if (r.label) assert.match(body, new RegExp(r.label.replace("/", "/")));
   });
+});
+
+// The sub-row is read through the same lookup the cards price with, so the two can't disagree.
+test("the pane's end-of-raid row is the payout the cards use, crests included", () => {
+  const doc = renderWith([]);
+  const sub = doc.querySelector("#rewardBody .rwd tr.sub");
+  assert.ok(sub, "the tier has a row of its own");
+  assert.equal(
+    words(sub),
+    `…its last ${REWARD_SEASON.special.lastBosses} bosses Venomcursed 9/6 344 up to 80 Myth`,
+  );
 });
 
 test("the M+ ladder is on screen, since the ranking only ever quotes its top rung", () => {

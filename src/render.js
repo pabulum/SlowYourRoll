@@ -219,13 +219,19 @@ function rewardRowHTML(table, row, here, keyLevel) {
   </tr>`;
 }
 
-/** The end-of-raid tier, as a sub-row of the Mythic one it's an exception to. */
-function specialRowHTML(sp) {
+/**
+ * The end-of-raid tier, as a sub-row of the difficulty row it's an exception to. Read through
+ * `rewardOf` like the cards, so the crest figure it inherits is the one they quote.
+ *
+ * @param {import("./season.js").Special} sp
+ * @param {import("./season.js").Reward} r  What a roll on those bosses pays at that difficulty.
+ */
+function specialRowHTML(sp, r) {
   return html`<tr class="sub">
     <th scope="row">…its last ${sp.lastBosses} bosses</th>
-    <td>${sp.badge}</td>
-    <td class="tnum">${sp.ilvl == null ? "—" : sp.ilvl}</td>
-    <td>—</td>
+    <td>${trackTag(r.label) || "—"}</td>
+    <td class="tnum">${r.ilvl == null ? "—" : r.ilvl}</td>
+    <td>${crestCell(r)}</td>
   </tr>`;
 }
 
@@ -334,6 +340,9 @@ export function renderRewards(here, keyLevel) {
   }
   const win = tokenVaultWindow(s);
   const mythCrest = table.mythic?.crests || 0;
+  // The end-of-raid tier's own payout, at the difficulty the season gives it one.
+  const tierRow = REWARD_ROWS.find((row) => s.special?.rollReward?.[row.key]);
+  const tier = tierRow ? rewardOf(s, "raid", tierRow.key, null, true) : null;
   const weekNow = weekNowHTML(s, true);
   // The pane documents REWARD_SEASON rather than a board, but the one thing in it that *is* about
   // this character is whether the crest figure has been checked — so it reads the active board for
@@ -400,7 +409,11 @@ export function renderRewards(here, keyLevel) {
             ${REWARD_ROWS.map(
               (row) =>
                 html`${rewardRowHTML(table, row, here, keyLevel)}${
-                  row.key === "mythic" && s.special && specialRowHTML(s.special)
+                  s.special?.rollReward?.[row.key] &&
+                  specialRowHTML(
+                    s.special,
+                    rewardOf(s, "raid", row.key, null, true),
+                  )
                 }`,
             )}
           </tbody>
@@ -411,6 +424,13 @@ export function renderRewards(here, keyLevel) {
             <b>${s.special.badge}.</b> ${s.special.note} It's the one place a
             roll promotes nothing — the drop is already there — so the token
             buys a second shot at it rather than an upgrade of it.
+            ${
+              tier?.crests
+                ? html`It still saves the crests any ${tierRow.name} does: an
+                    item past the top of the ${tier.crestKind || ""} track
+                    leaves nothing in its slot to pay for.`
+                : ""
+            }
           </p>`
         }
         ${
@@ -1435,8 +1455,13 @@ function cardHTML(b, r, i) {
   // Both chips open the reward pane: they're the two claims on a card that come from the season's
   // rules rather than from the report, and "pays Myth 6/6" is only meaningful to someone who
   // already knows the tracks. Buttons, so they're reachable without a pointer.
+  //
+  // At its own tier an end-of-raid boss's badge already names what the roll pays — Venomcursed 9/6
+  // is both — so there the chip would only say it twice.
+  const atTier = g.special && specialAtTier(r);
   const pays =
     r.reward?.label &&
+    !atTier &&
     html`<button
       class="pays"
       data-act="rewards"
@@ -1451,9 +1476,9 @@ function cardHTML(b, r, i) {
     html`<button
       class="special"
       data-act="rewards"
-      title="${specialAtTier(r) ? sp.note : sp.heroicNote || sp.note}"
+      title="${atTier ? sp.note : sp.heroicNote || sp.note}"
     >
-      ${specialAtTier(r) ? sp.badge : sp.badgeAlt || sp.badge}
+      ${atTier ? sp.badge : sp.badgeAlt || sp.badge}
     </button>`;
 
   return html`<div class="${cls}" data-key="${g.key}">
@@ -1513,7 +1538,9 @@ function cardHTML(b, r, i) {
  * "A floor" is a claim about two numbers, so it is checked rather than assumed. A Droptimizer run
  * with an upgrade level set — Raidbots will happily sim every Heroic drop at Hero 6/6 — sims *above*
  * what a Heroic roll pays, and telling that reader their scores run low would be the wrong warning
- * in the wrong direction. Where the levels straddle the payout, no direction is claimed at all.
+ * in the wrong direction. Where the levels straddle the payout, no direction is claimed at all, and
+ * where they meet it — the end-of-raid tier, whose roll pays exactly the drop — there is no gap to
+ * warn about.
  */
 function promoNote(b, r) {
   if (!r.reward?.label) return "";
@@ -1522,10 +1549,15 @@ function promoNote(b, r) {
       A roll here pays out at <b>${r.reward.label}</b>${
         r.reward.ilvl ? html` — ilvl ${r.reward.ilvl} —` : html`,`
       } and the scores below are your QE report's
-      <b>Upgraded Bonus Rolls</b> figures: that payout taken to the top of its
-      track with crests spent${
-        r.scoreIlvl ? html`, ilvl ${r.scoreIlvl}` : ""
-      }. Not the drop, which is lower.${
+      <b>Upgraded Bonus Rolls</b> figures${
+        r.reward.asDropped
+          ? html`. Here that is the drop itself: the boss drops these at ilvl
+              ${r.reward.ilvl} already finished, so a roll is a second shot at
+              the drop rather than an upgrade of it.`
+          : html`: that payout taken to the top of its track with crests
+              spent${r.scoreIlvl ? html`, ilvl ${r.scoreIlvl}` : ""}. Not the
+              drop, which is lower.`
+      }${
         r.scoreIlvl && r.reward.ilvl && r.scoreIlvl !== r.reward.ilvl
           ? html` Each row below shows both — what the roll hands over, then the
             item level its score is for, which is the same item after the crests.
@@ -1539,6 +1571,16 @@ function promoNote(b, r) {
     .map((i) => i.scoreLvl);
   const pays = r.reward.ilvl;
   const lead = html`A roll here pays out at <b>${r.reward.label}</b>`;
+  // With nothing scored there are no levels to check, and a payout the season records as the drop
+  // itself is the one case that can still be answered: a report that sims the drop simmed it.
+  if (
+    pays != null &&
+    (simmed.length ? simmed.every((l) => l === pays) : r.reward.asDropped)
+  )
+    return html`<div class="swap-note">
+      ${lead} — ilvl ${pays} — the item level your report simmed each drop at,
+      so the scores below are what a roll here hands you.
+    </div>`;
   if (!simmed.length || pays == null)
     return html`<div class="swap-note">
       ${lead}, which is not the item level your report simmed each drop at.
@@ -1632,7 +1674,7 @@ function crestNote(b, r) {
   const c = r.reward?.crests;
   if (!c) return "";
   const kind = r.reward.crestKind || "";
-  const step = r.reward.label || html`the top of its track`;
+  const step = crestTopOf(r.reward) || html`the top of its track`;
   const rng = crestSavingRange(b, r.reward, r.slots);
   const lead = !rng
     ? html`up to ${c} ${kind} crests`
@@ -1652,6 +1694,18 @@ function crestNote(b, r) {
       gives.</span
     >
   </div>`;
+}
+
+/**
+ * Where a payout's crests would have taken a slot: the top of the track they're spent on, "Myth 6/6".
+ * The payout's own label for every roll but one — the end-of-raid tier pays Venomcursed 9/6, past
+ * the top of that track, and no crest takes a slot there.
+ *
+ * @param {import("./season.js").Reward} reward
+ */
+function crestTopOf(reward) {
+  const n = reward.crestSteps?.length;
+  return n && reward.crestKind ? `${reward.crestKind} ${n}/${n}` : reward.label;
 }
 
 /**
@@ -1711,15 +1765,16 @@ function crestCheckHTML(reward, kind, step, rng, slots) {
  * Is this card being priced at the difficulty the season's end-of-raid rewards actually come from?
  *
  * The badge quotes an item level, and an item level is a claim about *this* roll. These bosses carry
- * their tier at Mythic only: the same encounter on Heroic pays Myth 1/6 like every other Heroic
- * boss, five upgrade steps below the badge. What survives the difficulty change is the cantrips, and
- * that is what the alternate badge names — the encounter stays worth singling out, for a reason the
- * card can state truthfully.
+ * their tier only where the season gives them a payout of their own (`Special.rollReward`), which
+ * is Mythic: the same encounter on Heroic pays Myth 1/6 like every other Heroic boss, five upgrade
+ * steps below the badge. What survives the difficulty change is the cantrips, and that is what the
+ * alternate badge names — the encounter stays worth singling out, for a reason the card can state
+ * truthfully.
  *
  * @param {import("./types.js").Row} r
  */
 function specialAtTier(r) {
-  return r.g.type === "raid" && r.diff === "mythic";
+  return r.g.type === "raid" && !!SEASON.special?.rollReward?.[String(r.diff)];
 }
 
 /**
