@@ -89,6 +89,26 @@ test("a share link carries the Rolled and Own marks, and reads back to the same 
   assert.deepEqual(parseMarks(new URL(url).searchParams), overlay);
 });
 
+// A raid mark names the difficulty whose pool it empties (`markKey`), and the link keeps it: the
+// recipient's Mythic pool shouldn't lose what the sharer rolled on Heroic.
+test("a share link keeps the difficulty a raid mark was made at", () => {
+  const overlay = {
+    "1320:2895:268265:heroic": "rolled",
+    "1320:2871:268252:mythic": "rolled",
+  };
+  const url = shareUrl(
+    /** @type {any} */ ({ reportId: "AbC123", overlay }),
+    "https://example.com/",
+  );
+  assert.match(url, /rolled=1320:2871:268252:mythic,1320:2895:268265:heroic$/);
+  assert.deepEqual(parseMarks(new URL(url).searchParams), overlay);
+  assert.deepEqual(
+    parseMarks(new URLSearchParams("rolled=1320:2895:1:hard,1320:2895:2:lfr")),
+    { "1320:2895:2:lfr": "rolled" },
+    "only a difficulty the app names",
+  );
+});
+
 test("a share link with nothing marked is just the report", () => {
   assert.equal(
     shareUrl(/** @type {any} */ ({ reportId: "AbC123", overlay: {} }), "/"),

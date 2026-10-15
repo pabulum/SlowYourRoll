@@ -95,6 +95,47 @@ export function simcOf(b) {
   return state.simc[charKeyOf(b.player, b.realm, b.region)];
 }
 
+/** The raid difficulties a mark can be filed under. */
+const MARK_DIFFS = ["lfr", "normal", "heroic", "mythic"];
+
+/**
+ * Where a board files a Rolled or Own mark on one item at one source: `inst:enc:item`, and for a
+ * raid, `inst:enc:item:difficulty`.
+ *
+ * A raid boss keeps a separate roll pool per difficulty. Rolling Ula'tek's neck on Heroic takes it
+ * out of the Heroic pool and leaves the Mythic one, a different item ten levels up, where it was.
+ * The SimC addon logs each roll with its difficulty because "item pools are per
+ * spec/encounter/context/keyLevel", and VoidcoreAdvisor files what you've obtained by source and
+ * difficulty. So a raid mark names its difficulty, and a click on a Mythic card says nothing about
+ * Heroic. A dungeon's mark doesn't name one.
+ *
+ * A mark filed before marks named a difficulty has no difficulty segment, and it still counts at
+ * every difficulty because nothing records which one it meant. See `markOf`.
+ *
+ * @param {string} src  The source, "inst:enc".
+ * @param {number|string} id
+ * @param {string|null} [diff]  Canonical raid difficulty; anything else files the mark unscoped.
+ */
+export function markKey(src, id, diff) {
+  return diff && MARK_DIFFS.includes(diff)
+    ? `${src}:${id}:${diff}`
+    : `${src}:${id}`;
+}
+
+/**
+ * The mark a board holds for an item at a source and difficulty. The difficulty's own mark comes
+ * first, then an unscoped one (a dungeon's, or a raid mark from before marks were per difficulty).
+ *
+ * @param {import("./types.js").Board} b
+ * @param {string} src
+ * @param {number|string} id
+ * @param {string|null} [diff]
+ * @returns {"own"|"rolled"|undefined}
+ */
+export function markOf(b, src, id, diff) {
+  return b.overlay[markKey(src, id, diff)] || b.overlay[markKey(src, id)];
+}
+
 /**
  * Bring a loaded state's keys up to the current `keyOf` and `charKeyOf`. A board whose key moved
  * would otherwise stop matching the next load of its own report and be duplicated. A /simc filed

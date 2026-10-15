@@ -297,6 +297,38 @@ test("on Heroic the same boss pays Myth 1/6 like any other", () => {
   assert.deepEqual(row.reward, rollReward("raid", "heroic"));
 });
 
+// A raid boss keeps a roll pool per difficulty. Rolling the Heroic copy, which is what the user had
+// done, leaves the Mythic one in its pool; only a Mythic mark, or one from before marks named a
+// difficulty, takes it out.
+test("a Rolled mark only empties the pool of the difficulty it names", () => {
+  if (!SEASON.special?.rollReward?.mythic) return;
+  const { row, it } = makeTierBoard("mythic", 0);
+  const k = `${row.g.key}:${it.id}`;
+  const [inst, enc] = row.g.key.split(":").map(Number);
+  const at = (overlay) => {
+    const b = makeBoard();
+    b.results = [
+      { item: it.id, inst, enc, diff: "mythic", level: 344, score: 50 },
+    ];
+    b.overlay = overlay;
+    return buildGroups(b)
+      .rows.find((r) => r.g.key === row.g.key)
+      .items.find((i) => i.id === it.id).state;
+  };
+  assert.equal(at({ [`${k}:heroic`]: "rolled" }), "want");
+  assert.equal(at({ [`${k}:mythic`]: "rolled" }), "rolled");
+  assert.equal(
+    at({ [k]: "rolled" }),
+    "rolled",
+    "an old unscoped mark still counts",
+  );
+  assert.equal(
+    at({ [k]: "rolled", [`${k}:mythic`]: "own" }),
+    "own",
+    "the difficulty's own mark comes first",
+  );
+});
+
 // A raid shorter than the window is all endgame rather than an error.
 test("a raid with fewer bosses than asked for yields all of them", () => {
   const n = Object.keys(RAID.bosses).length;

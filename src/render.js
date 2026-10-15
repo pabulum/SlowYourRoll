@@ -1481,7 +1481,12 @@ function cardHTML(b, r, i) {
       ${atTier ? sp.badge : sp.badgeAlt || sp.badge}
     </button>`;
 
-  return html`<div class="${cls}" data-key="${g.key}">
+  // The difficulty a click on one of its items files the mark under (`markKey`); a dungeon has none.
+  return html`<div
+    class="${cls}"
+    data-key="${g.key}"
+    data-diff="${g.type === "raid" ? r.diff || "" : ""}"
+  >
     <div class="card-head" data-act="toggle">
       <div class="rank tnum">${r.ev > 0 ? i + 1 : "–"}</div>
       <div class="name-cell">

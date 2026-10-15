@@ -20,7 +20,7 @@ import {
   trackStep,
 } from "./season.js";
 import { CARD_ROWS } from "./share.js";
-import { simcOf, state } from "./store.js";
+import { markOf, simcOf, state } from "./store.js";
 
 /**
  * Resolve an (instId, encId) pair to a display name and type. instId === -1 is a M+ dungeon.
@@ -793,7 +793,8 @@ function priceGroup(b, g, selDiff, ownedMap, sp, takeId) {
   const scoreIlvl = scoreIlvlOf(items);
   const top = rollScored(b) ? scoreIlvl : null;
   items.forEach((it) => {
-    const ov = b.overlay[`${g.key}:${it.id}`];
+    // A raid boss keeps a roll pool per difficulty, so its marks do too (`markKey`).
+    const ov = markOf(b, g.key, it.id, g.type === "raid" ? diff : null);
     // A tier token is never itself held; the piece it becomes is. Holding that piece at the top of
     // the roll's track makes the token as much a dupe as holding the item would.
     const held = ownedMap[it.givesId || it.id] || null;

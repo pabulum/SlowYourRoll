@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { parseSimc } from "../src/simc.js";
+import { applySimc, parseSimc } from "../src/simc.js";
+import { charKeyOf, state } from "../src/store.js";
 
 const SAMPLE = `# Foo - Holy Priest
 priest="Foo"
@@ -183,4 +184,74 @@ finger1=,id=268266,bonus_id=6652/13668/13334/12842
   assert.equal(d.owned[268266], 321);
   assert.deepEqual(d.ownedBonus[268266], [6652, 13668, 13334, 12846]);
   assert.equal(d.ownedBonus[3333], undefined, "no bonus ids, none recorded");
+});
+
+/* ---------- logged rolls, per difficulty ----------
+   A raid boss keeps a roll pool per difficulty, and the log's context field says which one a roll
+   came out of. Handstamp's real log: Ula'tek's neck and helm on Heroic (context 5), then two
+   Sszorak items on Mythic (6). Marking all four at every difficulty took Ula'tek's Mythic 9/6 copies
+   out of a pool they were still in. */
+
+const LOG =
+  "bonus_roll_items=3418:278284:5:4:268265:270/3418:278284:5:4:271875:270/" +
+  "3418:278288:6:3:268234:270/3418:278288:6:3:268252:270";
+const MONK = `monk="Handstamp"\nserver=tichondrius\nregion=us\nspec=mistweaver\n${LOG}\n`;
+
+test("parseSimc keeps the context each logged roll was made in", () => {
+  const d = parseSimc(MONK);
+  assert.deepEqual(d.rolledIds, [268265, 271875, 268234, 268252]);
+  assert.deepEqual(
+    d.rolls.map((r) => r.ctx),
+    [5, 5, 6, 6],
+  );
+});
+
+/** A board for that character with `items` in its report and `overlay` already on it. */
+function monkBoard(items, overlay = {}) {
+  return /** @type {any} */ ({
+    player: "Handstamp",
+    realm: "tichondrius",
+    region: "us",
+    results: items.map((item) => ({ item })),
+    overlay,
+  });
+}
+
+test("a logged raid roll is marked at the difficulty it was made at, and only there", () => {
+  state.simc = {
+    [charKeyOf("Handstamp", "tichondrius", "us")]: parseSimc(MONK),
+  };
+  const b = monkBoard([268265, 268252]);
+  applySimc(b);
+  assert.deepEqual(b.overlay, {
+    "1320:2895:268265:heroic": "rolled",
+    "1320:2871:268252:mythic": "rolled",
+  });
+});
+
+// What every earlier paste wrote: the same rolls, at every difficulty. The log now says where each
+// was made, so those marks are the same rolls filed too broadly, and they go.
+test("a paste with contexts replaces the every-difficulty marks an older one wrote", () => {
+  state.simc = {
+    [charKeyOf("Handstamp", "tichondrius", "us")]: parseSimc(MONK),
+  };
+  const b = monkBoard([268265], {
+    "1320:2895:268265": "rolled",
+    "1320:2895:271875": "own",
+  });
+  applySimc(b);
+  assert.deepEqual(b.overlay, {
+    "1320:2895:268265:heroic": "rolled",
+    "1320:2895:271875": "own",
+  });
+});
+
+// A /simc saved before contexts were kept has ids alone, and no way to say where each roll was made.
+test("a stored /simc with ids only still marks the old way until it's pasted again", () => {
+  state.simc = {
+    [charKeyOf("Handstamp", "tichondrius", "us")]: { rolledIds: [268265] },
+  };
+  const b = monkBoard([268265]);
+  applySimc(b);
+  assert.deepEqual(b.overlay, { "1320:2895:268265": "rolled" });
 });

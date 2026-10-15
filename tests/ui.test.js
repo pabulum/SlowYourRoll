@@ -72,7 +72,8 @@ function click(doc, selector) {
 test("tapping an item cycles Want → Own → Rolled → Want", () => {
   const { doc, board } = boot();
   const sel = '#sources .item[data-id="900001"] [data-act="cycle"]';
-  const k = `${KEY}:900001`;
+  // A raid boss keeps a pool per difficulty, so the mark is filed under the card's.
+  const k = `${KEY}:900001:mythic`;
 
   click(doc, sel);
   assert.equal(board.overlay[k], "own");
@@ -90,11 +91,33 @@ test("the cycle survives the re-render it causes", () => {
   // The button just clicked no longer exists — render() replaced it. If listeners were bound to
   // rows rather than to #sources, this second click would do nothing.
   click(doc, sel);
-  assert.equal(board.overlay[`${KEY}:900001`], "rolled");
+  assert.equal(board.overlay[`${KEY}:900001:mythic`], "rolled");
   assert.match(
     doc.querySelector('#sources .item[data-id="900001"]').getAttribute("class"),
     /st-rolled/,
   );
+});
+
+// A mark saved before marks named a difficulty answers for every one of them. Clicking it on a card is
+// a statement about that card's difficulty, so the mark moves there and stops speaking for the rest.
+test("an old mark with no difficulty is refiled under the card's when tapped", () => {
+  const { doc, board } = boot();
+  board.overlay[`${KEY}:900001`] = "rolled";
+  render();
+  const sel = '#sources .item[data-id="900001"] [data-act="cycle"]';
+  assert.match(
+    doc.querySelector('#sources .item[data-id="900001"]').getAttribute("class"),
+    /st-rolled/,
+    "it still counts until it's touched",
+  );
+  click(doc, sel);
+  assert.deepEqual(
+    board.overlay,
+    {},
+    "Rolled → Want, and the old mark is gone",
+  );
+  click(doc, sel);
+  assert.deepEqual(board.overlay, { [`${KEY}:900001:mythic`]: "own" });
 });
 
 test("tapping a card head expands and collapses it", () => {

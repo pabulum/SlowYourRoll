@@ -32,8 +32,11 @@ export function detectSource(v) {
   return null;
 }
 
-/** An overlay key, "instId:encId:itemId" — the only shape a share link's marks may take. */
-const MARK_KEY = /^-?\d+:\d+:\d+$/;
+/**
+ * An overlay key, "instId:encId:itemId" with a raid difficulty after it where the mark has one
+ * (`markKey` in store.js) — the only shape a share link's marks may take.
+ */
+const MARK_KEY = /^-?\d+:\d+:\d+(?::(?:lfr|normal|heroic|mythic))?$/;
 
 /**
  * What a share card says: the board's best rolls, ranked and priced the way the sharer's page had

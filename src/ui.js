@@ -11,7 +11,15 @@ import { closeBoardMenu, render } from "./render.js";
 import { loadReport } from "./reports.js";
 import { SHARE_HOST, shareUrl } from "./share.js";
 import { readSimc } from "./simc.js";
-import { active, replaceState, save, simcOf, state } from "./store.js";
+import {
+  active,
+  markKey,
+  markOf,
+  replaceState,
+  save,
+  simcOf,
+  state,
+} from "./store.js";
 
 /**
  * Delegate an event on a container to the nearest matching element at or above the target.
@@ -37,13 +45,20 @@ function commit() {
  * Want → Own → Rolled → Want. "Want" is the absence of an override rather than a value of one, so
  * the overlay only ever holds the states a user actually asserted — which is what keeps a stored
  * board meaningful after the report behind it is reloaded with different items.
+ *
+ * On a raid card the mark is filed under the card's difficulty (`markKey`). A mark from before
+ * marks were per difficulty is unscoped, and it gives way here: the click is a statement about this
+ * difficulty, so the old mark is refiled under this one rather than left to answer for the rest.
  */
-function cycleItem(b, key, itemEl) {
+function cycleItem(b, key, diff, itemEl) {
   if (!itemEl) return;
-  const k = `${key}:${itemEl.dataset.id}`;
+  const id = itemEl.dataset.id;
+  const k = markKey(key, id, diff),
+    old = markKey(key, id);
   const next = { want: "own", own: "rolled", rolled: "want" }[
-    b.overlay[k] || "want"
+    markOf(b, key, id, diff) || "want"
   ];
+  if (k !== old) delete b.overlay[old];
   if (next === "want") delete b.overlay[k];
   else b.overlay[k] = next;
   commit();
@@ -254,7 +269,7 @@ export function initUI() {
       b._showBlockedKey = b._showBlockedKey === key ? null : key;
       render();
     } else if (act === "cycle") {
-      cycleItem(b, key, el.closest(".item"));
+      cycleItem(b, key, card.dataset.diff || null, el.closest(".item"));
     }
   });
 

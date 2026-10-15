@@ -4,13 +4,16 @@
 import { loadQEData, QE_DATA } from "./data.js";
 import { $, toast } from "./dom.js";
 import { render } from "./render.js";
-import { charKeyOf, save, simcOf, state } from "./store.js";
+import { charKeyOf, markKey, save, simcOf, state } from "./store.js";
 
 /**
  * Parse a raw /simc export into
- * { name, realm, spec, lootSpec, region, vault, rolledIds, owned, ownedBonus, watermarks, currencies }.
+ * { name, realm, spec, lootSpec, region, vault, rolledIds, rolls, owned, ownedBonus, watermarks,
+ *   currencies }.
  *   vault:      [{ name, ilvl, id, bonus }] this week's Great Vault choices
  *   rolledIds:  item ids the addon logged as already bonus-rolled
+ *   rolls:      the same rolls with the item context each was made in, which names the raid
+ *               difficulty — see `RAID_CONTEXT`
  *   owned:      { [itemId]: highestIlvlHeld } from equipped + bags (excludes the vault block)
  *   ownedBonus: { [itemId]: bonusIds } for that same best copy, which name its upgrade track
  *   lootSpec:   the character's in-game loot spec, which decides what a bonus roll can award
@@ -56,14 +59,19 @@ export function parseSimc(t) {
     }
   }
 
+  // `currency:source:context:keyLevel:itemId:specId` per roll. The context is kept because a raid
+  // boss's roll pool is per difficulty, and it is the one field that says which difficulty.
   const rolledIds = [],
+    rolls = [],
     rm = t.match(/bonus_roll_items=(\S+)/);
   if (rm) {
     rm[1].split("/").forEach((rec) => {
       const p = rec.split(":");
       if (p.length >= 5) {
         const id = parseInt(p[4], 10);
-        if (id) rolledIds.push(id);
+        if (!id) return;
+        rolledIds.push(id);
+        rolls.push({ id, ctx: parseInt(p[2], 10) || 0 });
       }
     });
   }
@@ -98,6 +106,7 @@ export function parseSimc(t) {
     region,
     vault,
     rolledIds,
+    rolls,
     owned,
     ownedBonus,
     watermarks: parseWatermarks(t),
@@ -195,6 +204,7 @@ export async function readSimc() {
   state.simc[k] = {
     vault: d.vault,
     rolledIds: d.rolledIds,
+    rolls: d.rolls,
     owned: d.owned,
     ownedBonus: d.ownedBonus,
     watermarks: d.watermarks,
@@ -234,7 +244,25 @@ export async function readSimc() {
   );
 }
 
-/** Mark logged bonus-rolls as Rolled (only for items actually in this report's pools). */
+/**
+ * The raid difficulty a logged roll was made at, by the item context the addon records with it:
+ * Blizzard's `Enum.ItemCreationContext`. Checked against a real log, where a Heroic Ula'tek roll
+ * reads 5 and its item carries the Heroic tag (bonus id 13334), and a Mythic Sszorak roll reads 6
+ * with the Mythic tag (13335). Any other context is a dungeon's, or a roll the addon caught
+ * without one.
+ */
+const RAID_CONTEXT = { 3: "normal", 4: "lfr", 5: "heroic", 6: "mythic" };
+
+/**
+ * Mark logged bonus-rolls as Rolled, only for items actually in this report's pools.
+ *
+ * A roll made in a raid is marked at the difficulty it was made at and nowhere else, because a raid
+ * boss keeps a pool per difficulty (`markKey`). Rolling the Heroic copy leaves the Mythic one in
+ * its pool. Before the log's contexts were kept, every logged roll was marked at every difficulty
+ * of every source. A mark like that for a roll the log now places is this same roll filed too
+ * broadly, so it is replaced. A /simc saved before then has ids only (`rolledIds`), so it still
+ * marks the old way until it's pasted again.
+ */
 export function applySimc(b) {
   const simc = simcOf(b);
   if (!simc) return;
@@ -242,12 +270,24 @@ export function applySimc(b) {
   b.results.forEach((r) => {
     repIds[r.item] = 1;
   });
-  (simc.rolledIds || []).forEach((id) => {
+  const rolls =
+    simc.rolls || (simc.rolledIds || []).map((id) => ({ id, ctx: 0 }));
+  rolls.forEach(({ id, ctx }) => {
     if (!repIds[id]) return;
     const meta = QE_DATA.items[id];
     if (!meta) return;
+    const diff = RAID_CONTEXT[ctx] || null;
     meta.s.forEach((s) => {
-      b.overlay[`${s[0]}:${s[1]}:${id}`] = "rolled";
+      const src = `${s[0]}:${s[1]}`;
+      if (!diff) {
+        b.overlay[markKey(src, id)] = "rolled";
+        return;
+      }
+      // A raid roll says nothing about the pool of a dungeon that happens to drop the same item.
+      if (!QE_DATA.raids[String(s[0])]) return;
+      b.overlay[markKey(src, id, diff)] = "rolled";
+      if (b.overlay[markKey(src, id)] === "rolled")
+        delete b.overlay[markKey(src, id)];
     });
   });
 }

@@ -25,7 +25,9 @@ Each item in a pool is in one of three states you can cycle by tapping it:
 - **Own** — you have it (or took it from the vault). It still dilutes the pool but is worth 0
   to you. Anything you hold at ≥ the item level a roll here _ends up at_ auto-marks Own, taken from
   the gear the report was run in and from your `/simc` export if you pasted one.
-- **Rolled** — you already bonus-rolled it; removed from the pool for good.
+- **Rolled** — you already bonus-rolled it; removed from the pool for good. On a raid boss that's
+  the pool of one difficulty, because each difficulty keeps its own: rolling the Heroic copy leaves
+  the Mythic one where it was. So a raid mark is filed under the difficulty on screen.
 
 **The pool is the boss's whole loot table, not just what your report scored.** A report only
 evaluates items worth simming, but a bonus roll draws from everything that boss can hand you, so
@@ -65,6 +67,11 @@ auto-mark owned gear, and import your logged bonus-roll history. Each vault opti
 comes and finished at the top of its track, with the crests finishing it costs in that slot, and the
 trade against the roll the vault's token would buy says when the answer turns on those crests rather
 than inventing a rate to settle it.
+
+Each logged roll carries the item context it was made in, Blizzard's `Enum.ItemCreationContext`
+(5 for Heroic, 6 for Mythic, checked against a real log and the difficulty tag on the item it
+gave). So a roll made in a raid comes out of that difficulty's pool only (`applySimc`). A `/simc`
+saved before the app kept the context marks a roll at every difficulty until it's pasted again.
 
 **The vault half of that paste expires at the weekly reset**, and only that half. Three options
 appear at reset and are gone at the next one, so a `/simc` read before the last reset has no live

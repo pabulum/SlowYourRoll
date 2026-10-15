@@ -112,6 +112,8 @@
  * @property {{ name: string, ilvl: number, id: number, bonus?: number[] }[]} vault  `bonus` is the
  *   option's bonus ids, which name its upgrade track; absent on options saved before they were read.
  * @property {number[]} rolledIds
+ * @property {{id: number, ctx: number}[]} [rolls]  The same logged rolls with the item context each
+ *   was made in, which names a raid roll's difficulty. Absent on a /simc saved before it was kept.
  * @property {Object<number, number>} owned  itemId -> highest ilvl held.
  * @property {Object<number, number[]>} [ownedBonus]  That copy's bonus ids, where the paste had them.
  * @property {(number|null)[]|null} [watermarks]  Highest ilvl held, indexed by Blizzard's
